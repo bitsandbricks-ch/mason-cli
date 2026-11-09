@@ -13,7 +13,9 @@ const router = useRouter()
 const signedIn = computed(() => !!state.me?.user)
 const themes = THEMES
 function stored() { try { return localStorage.getItem('mason-theme') } catch { return null } }
-const theme = ref(themes.includes(stored()) ? stored() : 'phosphor')
+// No choice yet: bricks, or mortar (its light twin) when the system is set to light.
+function fallback() { try { return matchMedia('(prefers-color-scheme: light)').matches ? 'mortar' : 'bricks' } catch { return 'bricks' } }
+const theme = ref(themes.includes(stored()) ? stored() : fallback())
 const plugins = ref([])
 watch(theme, (t) => { document.documentElement.dataset.theme = t; try { localStorage.setItem('mason-theme', t) } catch { /* private mode */ } }, { immediate: true })
 // The theme is a per-user setting: signing in picks up your choice, and switching saves it to your account.
