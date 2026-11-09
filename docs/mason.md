@@ -66,7 +66,7 @@ one-key shortcut (`1` to `9` for the first ones, `I` issues, `W` workflows, `D` 
 - **Settings** holds the defaults repo, orgs, extra and left-out repos, GitLab groups and projects,
   connected accounts, API keys, sessions and plugin secrets.
 - **Keys:** arrows or `j`/`k` move, Enter acts, `/` filters, `r` reloads, `t` switches the theme
-  (phosphor, amber, grey, paper) and saves your choice to your account, so every browser you sign in
+  (bricks, mortar, phosphor, amber, grey, paper) and saves your choice to your account, so every browser you sign in
   with uses it; `?` lists the keys.
 
 ## Run it

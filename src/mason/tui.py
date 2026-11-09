@@ -147,20 +147,22 @@ F11 full screen; on a Mac the F-keys need fn). The letter keys always work.
 SETTINGS = [("defaults", "Defaults repo"), ("orgs", "Orgs"), ("groups", "Groups"), ("plugins", "Plugins"),
             ("theme", "Theme"), ("file", "Config file")]
 
-# mason: brick red and a warm sand on graphite.
-BRICK, SAND, SKY = "#e2674a", "#f2c46d", "#6cb6d9"
-SUCCESS, WARNING, DANGER = "#3fa76a", "#e0a43a", "#d9534f"
+# mason: the BitsAndBricks colours of mortar.ch. Brick orange leads, green for what is live and well,
+# sand for keys and warnings, on a neutral graphite (dark) or a warm off-white (mason-light).
+BRICK, SAND, SKY = "#f27a4f", "#f2c46d", "#6cb6d9"
+SUCCESS, WARNING, DANGER = "#5cb97c", "#e0a43a", "#ef5350"
+BRICK_LIGHT = "#b23b14"
 THEMES = [
-    Theme(name="mason", dark=True, primary=SKY, secondary=BRICK, accent=SAND,
-          foreground="#e9e7e4", background="#121314", surface="#1a1c1e", panel="#24272a",
+    Theme(name="mason", dark=True, primary=BRICK, secondary=SUCCESS, accent=SAND,
+          foreground="#ededed", background="#111111", surface="#1a1a1a", panel="#212121",
           success=SUCCESS, warning=WARNING, error=DANGER,
-          variables={"footer-key-foreground": SAND, "block-cursor-background": "#2f5d75",
-                     "block-cursor-foreground": "#ffffff", "link-color": SKY, "border": "#2e3134"}),
-    Theme(name="mason-light", dark=False, primary="#1f6f94", secondary=BRICK, accent="#b24a2f",
-          foreground="#1d1f21", background="#f7f6f3", surface="#ffffff", panel="#ece9e3",
-          success="#2a7d4f", warning=WARNING, error=DANGER,
-          variables={"footer-key-foreground": "#b24a2f", "block-cursor-background": "#1f6f94",
-                     "block-cursor-foreground": "#ffffff", "link-color": "#1f6f94", "border": "#e2ded6"}),
+          variables={"footer-key-foreground": BRICK, "block-cursor-background": "#5a2a18",
+                     "block-cursor-foreground": "#ffffff", "link-color": BRICK, "border": "#2e2e2e"}),
+    Theme(name="mason-light", dark=False, primary=BRICK_LIGHT, secondary="#15803d", accent=BRICK_LIGHT,
+          foreground="#151515", background="#f7f7f4", surface="#ffffff", panel="#efefea",
+          success="#15803d", warning="#9a6200", error="#c62828",
+          variables={"footer-key-foreground": BRICK_LIGHT, "block-cursor-background": BRICK_LIGHT,
+                     "block-cursor-foreground": "#ffffff", "link-color": BRICK_LIGHT, "border": "#e1e1da"}),
 ]
 
 STATE_STYLE = {
@@ -187,7 +189,7 @@ def link_label(url: str) -> str:
     return url
 
 
-def linkify(text: str, color: str = SKY) -> Text:
+def linkify(text: str, color: str = BRICK) -> Text:
     """Text with every URL as a short, clickable label: one unbroken word, so it never wraps apart."""
     out = Text()
     pos = 0
@@ -617,7 +619,7 @@ class MasonTui(App):
             self.action_tab(self.tabs[n - 1][0])
 
     def highlight(self) -> str:
-        return "#b24a2f" if self.theme == "mason-light" else SAND
+        return BRICK_LIGHT if self.theme == "mason-light" else SAND
 
     def action_next_tab(self, step: int) -> None:
         """← →: the next tab from the list or the tab bar, the next button in a dialog. Anywhere else

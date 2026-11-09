@@ -20,7 +20,8 @@ GITLAB_REPO = re.compile(r"^gitlab:[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+$")
 SETTING_KEYS = {"defaults": str, "ref": str, "orgs": list, "repos": list, "exclude": list,
                 "gitlab_groups": list, "gitlab_repos": list, "theme": str, "plugins_off": list,
                 "org_defaults": bool}
-THEMES = ("phosphor", "amber", "grey", "paper")  # the web app's themes (web/src/themes.js); "" is the default
+# The web app's themes (web/src/themes.js). "" is the default: bricks, or mortar on a light system.
+THEMES = ("bricks", "mortar", "phosphor", "amber", "grey", "paper")
 
 
 class NoTransport:
