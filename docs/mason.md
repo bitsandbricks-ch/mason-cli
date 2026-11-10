@@ -142,7 +142,9 @@ instead (switch on "Enable Device Flow" in its settings).
 
 With a client secret as well (`GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, or `GITLAB_CLIENT_ID` and
 `GITLAB_CLIENT_SECRET`) the sign-in is the usual redirect: the authorization code flow with PKCE, back to
-`{MASON_URL}/api/v1/auth/{github|gitlab}/callback`. GitLab always needs its own app. Mason's own
+`{MASON_URL}/api/v1/auth/{github|gitlab}/callback`. With Mason's own GitHub app, `GITHUB_CLIENT_SECRET`
+alone is enough (its callback URL must match `MASON_URL`). The login page picks the method by itself: the
+redirect when there is a secret, else the device flow. GitLab always needs its own app. Mason's own
 device-code flow for `mason login` is separate (see [The CLI and TUI through
 Mason](#the-cli-and-tui-through-mason)). Someone signed in with one provider connects the other in
 Settings › Accounts, and both logins then belong to the same Mason user.
