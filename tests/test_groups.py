@@ -7,7 +7,7 @@ import sys
 import pytest
 
 from mason import config
-from mason.config import Config, Group, orgs_of
+from mason.config import Config, Group, group_label, orgs_of
 
 
 def cfg(*groups: Group) -> Config:
@@ -42,6 +42,13 @@ def test_group_names_stay_groups():
     c = cfg(Group("acme:default"), Group("rest"))
     assert c.in_group("acme/web", "acme:default") and not c.in_group("acme/web", "rest")
     assert config.org_filter("rest") is None and config.org_filter("/") is None
+
+
+def test_group_label_falls_back_to_the_org():
+    assert group_label(Group("plugins"), "acme/plugin-a") == "plugins"
+    assert group_label(None, "acme/web") == "acme/"
+    assert group_label(None, "gitlab:grp/sub/p") == "gitlab:grp/sub/"
+    assert group_label(None, "odd") == "-"
 
 
 def test_orgs_of():

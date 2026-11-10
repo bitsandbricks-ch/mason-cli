@@ -264,6 +264,15 @@ def orgs_of(repo: str) -> list[str]:
     return [f"{'/'.join(parts[:i])}/" for i in range(1, len(parts) + 1)]
 
 
+def group_label(group: Group | None, repo: str) -> str:
+    """What a list shows as a repo's group: its group's name, else its org (`acme/`, `gitlab:grp/sub/`),
+    the same value the group filter takes."""
+    if group:
+        return group.name
+    orgs = orgs_of(repo)
+    return orgs[-1] if orgs else "-"
+
+
 def _list(value) -> list[str]:
     if value is None:
         return []
