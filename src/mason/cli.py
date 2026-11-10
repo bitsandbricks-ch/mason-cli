@@ -8,9 +8,10 @@ repo of your orgs. --org and --group narrow that down.
   mason status | prs | runs           what's going on
   mason stats [--days 30]             PRs merged, time to merge, CI success, releases
   mason rerun name [--run ID]         re-run the failed jobs of a run
-  mason releases [--problems]         latest releases, missing assets, failed release runs
+  mason releases [--problems]         latest releases, missing assets, failed release runs, unreleased versions
+  mason releases --unreleased         repos whose version changed but isn't released yet
   mason packages [--problems]         container images: newest tags, release images, image builds
-  mason bump name [patch|minor|1.4.0] a PR with the next version and its changelog section
+  mason bump name [patch|minor|major] a PR with the next version (or 1.4.0) and its changelog section
   mason release [names] [--yes]       tag v<version> where it is newer than the latest release
   mason release new name v1.4.0       create a release by hand (--title, --notes, --draft, --prerelease)
   mason release tag name [v1.4.0]     push only the tag (a workflow that publishes on tags makes the release)
@@ -92,6 +93,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
             sp.add_argument("--failed", action="store_true")
         if cmd in ("releases", "packages"):
             sp.add_argument("--problems", action="store_true", help="only what's missing or failed")
+        if cmd == "releases":
+            sp.add_argument("--unreleased", action="store_true",
+                            help="only repos whose version file is newer than the latest release")
         if cmd == "doctor":
             sp.add_argument("--fix", action="store_true", help="apply settings and rulesets where they drifted")
         if cmd == "issues":
@@ -389,7 +393,7 @@ def run(cfg, args, names: list[str], pick: dict) -> None:
             sys.exit("Name the repo: mason rerun hubra")
         return repos.rerun(names, args.run, args.yes)
     if args.cmd == "releases":
-        return repos.releases(cfg, names, args.problems)
+        return repos.releases(cfg, names, args.problems, args.unreleased)
     if args.cmd == "packages":
         return packages.packages(cfg, names, args.problems)
     if args.cmd == "approve":

@@ -87,7 +87,7 @@ FILTERS = {
     "repos": [("all", "all"), ("prs", "with open PRs"), ("failing", "CI failing")],
     "prs": [("all", "all open"), ("auto", "auto-merge"), ("merged", "recently merged"), ("drafts", "drafts")],
     "runs": [("all", "all"), ("waiting", "waiting"), ("failed", "failed"), ("running", "running")],
-    "releases": [("all", "all"), ("problems", "with problems")],
+    "releases": [("all", "all"), ("problems", "with problems"), ("unreleased", "version not released yet")],
     "packages": [("all", "all"), ("problems", "with problems")],
     "security": [("all", "all"), ("alerts", "with alerts")],
 }
@@ -568,7 +568,7 @@ class MasonTui(App):
         self.theme = self.themes[0].name
         heads = {"repos": R.status_head(), "prs": ["repo", "#", "title", "state", "checks"],
                  "runs": ["repo", "state", "workflow", "ref", "when"],
-                 "releases": ["repo", "release", "when", "assets", "release run"],
+                 "releases": ["repo", "release", "when", "assets", "release run", "version"],
                  "packages": ["image", "newest", "updated", "release", "image build"],
                  "security": ["repo", "alerts", "worst", "kinds"],
                  "checks": ["check"], "settings": ["setting"], **{t: ["view"] for t in self.plugin_tabs}}
@@ -878,7 +878,7 @@ class MasonTui(App):
     def load_releases(self) -> None:
         self.loaded["releases"] = time.time()
         try:
-            found = R.release_infos(self.cfg, self.repos)
+            found = R.with_versions(self.cfg, self.repos, R.release_infos(self.cfg, self.repos))
         except core.RateLimited as err:
             self.call_from_thread(self.rate_limited, err)
             return
@@ -894,10 +894,18 @@ class MasonTui(App):
                 problems = R.release_problems(i)
                 bad += bool(problems)
                 last = i["runs"][0] if i["runs"] else {}
+                st = i.get("version")
+                if st:
+                    self.versions[i["repo"]] = st
                 out.append((i["repo"], [self.label(i["repo"]), tag, when,
                                         Text(files, style=DANGER if i["missing"] else ""),
-                                        Text(run, style=STATE_STYLE.get(R.run_state(last), "") if last else "")]))
+                                        Text(run, style=STATE_STYLE.get(R.run_state(last), "") if last else ""),
+                                        Text(V.pending_word(st), style=WARNING if (st or {}).get("todo") else "")]))
             self.put_rows("releases", out)
+            todo = [r for r, i in self.releases.items() if (i.get("version") or {}).get("todo")]
+            if todo:
+                self.log_line(f"{len(todo)} repo(s) have a version that isn't released yet: R releases it, "
+                              "F4 lists only those")
             self.query_one("#tabs", TabbedContent).get_tab("releases").label = (
                 f"Releases ({bad})" if bad else "Releases")
             if bad:
@@ -1010,6 +1018,8 @@ class MasonTui(App):
                 return {"waiting": bool(envs) or run.get("status") == "waiting",
                         "failed": (run.get("conclusion") or "") in R.FAILED,
                         "running": run.get("status") in R.ACTIVE}[f]
+            if tab == "releases" and f == "unreleased":
+                return bool((self.releases[key].get("version") or {}).get("todo"))
             if tab == "releases":
                 return bool(R.release_problems(self.releases[key]))
             if tab == "packages":
@@ -1362,8 +1372,12 @@ class MasonTui(App):
             return []
         if not st["version"]:
             return [f"version      none found in {st['file']}"]
-        todo = f"  → R releases {st['tag']}" if st["todo"] else "  (released; b bumps it)"
-        return [f"version      {st['version']} in {st['file']}{todo}"]
+        todo = (f"  not released yet (latest {st.get('released') or 'none'}): R releases {st['tag']}" if st["todo"]
+                else "  (released; b bumps it)")
+        lines = [f"version      {st['version']} in {st['file']}{todo}"]
+        if st.get("pr"):
+            lines.append(f"bump PR      #{st['pr']['number']} to {st['pr']['version']} is open: {st['pr']['url']}")
+        return lines
 
     @work(thread=True, group="version")
     def load_version(self, repo: str) -> None:
@@ -1755,13 +1769,20 @@ class MasonTui(App):
         if not repo:
             return
 
+        st = self.versions.get(repo)
+        st = st if isinstance(st, dict) else {}
+        cur, nxt = (st["version"], st["next"]) if st.get("next") else ("1.2.3", V.next_versions("1.2.3"))
+
         def picked(level: str | None) -> None:
             if level:
-                self.confirm_then(f"Open a PR in {repo} that raises the version ({level}) and adds the changelog "
-                                  "section?\nAfter its merge, R pushes the tag.", V.bump, self.cfg, repo, level)
-        self.push_screen(Pick(f"Bump {repo}", [("patch", "patch: fixes (1.2.3 → 1.2.4)"),
-                                               ("minor", "minor: new features (1.2.3 → 1.3.0)"),
-                                               ("major", "major: breaking changes (1.2.3 → 2.0.0)")]), picked)
+                self.confirm_then(f"Open a PR in {repo} that sets the version to {nxt.get(level, level)} ({level}) and "
+                                  "adds the changelog section?\nAfter its merge, R pushes the tag.",
+                                  V.bump, self.cfg, repo, level)
+        pr = st.get("pr")
+        title = f"Bump {repo}" + (f" (bump PR #{pr['number']} to {pr['version']} is open)" if pr else "")
+        self.push_screen(Pick(title, [("patch", f"patch: fixes ({cur} → {nxt['patch']})"),
+                                      ("minor", f"minor: new features ({cur} → {nxt['minor']})"),
+                                      ("major", f"major: breaking changes ({cur} → {nxt['major']})")]), picked)
 
     def action_release(self) -> None:
         repo = self.version_repo()

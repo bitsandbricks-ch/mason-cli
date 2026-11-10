@@ -365,12 +365,16 @@ def approve():
 @bp.get("/releases")
 @need("read")
 def releases():
+    """Each repo's latest release, and its version file against it: `version` is versions.state (None without a
+    version file); version.todo means the version changed but isn't released yet. ?unreleased=1 keeps only those."""
+    from mason import versions as V
     problems_only = request.args.get("problems") == "1"
+    unreleased_only = request.args.get("unreleased") == "1"
     with as_user() as (gh, gl):
         cfg = load_config()
         gh_r, gl_r, _ = all_repos(cfg, gh, gl, names_arg(), request.args.get("group"))
         try:
-            infos = R.release_infos(cfg, gh_r) if gh_r else []
+            infos = R.with_versions(cfg, gh_r, R.release_infos(cfg, gh_r)) if gh_r else []
             infos += [i for i in core.pmap(lambda r: GL.release_info(gl, cfg, r), gl_r)
                       if i["release"] or i["runs"] or i["error"]] if gl and gl_r else []
         except core.RateLimited as err:
@@ -378,13 +382,17 @@ def releases():
         out = []
         for i in infos:
             bad = R.release_problems(i)
-            if problems_only and not bad:
+            ver = i.get("version")
+            if (problems_only and not bad) or (unreleased_only and not (ver or {}).get("todo")):
                 continue
             row = R.release_row(i)
+            text = R.release_text(i)  # the version and bump PR show above it (VersionBar)
             out.append({"repo": i["repo"], "provider": i.get("provider", "github"), "release": row[0], "when": row[1],
-                        "assets": row[2], "run": row[3], "problems": bad, "text": R.release_text(i),
-                        "url": (i["release"] or {}).get("html_url", "")})
-        return jsonify({"releases": out})
+                        "assets": row[2], "run": row[3], "problems": bad, "text": text,
+                        "url": (i["release"] or {}).get("html_url", ""), "version": ver,
+                        "pending": V.pending_word(ver) if ver else ""})
+        return jsonify({"releases": out, "unreleased": sum(bool((i.get("version") or {}).get("todo")) for i in infos)})
+
 
 
 @bp.get("/release")

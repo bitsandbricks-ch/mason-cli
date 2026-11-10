@@ -10,6 +10,12 @@ const text = ref('')
 watch(() => prompt.open, (open) => { if (open) { text.value = ''; nextTick(() => (field.value || box.value)?.focus()) } })
 function key(e) {
   if (prompt.notice) { if (['Enter', 'Escape', 'y', 'n'].includes(e.key)) answer('ok'); return }
+  if (prompt.choices) {
+    const c = prompt.choices.find((x) => x.key === e.key)
+    if (c) answer(c.value)
+    else if (e.key === 'Escape' || e.key === 'n') answer(null)
+    return
+  }
   if (e.target.tagName === 'INPUT') { if (e.key === 'Enter') answer(text.value || null); if (e.key === 'Escape') answer(null); return }
   if (e.key === 'y' || e.key === 'Enter') answer(state.dryRun ? 'dry' : 'yes')
   else if (e.key === 'd' && prompt.allowDry) answer('dry')
@@ -30,7 +36,14 @@ function key(e) {
                style="width: 100%" autofocus>
       </div>
       <div class="row" style="margin-top: 12px">
-        <template v-if="prompt.notice">
+        <template v-if="prompt.choices">
+          <div class="choices">
+            <button v-for="(c, i) in prompt.choices" :key="c.value" :class="{ primary: i === 0 }" @click="answer(c.value)">
+              <span class="k">{{ c.key }}</span> {{ c.label }}<span v-if="c.hint" class="dim"> · {{ c.hint }}</span></button>
+            <button @click="answer(null)"><span class="k">esc</span> cancel</button>
+          </div>
+        </template>
+        <template v-else-if="prompt.notice">
           <button class="primary" @click="answer('ok')">ok</button>
         </template>
         <template v-else-if="prompt.input">

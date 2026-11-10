@@ -760,14 +760,31 @@ def release_text(info: dict) -> str:
     return "\n".join(lines)
 
 
-def releases(cfg: Config, repos: list[str], problems: bool = False) -> None:
-    infos = release_infos(cfg, repos)
+def with_versions(cfg: Config, repos: list[str], infos: list[dict]) -> list[dict]:
+    """The release infos with each repo's version file state (`version`), plus a row for every repo whose version
+    isn't released yet and that has no release at all."""
+    from mason import versions as V
+    found = {st["repo"]: st for st in V.states(cfg, repos)}
+    seen = {i["repo"] for i in infos}
+    infos = [{**i, "version": found.get(i["repo"])} for i in infos]
+    infos += [{"repo": r, "release": None, "missing": [], "runs": [], "error": "", "version": st}
+              for r, st in found.items() if r not in seen and (st.get("todo") or st.get("pr"))]
+    return sorted(infos, key=lambda i: repos.index(i["repo"]) if i["repo"] in repos else len(repos))
+
+
+def releases(cfg: Config, repos: list[str], problems: bool = False, unreleased: bool = False) -> None:
+    from mason import versions as V
+    infos = with_versions(cfg, repos, release_infos(cfg, repos))
     if problems:
         infos = [i for i in infos if release_problems(i)]
+    if unreleased:
+        infos = [i for i in infos if (i.get("version") or {}).get("todo")]
     if not infos:
-        say("no problems" if problems else "no releases")
+        say("no problems" if problems else "every version is released" if unreleased else "no releases")
         return
-    table(["repo", "release", "when", "assets", "release run"], [[short(i["repo"]), *release_row(i)] for i in infos])
+    table(["repo", "release", "when", "assets", "release run", "version"],
+          [[short(i["repo"]), *release_row(i), V.pending_word(i.get("version"))] for i in infos])
+    V.pending_hint([i["version"] for i in infos if i.get("version")])
     for i in infos:
         bad = release_problems(i)
         if not bad:

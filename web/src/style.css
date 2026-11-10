@@ -282,3 +282,5 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
 .actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 .actions button { text-align: left; }
 @media (max-width: 900px) { .split.page { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); } }
+.choices { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.choices button { text-align: left; }
