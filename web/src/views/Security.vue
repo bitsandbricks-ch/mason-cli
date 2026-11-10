@@ -14,8 +14,8 @@ const rows = computed(() => (data.value?.security || []).flatMap((s) => s.alerts
 const unread = computed(() => (data.value?.security || []).filter((s) => s.unread.length))
 const counts = computed(() => rows.value.reduce((m, a) => ({ ...m, [a.severity]: (m[a.severity] || 0) + 1 }), {}))
 const columns = [
-  { key: 'severity', label: 'severity' }, { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
-  { key: 'kind', label: 'kind', cls: () => 'dim' }, { key: 'title', label: 'alert', cls: () => '' }, { key: 'where', label: 'where', cls: () => 'dim' },
+  { key: 'severity', label: 'severity' }, { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : ''), card: 'head' },
+  { key: 'kind', label: 'kind', cls: () => 'dim' }, { key: 'title', label: 'alert', cls: () => '', card: 'main' }, { key: 'where', label: 'where', cls: () => 'dim' },
 ]
 const open = (r) => r?.url && window.open(r.url, '_blank', 'noopener')
 useKeys({ r: () => load(true) })

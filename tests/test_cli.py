@@ -187,6 +187,8 @@ def test_doctor(env):
     api = out.split("== acme/api")[1].split("==")[0]
     assert "ruleset release (.github/rulesets/release.json) isn't imported" in api
     assert "required_approving_review_count" not in api  # the defaults' ruleset leaves it out: any value is fine
+    assert 'no version file found, so bump, release and New tag skip it: set [release] version = "..."' in api
+    assert "version" not in out.split("== acme/plugin-a")[1].split("==")[0]  # plugin.yaml matches its release
     dot = out.split("== mike/dotfiles")[1].split("==")[0]
     assert "ruleset main: has required_linear_history, defaults doesn't" in dot
 
@@ -473,3 +475,23 @@ def test_python_version_files():
     assert V.read_version(text, "src/app/__init__.py") == "0.9.1"
     assert V.write_version(text, "src/app/__init__.py", "1.0.0") == '"""x"""\n__version__ = "1.0.0"\n'
     assert V.read_version('[package]\nname = "x"\nversion = "0.3.0"\n', "Cargo.toml") == "0.3.0"
+
+
+def test_doctor_version_problems(monkeypatch):
+    from mason import core, versions
+
+    found = {"file": "plugin.yaml", "changelog": [], "tag": "v{version}", "from": "group"}
+    cases = [
+        (None, [], None, []),  # no releases, no version file: nothing to say
+        (found, ["v1.0.0"], None, ["version file plugin.yaml (named by its group) is missing"]),
+        (found, ["v1.0.0"], "name: x\n", ["no version in plugin.yaml (named by its group)"]),
+        (found, ["v1.0.0", "v1.2.0"], "version: 1.1.0\n",
+         ["plugin.yaml says 1.1.0, behind the latest release v1.2.0"]),
+        (found, ["v1.2.0"], "version: 1.2.0\n", []),
+    ]
+    for sp, tags, text, want in cases:
+        monkeypatch.setattr(versions, "spec", lambda cfg, repo, sp=sp: sp)
+        monkeypatch.setattr(versions, "release_tags", lambda repo, tags=tags: tags)
+        monkeypatch.setattr(core, "file_on", lambda repo, path, ref=None, text=text: text)
+        assert versions.doctor_problems(None, "acme/x") == want
+    assert versions.doctor_problems(None, "gitlab:acme/x") == []

@@ -1,5 +1,6 @@
 // Small shared helpers: confirmation prompts, time, links in text.
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
+import { router } from './router.js'
 
 export const prompt = reactive({ open: false, question: '', detail: '', resolve: null, allowDry: true, input: null,
   links: [], notice: false, choices: null })
@@ -73,4 +74,23 @@ export function stateClass(value) {
   if (/(fail|error|conflict|critical|high|secret|denied|unverified|missing|blocked)/.test(v)) return 'bad'
   if (/(pending|running|waiting|draft|medium|moderate|manual|review)/.test(v)) return 'warn'
   return ''
+}
+
+// Phones: one column. A list fills the screen, and tapping a row opens its detail (with the view's actions)
+// on top, as #detail in the URL, so the phone's back gesture closes it again.
+const narrow = (() => { try { return matchMedia('(max-width: 700px)') } catch { return null } })()
+export const phone = ref(!!narrow?.matches)
+narrow?.addEventListener?.('change', (e) => { phone.value = e.matches })
+
+export function openDetail() {
+  const r = router.currentRoute.value
+  if (!phone.value || r.hash === '#detail') return
+  router.push({ path: r.path, query: r.query, hash: '#detail' })
+}
+
+export function closeDetail() {
+  const r = router.currentRoute.value
+  if (r.hash !== '#detail') return
+  if (window.history.state?.back === r.fullPath.replace(/#detail$/, '')) router.back()
+  else router.replace({ path: r.path, query: r.query })
 }

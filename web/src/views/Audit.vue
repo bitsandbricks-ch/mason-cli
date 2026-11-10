@@ -28,7 +28,7 @@ useKeys({ r: load })
     <div class="toolbar">
       <button @click="load"><span class="k">r</span> refresh</button>
     </div>
-    <div class="split">
+    <div class="split ld">
       <div class="scroll"><DataTable v-model="sel" :columns="cols" :rows="rows" empty="nothing logged yet" /></div>
       <div class="scroll pad">
         <TextPane v-if="picked" :text="`${picked.at}  ${picked.user} via ${picked.via} from ${picked.ip}\n${picked.action} ${picked.target}\n\n${picked.detail || ''}`" />

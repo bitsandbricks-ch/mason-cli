@@ -114,7 +114,9 @@ Bump, release and New tag need to know which file holds a repo's version. Mason 
 2. **Its group** in the defaults' `mason.toml`: `version = "plugin.yaml"`, `changelog = ["CHANGELOG.md"]`.
 3. **A known file in the repo root** that holds a version: plugin.yaml, pyproject.toml, package.json, Cargo.toml, VERSION (with CHANGELOG.md, CHANGES.md or HISTORY.md as the changelog).
 
-`mason release` (no names) lists every repo with the file it found.
+`mason release` (no names) lists every repo with the file it found. `mason doctor` flags a repo that has releases but no
+version file, a version file that's missing or holds no version, and a version behind the latest release
+(`skip = ["version"]` on a group turns this off).
 
 ## Configuration
 
@@ -186,7 +188,7 @@ A ruleset from the defaults folder only has to be covered: a repo may set more t
 
 `doctor --fix` sets settings, security (Dependabot alerts and security updates too), topics (it adds the missing ones and keeps the rest), labels (it creates missing ones and fixes colors, and leaves other labels alone) and the Actions permissions. `branch`, `visibility`, `description` and `required_files` are only checked, because changing them can break things: a missing required file is a job for `mason sync` or a PR.
 
-`skip` turns checks off for a group: `settings`, `security`, `vulnerability_reporting`, `immutable_releases`, `rulesets`, `own_rulesets` (the repo's `.github/rulesets`), `files`, `required_files`, `topics`, `labels`, `actions`, `branch`, `visibility`, `description`, `workflows` and `plugins` (the plugins' doctor checks).
+`skip` turns checks off for a group: `settings`, `security`, `vulnerability_reporting`, `immutable_releases`, `rulesets`, `own_rulesets` (the repo's `.github/rulesets`), `files`, `required_files`, `topics`, `labels`, `actions`, `branch`, `visibility`, `description`, `workflows`, `plugins` (the plugins' doctor checks) and `version` (the version file).
 
 `workflows` makes doctor check the group's workflow files like `mason workflows` does. It takes `true` or a table: `pinned`, `permissions`, `pull_request_target` and `injection` turn single checks off with `false`, and `allow_unpinned = ["actions/*", "your-org/*"]` lets actions of owners you trust stay on a tag. `mason workflows --fix` keeps the tag as a comment (`uses: actions/checkout@<sha> # v4`), so Dependabot and Renovate keep updating the pins.
 

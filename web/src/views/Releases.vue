@@ -13,6 +13,7 @@ import ReleaseForm from '../components/ReleaseForm.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
+import { openDetail } from '../ui.js'
 
 const router = useRouter()
 const problems = ref(false)
@@ -39,6 +40,7 @@ const toggleUnreleased = () => { unreleased.value = !unreleased.value; load() }
 const page = (r) => { const repo = r?.repo || sel.value; if (repo) router.push({ path: '/release', query: { repo } }) }
 async function newRelease(mode = 'release') {
   form.value = mode
+  openDetail()
   output.value = ''
   if (!repoNames.value.length) {
     try { repoNames.value = (await get('/repos')).repos.map((r) => r.repo) } catch (e) { log(e.message, 'error') }
@@ -53,15 +55,15 @@ useKeys({ r: () => load(true), p: toggle, u: toggleUnreleased, n: () => newRelea
   <div class="view">
     <div class="toolbar">
       <Scope :groups="scope.groups" />
-      <label class="check"><input :checked="problems" type="checkbox" @change="toggle"> only problems <span class="dim">(p)</span></label>
+      <label class="check"><input :checked="problems" type="checkbox" @change="toggle"> only problems <span class="dim k">(p)</span></label>
       <label class="check"><input :checked="unreleased" type="checkbox" @change="toggleUnreleased"> only unreleased
-        <span class="dim">(u)</span><span v-if="data?.unreleased" class="warn"> {{ data.unreleased }}</span></label>
+        <span class="dim k">(u)</span><span v-if="data?.unreleased" class="warn"> {{ data.unreleased }}</span></label>
       <span class="spacer" />
-      <button class="primary" @click="newRelease('release')"><span class="k">n</span> new release</button>
-      <button @click="newRelease('tag')"><span class="k">T</span> new tag</button>
+      <button class="primary any" @click="newRelease('release')"><span class="k">n</span> new release</button>
+      <button class="any" @click="newRelease('tag')"><span class="k">T</span> new tag</button>
       <button :disabled="!sel" @click="page()"><span class="k">⏎</span> releases of the repo</button>
     </div>
-    <div class="split">
+    <div class="split ld">
       <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : 'no releases'" @activate="page" /></div>
       <div class="pad">
         <VersionBar v-if="current?.version && !form" :key="current.repo" :repo="current.repo" :version="current.version" @done="done" />

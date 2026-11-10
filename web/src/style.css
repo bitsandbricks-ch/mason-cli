@@ -171,16 +171,6 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
   input, select, textarea { font-size: 16px; } /* smaller makes iOS zoom in */
   .hide-xs { display: none; }
   .show-xs { display: inline; }
-  .top { gap: 10px; padding: 6px 10px; }
-  .toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 6px 10px;
-    -webkit-overflow-scrolling: touch; }
-  .toolbar::-webkit-scrollbar { display: none; }
-  .toolbar { mask-image: linear-gradient(to right, #000 88%, transparent); padding-right: 28px; } /* more to swipe to */
-  .toolbar > * { flex-shrink: 0; }
-  .toolbar .spacer { display: none; }
-  .toolbar input { min-width: 14ch; flex: 1 0 auto; }
-  .split { grid-template-rows: minmax(0, 55fr) minmax(0, 45fr); }
-  .table td { max-width: 26ch; }
   .pad { padding: 10px; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi .v { font-size: 20px; }
@@ -188,11 +178,104 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
   .modal .dialog { min-width: 0; max-width: none; width: 100%; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
   .modal .dialog .row button { flex: 1; }
   .banner { font-size: 7.5px; }
-  .foot { padding-bottom: max(4px, env(safe-area-inset-bottom)); }
+  .center .btn, .center button { min-height: 44px; }
   .console-out pre.text { white-space: pre; overflow-x: auto; } /* command output keeps its columns */
+  pre.text { overflow-wrap: anywhere; }
+  .table td { max-width: 26ch; }
+  .box .table, .scroll > .table { display: block; overflow-x: auto; } /* small tables scroll sideways */
+  .form input, .form select { width: 100%; }
+
+  /* the phone screen: a title bar, the view, a bar of views at the bottom */
+  .screen.phone { grid-template-rows: auto minmax(0, 1fr) auto; }
+  .phone .top { gap: 8px; padding: 0 10px; padding-top: env(safe-area-inset-top); min-height: 46px; overflow: hidden; }
+  .phone .top .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .phone .top .back { border: 0; font-size: 26px; line-height: 1; padding: 0 10px 2px 0; min-height: 44px; color: var(--accent); }
+  .phone .top .chip { color: var(--warn); border-color: var(--warn); min-height: 30px; }
+  .phone main { position: relative; }
+  .dock { display: flex; border-top: 1px solid var(--line); background: var(--bg2);
+    padding-bottom: env(safe-area-inset-bottom); }
+  .dock a, .dock button { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 7px 2px 6px; border: 0; border-top: 2px solid transparent; color: var(--dim); font-size: 11px; min-height: 52px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: transparent; }
+  .dock .ico { font-size: 18px; line-height: 22px; }
+  .dock a:hover, .dock button:hover { text-decoration: none; color: var(--fg); }
+  .dock .active, .dock .router-link-exact-active { color: var(--accent); border-top-color: var(--accent); background: var(--bg3); }
+  .toast { position: fixed; left: 10px; right: 10px; bottom: calc(62px + env(safe-area-inset-bottom)); z-index: 40;
+    background: var(--bg3); border: 1px solid var(--line); padding: 8px 12px; overflow-wrap: anywhere;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .35); }
+
+  /* the menu of every view */
+  .sheet { position: absolute; inset: 0; z-index: 30; overflow-y: auto; background: var(--bg); padding: 4px 0 16px;
+    overscroll-behavior: contain; }
+  .sheet section { padding: 8px 0 4px; }
+  .sheet h2 { padding: 4px 12px; margin: 0; }
+  .sheet .item { display: grid; grid-template-columns: 14ch minmax(0, 1fr); gap: 4px 10px; align-items: center;
+    padding: 11px 12px; border-bottom: 1px dotted var(--bg3); color: var(--fg); min-height: 44px; }
+  .sheet .item:hover { text-decoration: none; background: var(--bg2); }
+  .sheet .item.active { background: var(--sel); }
+  .sheet .item.active > :first-child { color: var(--accent); }
+  .sheet .item .dim { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sheet .item.static { grid-template-columns: 1fr; }
+  .sheet .item.static > :first-child { color: var(--dim); }
+  .sheet .item .chip { min-height: 34px; }
+
+  /* toolbars wrap: nothing hides off-screen */
+  .toolbar { padding: 8px 10px; gap: 6px; }
+  .toolbar .spacer { display: none; }
+  .toolbar input { min-width: 0; flex: 1 1 14ch; }
+  .toolbar select { max-width: 100%; }
+  .toolbar > .row { flex-wrap: wrap; }
+  .toolbar.quick { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .toolbar.quick::-webkit-scrollbar { display: none; }
+  .toolbar.quick > * { flex-shrink: 0; }
+
+  /* a list and its detail (.split.ld): the list fills the screen; a tap shows the detail with the view's
+     actions (what follows the toolbar's spacer) at the bottom, in reach of the thumb */
+  .split.ld { display: block; overflow-y: auto; }
+  .split.ld > * { overflow: visible; border: 0 !important; }
+  .split.ld > :last-child { display: none; }
+  .view:has(> .split.ld) > .toolbar > .spacer ~ :not(.any) { display: none; }
+  main.detail .split.ld > :first-child { display: none; }
+  main.detail .split.ld > :last-child { display: block; }
+  main.detail .view:has(> .split.ld) { display: flex; }
+  main.detail .view:has(> .split.ld) > .toolbar { order: 2; border-bottom: 0; border-top: 1px solid var(--line);
+    background: var(--bg2); }
+  main.detail .view:has(> .split.ld) > .toolbar > :not(.spacer ~ *) { display: none; }
+  main.detail .view:has(> .split.ld) > .toolbar > .spacer ~ * { display: inline-flex; align-items: center; justify-content: center; }
+  main.detail .view:has(> .split.ld) > .toolbar > button { flex: 1 1 auto; }
+  main.detail .view:has(> .split.ld) > .toolbar:not(:has(.spacer)) { display: none; }
+  main.detail .split.ld { flex: 1; }
+
+  /* other splits (the defaults editor, plugins, a repo's page) stack and scroll as one */
+  .split:not(.ld) { display: block; overflow-y: auto; }
+  .split:not(.ld) > * { overflow: visible; border-right: 0; }
+  .split:not(.ld) > :first-child { border-bottom: 1px solid var(--line); }
+  .split:not(.ld) textarea.editor { min-height: 55vh; }
+
+  /* lists as cards */
+  .cards { list-style: none; margin: 0; padding: 0; }
+  .cards li { padding: 10px 12px; border-bottom: 1px dotted var(--line); cursor: pointer; }
+  .cards li:active { background: var(--bg2); }
+  .cards li.sel { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
+  .cards .head { display: flex; gap: 8px; align-items: baseline; }
+  .cards .head > :first-child { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cards .head .go { margin-left: auto; font-size: 18px; line-height: 1; }
+  .cards .main { margin-top: 2px; overflow-wrap: anywhere; }
+  .cards .meta { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 3px; font-size: 12.5px; }
+  .cards .meta:empty { display: none; }
+  .cards .meta > span { min-width: 0; overflow-wrap: anywhere; }
+  .cards .open { margin-top: 8px; }
+  select.sort { max-width: 12ch; }
+  .cards .meta .dim { margin-right: .6ch; }
+  .k, .toolbar .k { display: none; } /* key hints: no keyboard here */
+  label.check { white-space: nowrap; }
+  .toolbar > .row:has(> .chip) { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+  .toolbar > .row:has(> .chip)::-webkit-scrollbar { display: none; }
+  .toolbar > .row > .chip { flex-shrink: 0; }
+  .chip { min-height: 32px; display: inline-flex; align-items: center; }
 }
 .toolbar.quick { border-top: 1px dashed var(--line); }
-@media (pointer: fine) { .toolbar.quick { display: none; } }
+@media (pointer: fine) and (min-width: 701px) { .toolbar.quick { display: none; } }
 
 /* a row's own page (Enter): actions on the left, its detail on the right */
 .split.page { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
