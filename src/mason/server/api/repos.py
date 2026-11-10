@@ -11,6 +11,7 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from mason import config, core, plugins
 from mason import defaults as D
+from mason import extras as X
 from mason import issues as I
 from mason import packages as P
 from mason import releases as REL
@@ -746,6 +747,59 @@ def new_repo():
         R._listing.clear()
     audit("new", repo, dry, detail=text)
     return jsonify({"text": text})
+
+
+# ── secrets (names from the defaults; values only pass through, encrypted for GitHub) ─────────────
+
+
+@bp.get("/repo/secrets")
+@need("read")
+def secrets_view():
+    """The Actions secrets the defaults name for a repo (and its environments), set or missing."""
+    repo = valid_repo(request.args.get("repo", ""))
+    if is_gl(repo):
+        return jsonify({"secrets": [], "note": "secrets are checked on GitHub repos only"})
+    with as_user():
+        cfg = load_config()
+        try:
+            rows = X.secret_status(repo, X.repo_want(cfg, repo))
+        except core.RateLimited as err:
+            abort(429, str(err))
+        except RuntimeError as err:
+            abort(409, f"couldn't read the secrets: {X.short_err(err)}")
+    return jsonify({"secrets": rows})
+
+
+@bp.post("/repo/secrets")
+@need("write")
+def secrets_set():
+    """Store one secret's value in one or more repos. The value is encrypted with each repo's public key
+    and sent to GitHub; Mason keeps nothing, and the audit log names the secret, never its value."""
+    data = body()
+    name = str(data.get("name") or "").strip()
+    env = str(data.get("env") or "").strip() or None
+    value = data.get("value")
+    if not isinstance(value, str) or not value:
+        abort(400, "send the value (GitHub doesn't store an empty secret)")
+    targets = [valid_repo(str(x)) for x in (data.get("repos") or [])][:50]
+    if not targets or any(is_gl(r) for r in targets):
+        abort(400, "name GitHub repos (owner/name)")
+    dry = write_allowed(bool(data.get("dry_run")))
+    done, failed = [], []
+    with as_user(dry):
+        for repo in targets:
+            try:
+                X.set_secret(repo, name, value, env)
+                done.append(repo)
+            except core.RateLimited as err:
+                abort(429, str(err))
+            except RuntimeError as err:
+                failed.append(f"{repo}: {X.short_err(err)}")
+    where = f"{env}/{name}" if env else name
+    audit("secret.set", ", ".join(targets), dry, ok=not failed, detail=f"{where} in {len(done)} repo(s)"
+          + ("".join(f"\n{f}" for f in failed)))
+    lines = [f"{'[dry-run] ' if dry else ''}set {where} in {r}" for r in done] + [f"failed: {f}" for f in failed]
+    return jsonify({"text": "\n".join(lines), "ok": not failed})
 
 
 @bp.get("/config")

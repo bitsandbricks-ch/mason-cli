@@ -39,9 +39,41 @@ def test_org_filter_takes_every_repo_of_the_org_grouped_or_not():
 
 
 def test_group_names_stay_groups():
-    c = cfg(Group("acme:default"), Group("rest"))
+    c = cfg(Group("acme:default"), Group("rest", match={"org": "other"}))
     assert c.in_group("acme/web", "acme:default") and not c.in_group("acme/web", "rest")
     assert config.org_filter("rest") is None and config.org_filter("/") is None
+
+
+def test_groups_stack_all_then_prefix_then_full_name():
+    """Every group that matches applies; the more specific one wins key by key, lists add up."""
+    c = cfg(Group("one", match={"repos": ["acme/plugin-pay"]}, settings={"has_wiki": True}, pages={"cname": "pay.x"}),
+            Group("plugins", match={"prefix": "plugin-"}, settings={"has_wiki": False, "has_issues": False},
+                  topics=["plugin"], pages={"build": "workflow"}, secrets=["SIGN_KEY"]),
+            Group("all", settings={"delete_branch_on_merge": True}, topics=["acme"], immutable_releases=True,
+                  environments={"production": {"wait": 5}}))
+    g = c.group_of("acme/plugin-pay")
+    assert g.name == "one" and [x.name for x in g.layers] == ["all", "plugins", "one"]
+    assert g.settings == {"delete_branch_on_merge": True, "has_wiki": True, "has_issues": False}
+    assert g.topics == ["acme", "plugin"] and g.secrets == ["SIGN_KEY"] and g.immutable_releases is True
+    assert g.pages == {"build": "workflow", "cname": "pay.x"} and g.environments == {"production": {"wait": 5}}
+    assert c.group_of("acme/plugin-b").name == "plugins" and c.group_of("acme/web").name == "all"
+    assert c.in_group("acme/plugin-pay", "all") and c.in_group("acme/plugin-pay", "plugins")
+    assert c.group_of("acme/web").layers == []  # one group: itself
+    c.groups[1].inherit = False  # plugins stand alone: "all" doesn't stack under them
+    assert [x.name for x in c.group_of("acme/plugin-pay").layers] == ["plugins", "one"]
+
+
+def test_a_repos_own_file_wins(monkeypatch):
+    c = cfg(Group("all", settings={"has_wiki": False, "has_issues": True}, topics=["acme"]))
+    own = {"acme/site": 'topics = ["web"]\nsecrets = ["CF_TOKEN"]\n[settings]\nhas_wiki = true\n'
+                        '[pages]\ncname = "acme.ch"\n[release]\nversion = "VERSION"\n'}
+    monkeypatch.setattr(config, "file_on", lambda repo, path, ref=None: own.get(repo))
+    monkeypatch.setattr(config, "_repo_loaded", {})
+    g = c.settings_of("acme/site")
+    assert g.name == "all" and g.settings == {"has_wiki": True, "has_issues": True}
+    assert g.topics == ["acme", "web"] and g.secrets == ["CF_TOKEN"] and g.pages == {"cname": "acme.ch"}
+    assert c.settings_of("acme/api").settings == {"has_wiki": False, "has_issues": True}  # no own file
+    assert cfg().settings_of("acme/site").name == ".mason.toml"  # no group: the file alone
 
 
 def test_group_label_falls_back_to_the_org():

@@ -211,7 +211,7 @@ class Store:
 # ── derived caches ───────────────────────────────────────────────────────────
 
 SPACE_TTL = {"me": 600, "listing": 300, "gl_listing": 300, "nodes": 60, "gl_nodes": 60, "config": 120,
-             "org_defaults": 300, "workflows.resolved": 3600}
+             "org_defaults": 300, "repo_layer": 300, "workflows.resolved": 3600}
 SPACE_MAX = 5000
 
 
@@ -291,6 +291,7 @@ class Spaces(dict):
         self.pop("config", None)
         self.pop("org_defaults", None)
         self.pop("version_spec", None)
+        self.pop("repo_layer", None)
 
 
 def size_of(text: str, default: int) -> int:

@@ -16,7 +16,7 @@ tui = ["textual>=1.0"]
 market = ["cryptography>=42"]
 server = ["flask>=3.0", "sqlalchemy>=2.0", "cryptography>=42", "gunicorn>=22"]
 postgres = ["psycopg[binary]>=3.1"]
-dev = ["pytest>=8", "ruff>=0.6", "textual>=1.0", "flask>=3.0", "sqlalchemy>=2.0", "cryptography>=42"]
+dev = ["pytest>=8", "ruff>=0.6", "pynacl>=1.5", "textual>=1.0", "flask>=3.0", "sqlalchemy>=2.0", "cryptography>=42"]
 
 [project.scripts]
 mason = "mason.cli:main"

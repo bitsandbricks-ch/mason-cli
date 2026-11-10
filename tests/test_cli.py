@@ -174,7 +174,9 @@ def test_run_and_pr_actions(env, monkeypatch, tmp_path):
 def test_doctor(env):
     out = mason(env, "doctor")
     assert "== acme/plugin-tpl (the reference)\n   ok\n   reference of group plugins" in out
-    assert "== acme/plugin-a\n   ok (group plugins)" in out
+    a = out.split("== acme/plugin-a")[1].split("==")[0]
+    assert "SECURITY.md is missing" in a  # the catch-all "default" stacks under "plugins": its files too
+    assert "has_wiki" not in a and "ruleset" not in a
     b = out.split("== acme/plugin-b")[1].split("==")[0]
     assert "has_wiki is true, plugin-tpl has false" in b
     assert "ruleset main is missing" in b
@@ -201,9 +203,9 @@ def test_doctor_fix_and_sync(env):
     assert "[dry-run] POST /repos/acme/web/rulesets" in out
     assert "fixed 3" in out
     out = mason(env, "sync", "--dry-run")
-    assert "== acme/plugin-b\n   update LICENSE\n   [dry-run] PR on mason/sync-headsha" in out
+    assert "== acme/plugin-b\n   update LICENSE\n   add SECURITY.md\n   [dry-run] PR on mason/sync-headsha" in out
     assert "== acme/web\n   add SECURITY.md\n   [dry-run] PR on mason/sync-" in out
-    assert "== acme/plugin-a\n   in sync with plugin-tpl" in out
+    assert "== acme/plugin-a\n   add SECURITY.md\n" in out  # from "default", which stacks under "plugins"
     assert "== acme/api\n   in sync with defaults" in out
     assert "PR: https://github.com/acme/web/pull/99" in mason(env, "sync", "web")
     assert "not among the synced files: nope" in mason(env, "sync", "--only", "nope")
@@ -329,7 +331,78 @@ skip = ["own_rulesets"]
                  "PUT /repos/mike/dotfiles/actions/permissions",
                  "PUT /repos/mike/dotfiles/actions/permissions/workflow"):
         assert f"[dry-run] {call}" in out, call
-    assert "default branch is main" in out  # checked only: --fix leaves it
+    assert "[dry-run] POST /repos/mike/dotfiles/branches/main/rename" in out  # --fix renames it
+
+
+EXTRAS_TOML = '''orgs = ["mike"]
+[[group]]
+name = "default"
+variables = { NODE = "22", REGION = "eu" }
+secrets = ["NPM_TOKEN"]
+pages = { build = "workflow", cname = "dots.example.ch", https = true }
+homepage = true
+code_scanning = true
+autolinks = { "DOT-" = "https://tracker.example.ch/DOT-<num>" }
+actions = { retention_days = 30, fork_pr_approval = "all_external_contributors" }
+skip = ["own_rulesets", "files"]
+
+[group.environments.production]
+wait = 5
+reviewers = ["mike"]
+branches = ["main"]
+secrets = ["DEPLOY_TOKEN", "SIGN_KEY"]
+variables = { STAGE = "prod" }
+'''
+
+
+def test_environments_pages_and_more(env, tmp_path):
+    folder = tmp_path / "defaults"
+    folder.mkdir()
+    (folder / "mason.toml").write_text(EXTRAS_TOML)
+    e = {**env, "MASON_DEFAULTS": str(folder)}
+    out = mason(e, "doctor", "dotfiles")
+    for line in ("environment production: wait is 0 min, defaults has 5",
+                 "environment production: reviewers are none, defaults has mike",
+                 "environment production: deploys from all branches, defaults has main",
+                 "environment production: variable STAGE is missing",
+                 "environment production: secret SIGN_KEY is missing (mason secrets set SIGN_KEY mike/dotfiles "
+                 "--env production)",
+                 "variable NODE is 20, defaults has 22", "variable REGION is missing",
+                 "secret NPM_TOKEN is missing", "Pages is off, defaults has it on",
+                 "homepage: Pages is off, so there's no address to use",
+                 "CodeQL default setup is not-configured, defaults has it on",
+                 "autolink DOT- goes to https://old/<num>, defaults has https://tracker.example.ch/DOT-<num>",
+                 "actions retention_days is 90, defaults has 30",
+                 "actions fork_pr_approval is first_time_contributors, defaults has all_external_contributors",
+                 "set secrets: mason secrets set NAME repo"):
+        assert line in out, line
+    assert "DEPLOY_TOKEN is missing" not in out
+    out = mason(e, "doctor", "--fix", "--dry-run", "dotfiles")
+    for call in ("PUT /repos/mike/dotfiles/environments/production",
+                 "POST /repos/mike/dotfiles/environments/production/deployment-branch-policies",
+                 "POST /repos/mike/dotfiles/environments/production/variables",
+                 "PATCH /repos/mike/dotfiles/actions/variables/NODE", "POST /repos/mike/dotfiles/actions/variables",
+                 "POST /repos/mike/dotfiles/pages", "PUT /repos/mike/dotfiles/pages",
+                 "PATCH /repos/mike/dotfiles/code-scanning/default-setup",
+                 "DELETE /repos/mike/dotfiles/autolinks/3", "POST /repos/mike/dotfiles/autolinks",
+                 "PUT /repos/mike/dotfiles/actions/permissions/artifact-and-log-retention",
+                 "PUT /repos/mike/dotfiles/actions/permissions/fork-pr-contributor-approval"):
+        assert f"[dry-run] {call}" in out, call
+    assert "secret NPM_TOKEN is missing" in out  # --fix can't: mason never has the value
+
+
+def test_a_repos_own_mason_toml_wins(env, tmp_path):
+    folder = tmp_path / "defaults"
+    folder.mkdir()
+    (folder / "mason.toml").write_text(EXTRAS_TOML)
+    own = 'code_scanning = false\nsecrets = ["CF_TOKEN"]\n[pages]\ncname = "mike.example.ch"\n' \
+          '[environments.production]\nwait = 0\n'
+    e = {**env, "MASON_DEFAULTS": str(folder), "FAKE_GH_OWN": own}
+    out = mason(e, "doctor", "dotfiles")
+    assert "(group default + .mason.toml)" in out
+    assert "CodeQL" not in out and "wait is" not in out  # the repo's own values win
+    assert "secret CF_TOKEN is missing" in out and "secret NPM_TOKEN is missing" in out  # lists add up
+    assert "defaults + .mason.toml has 22" in out
 
 
 def test_workflows(env, tmp_path):
@@ -496,3 +569,30 @@ def test_doctor_version_problems(monkeypatch):
         monkeypatch.setattr(core, "file_on", lambda repo, path, ref=None, text=text: text)
         assert versions.doctor_problems(None, "acme/x") == want
     assert versions.doctor_problems(None, "gitlab:acme/x") == []
+
+
+def test_secrets_list_and_set(env, tmp_path):
+    import base64
+    import json
+
+    from mason import sealedbox
+
+    folder = tmp_path / "defaults"
+    folder.mkdir()
+    (folder / "mason.toml").write_text(EXTRAS_TOML)
+    log = tmp_path / "calls.log"
+    e = {**env, "MASON_DEFAULTS": str(folder), "FAKE_GH_LOG": str(log)}
+    out = mason(e, "secrets", "dotfiles")
+    assert "NPM_TOKEN                    MISSING" in out
+    assert "production: DEPLOY_TOKEN" in out and "production: SIGN_KEY" in out
+    proc = subprocess.run([sys.executable, "-m", "mason", "secrets", "set", "NPM_TOKEN", "dotfiles"], env=e,
+                          input="s3cret\n", capture_output=True, text=True, timeout=60, check=False)
+    assert "mike/dotfiles: set NPM_TOKEN" in proc.stdout, proc.stderr
+    calls = log.read_text()
+    assert "/repos/mike/dotfiles/actions/secrets/public-key" in calls
+    body = json.loads(calls.split("BODY ", 1)[1].splitlines()[0])
+    assert body["key_id"] == "k1"
+    box = base64.b64decode(body["encrypted_value"])
+    assert sealedbox.open_box(box, bytes(range(1, 33))) == b"s3cret"  # the newline from stdin is dropped
+    assert "s3cret" not in calls
+    assert "Not a secret name" in mason(e, "secrets", "set", "GITHUB_X", "dotfiles")

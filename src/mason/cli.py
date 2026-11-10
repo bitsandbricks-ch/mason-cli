@@ -20,7 +20,9 @@ repo of your orgs. --org and --group narrow that down.
   mason merge [names] [--now]         auto-merge open PRs (drafts and conflicts stay)
   mason approve                       runs waiting for you (environments, outside contributors)
   mason security                      Dependabot, secret and code scanning alerts
-  mason doctor [names] [--fix]        settings, security, rulesets and files against the defaults
+  mason doctor [names] [--fix]        settings, security, rulesets, environments, Pages and files against the defaults
+  mason secrets [names]               the Actions secrets the defaults name: set or missing (names only)
+  mason secrets set NAME [names]      store a secret's value (read from stdin) in each repo (--env ENV)
   mason issues [names] [--mine]       open issues; mason issue new|view|close|comment name[#12] ...
   mason workflows [names] [--fix]     unpinned actions, write-all tokens, script injection; --fix: PRs that pin
   mason sync [names]                  PRs that bring shared files in line
@@ -124,6 +126,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("--prerelease", action="store_true", help="new: mark it as a pre-release")
     sp.add_argument("--target", default="", help="new, tag: branch or commit for the tag (default: the default branch)")
     sp.add_argument("--generate-notes", action="store_true", help="new: GitHub writes the notes from merged PRs")
+    sp = sub.add_parser("secrets", parents=[common], help="Actions secrets the defaults name; `set NAME` stores one")
+    sp.add_argument("repos", nargs="*", help=f"{names}; or: set NAME [names]")
+    sp.add_argument("--env", default=None, help="set: an environment's secret instead of the repo's")
     sp = sub.add_parser("pr", parents=[common], help="one PR in detail")
     sp.add_argument("target", help="name#12 or a PR URL")
     sp.add_argument("--diff", action="store_true")
@@ -307,6 +312,8 @@ def main(argv: list[str] | None = None) -> None:
                 level = args.repos.pop()
             names, _ = repos.pick_repos(cfg, args.repos, args.group)
             return versions.bump_all(cfg, names, level, args.auto_merge)
+        if args.cmd == "secrets":
+            return secrets_command(cfg, args)
         if args.cmd == "release" and args.repos[:1] in (["new"], ["view"], ["tag"]):
             return release_new_or_view(cfg, args)
         if args.cmd == "release":
@@ -320,6 +327,27 @@ def main(argv: list[str] | None = None) -> None:
         return run(cfg, args, names, pick)
     except RuntimeError as err:
         sys.exit(str(err))
+
+
+def secrets_command(cfg, args) -> None:
+    """mason secrets [names] lists; mason secrets set NAME [names] [--env ENV] reads the value from stdin."""
+    from mason import extras
+    if args.repos[:1] != ["set"]:
+        names, _ = repos.pick_repos(cfg, args.repos, args.group)
+        return extras.secrets_list(cfg, names)
+    if len(args.repos) < 2:
+        sys.exit("Name the secret: mason secrets set NAME [names] [--env ENV]")
+    name, rest = args.repos[1], args.repos[2:]
+    if not rest:
+        sys.exit("Name the repos too (a secret goes to every repo named): mason secrets set NAME web api")
+    names, _ = repos.pick_repos(cfg, rest, args.group)
+    if sys.stdin.isatty():
+        import getpass
+        value = getpass.getpass(f"Value of {name} (not shown): ")
+    else:
+        value = sys.stdin.read()
+        value = value[:-1] if value.endswith("\n") else value
+    return extras.secrets_set(names, name, value, args.env)
 
 
 def release_new_or_view(cfg, args) -> None:

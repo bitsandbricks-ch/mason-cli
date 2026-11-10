@@ -32,22 +32,31 @@ READ = [re.compile(p) for p in (
     R + r"(/.*)?$",
 )]
 WRITE = {
-    "PATCH": [R + "$", R + r"/pulls/\d+$", R + r"/rulesets/\d+$", R + r"/labels/[^/]+$", R + r"/issues/\d+$"],
+    "PATCH": [R + "$", R + r"/pulls/\d+$", R + r"/rulesets/\d+$", R + r"/labels/[^/]+$", R + r"/issues/\d+$",
+              R + r"/actions/variables/[^/]+$", R + r"/environments/[^/]+/variables/[^/]+$",
+              R + r"/code-scanning/default-setup$"],
     "PUT": [R + r"/contents/.+$", R + r"/pulls/\d+/merge$", R + r"/pulls/\d+/update-branch$",
             R + r"/rulesets/\d+$", R + r"/automated-security-fixes$",
             R + r"/private-vulnerability-reporting$", R + r"/immutable-releases$", R + r"/environments/[^/]+$",
             R + r"/environments/[^/]+/secrets/[^/]+$", R + r"/topics$",
-            R + r"/vulnerability-alerts$", R + r"/actions/permissions(/workflow)?$"],
+            R + r"/vulnerability-alerts$",
+            R + r"/actions/permissions(/workflow|/artifact-and-log-retention|/fork-pr-contributor-approval)?$",
+            R + r"/actions/secrets/[^/]+$", R + r"/pages$"],
     "POST": [R + r"/labels$", R + r"/issues$", R + r"/git/refs$", R + r"/pulls$", R + r"/rulesets$",
              R + r"/actions/runs/\d+/approve$",
              R + r"/actions/runs/\d+/pending_deployments$", R + r"/actions/runs/\d+/(rerun(-failed-jobs)?|cancel)$",
              R + r"/generate$", r"/user/repos$", r"/orgs/[\w.-]+/repos$", R + r"/releases$", R + r"/git/tags$",
-             R + r"/issues/\d+/comments$", R + r"/dispatches$", R + r"/actions/workflows/[^/]+/dispatches$"],
+             R + r"/issues/\d+/comments$", R + r"/dispatches$", R + r"/actions/workflows/[^/]+/dispatches$",
+             R + r"/environments/[^/]+/deployment-branch-policies$", R + r"/environments/[^/]+/variables$",
+             R + r"/actions/variables$", R + r"/pages$", R + r"/autolinks$", R + r"/branches/[^/]+/rename$"],
     "DELETE": [R + r"/git/refs/heads/.+$", R + r"/automated-security-fixes$", R + r"/private-vulnerability-reporting$",
-               R + r"/immutable-releases$", R + r"/rulesets/\d+$", R + r"/vulnerability-alerts$"],
+               R + r"/immutable-releases$", R + r"/rulesets/\d+$", R + r"/vulnerability-alerts$",
+               R + r"/environments/[^/]+/deployment-branch-policies/\d+$", R + r"/pages$", R + r"/autolinks/\d+$"],
 }
 WRITE_RE = {m: [re.compile(p) for p in ps] for m, ps in WRITE.items()}
-NEVER = re.compile(r"/(collaborators|invitations|keys|hooks|actions/secrets|actions/variables|transfer|"
+# Secrets: names can be listed and values stored (encrypted on the CLI's side with the repo's public key),
+# never deleted through here. Variables are settings like any other.
+NEVER = re.compile(r"/(collaborators|invitations|keys|hooks|transfer|"
                    r"teams|members|interaction-limits)(/|$)|/user/(emails|keys|gpg_keys|ssh_signing_keys)")
 MUTATIONS = {"markPullRequestReadyForReview", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge",
              "mergePullRequest", "convertPullRequestToDraft"}
@@ -62,7 +71,12 @@ def transport():
     return t
 
 
+TEAM = re.compile(r"/orgs/[\w.-]+/teams/[\w.-]+$")  # an environment's reviewer team: its id
+
+
 def allowed(method: str, path: str) -> bool:
+    if method in ("GET", "HEAD") and TEAM.match(path):
+        return True
     if NEVER.search(path):
         return False
     if method in ("GET", "HEAD"):
