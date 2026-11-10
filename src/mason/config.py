@@ -35,21 +35,24 @@ Two files:
       files = "files/default"               # folder copied into each repo, path for path
 
   `match.org` takes GitHub orgs (any case) and GitLab groups, subgroups included (`org = "grp/sub"`).
-  The first group that matches a repo is its group. Where a group can be named to narrow a list
+  Every group that matches a repo stacks (see layers_of): the more specific one wins key by key.
+  Where a group can be named to narrow a list
   (`--group`, the web app's group menu), `acme/` names the org acme instead, and `gitlab:grp/` a
   GitLab group. Keys mason doesn't know stay on the group for plugins (`group.extra`).
 
 * `mason.toml` in a repo named `.mason` in an org (GitHub) or group (GitLab): that org's
   defaults for its own repos, like the `.github` repo. Only its `[[group]]` tables count, and
   only for repos of that org; its `rulesets` and `files` folders are read from the `.mason`
-  repo. Which group a repo gets, first hit wins:
+  repo. Which groups stack for a repo, least important first:
 
-      1. a group of your defaults that names the repo with `match`
-      2. a group of the org's `.mason` (GitLab: the nearest group's, then its parents')
-      3. a group of your defaults without `match` (the rest)
+      1. your groups without `match` (the rest), only when no group of the org's `.mason` matches
+      2. the org's `.mason` groups that match (GitLab: a parent group's, then the nearest group's)
+      3. your groups that name the repo with `match`
+      4. the repo's own `.mason.toml` (settings_of: environments, pages, secrets, settings ...)
 
-  So the org's `.mason` replaces your catch-all for its repos, and your own explicit groups
-  still win. Org groups are named `org:name` (`acme:default`). It is read with your own login,
+  So the org's `.mason` replaces your catch-all for its repos, your own explicit groups go on
+  top, and the repo itself has the last word. Org groups are named `org:name` (`acme:default`).
+  It is read with your own login,
   so you see what your token may read, and cached per user. `org_defaults = false` in your
   config (MASON_ORG_DEFAULTS=0, or the operator's settings) turns it off.
 """
@@ -89,11 +92,15 @@ OVERRIDE: contextvars.ContextVar = contextvars.ContextVar("mason_config_override
 GROUP_KEYS = {"name", "match", "from", "files", "require", "settings", "security", "immutable_releases",
               "vulnerability_reporting", "rulesets", "release_assets",
               "version", "changelog", "topics", "labels", "actions", "required_files", "branch",
-              "visibility", "description", "skip", "workflows"}
+              "visibility", "description", "skip", "workflows", "environments", "variables", "secrets", "pages",
+              "homepage", "code_scanning", "autolinks", "inherit"}
+# What a repo's own .mason.toml may set for itself (besides [release]): it wins over every group.
+REPO_KEYS = GROUP_KEYS - {"name", "match", "from", "files", "require", "rulesets", "version", "changelog", "inherit"}
 # What doctor checks for a group; `skip = [...]` turns checks off.
 CHECKS = ("settings", "security", "vulnerability_reporting", "immutable_releases", "rulesets", "own_rulesets",
           "files", "required_files", "topics", "labels", "actions", "branch", "visibility", "description", "workflows",
-          "plugins", "version")
+          "plugins", "version", "environments", "variables", "secrets", "pages", "homepage", "code_scanning",
+          "autolinks")
 
 
 def config_dir() -> Path:
@@ -207,12 +214,21 @@ class Group:
     required_files: list[str] = field(default_factory=list)  # each must exist; "A|B" takes either
     branch: str | None = None  # the default branch's name (checked only)
     visibility: str | None = None  # public, private or internal (checked only)
-    description: bool = False  # every repo needs a description (checked only)
+    description: bool | None = None  # every repo needs a description (checked only)
     skip: list[str] = field(default_factory=list)  # checks to leave out (CHECKS)
     workflows: bool | dict | None = None  # workflow hardening in doctor: true, or a table (see workflows.py)
+    environments: dict = field(default_factory=dict)  # {name: {reviewers, wait, branches, secrets, variables, ...}}
+    variables: dict = field(default_factory=dict)  # Actions variables {NAME: value} (--fix sets them)
+    secrets: list[str] = field(default_factory=list)  # Actions secrets that must exist (names only, never values)
+    pages: bool | dict | None = None  # GitHub Pages: false, true, or {build, branch, path, cname, https}
+    homepage: bool | str | None = None  # the repo's website: a URL, or true for its Pages address
+    code_scanning: bool | None = None  # CodeQL default setup on or off
+    autolinks: dict = field(default_factory=dict)  # {"HUB-": "https://tracker/HUB-<num>"}
     extra: dict = field(default_factory=dict)
     source: Source | None = None  # where its rulesets and files folders live (None: the config's defaults)
     origin: str = ""  # "" for your defaults; "acme/.mason" for a group of an org's .mason repo
+    layers: list = field(default_factory=list)  # a stacked group: the groups it was made of, least important first
+    inherit: bool = True  # false: the less important groups that match don't stack under this one
 
     def matches(self, repo: str, topics: list[str] | None = None) -> bool:
         m = self.match
@@ -283,6 +299,98 @@ def _glob(repo: str, pattern: str) -> bool:
     return fnmatch.fnmatchcase(repo, pattern) if "/" in pattern else fnmatch.fnmatchcase(repo.split("/")[-1], pattern)
 
 
+# ── stacking groups ──────────────────────────────────────────────────────────
+
+MERGE_DICT = ("require", "settings", "security", "labels", "actions", "variables", "autolinks", "extra")
+MERGE_LIST = ("topics", "required_files", "release_assets", "skip", "secrets")
+MERGE_SCALAR = ("reference", "files", "rulesets", "version", "immutable_releases", "vulnerability_reporting",
+                "branch", "visibility", "description", "workflows", "homepage", "code_scanning")
+
+
+def specificity(group: Group) -> int:
+    m = group.match
+    if not m:
+        return 0
+    if m.get("repos"):
+        return 3
+    if m.get("prefix") or m.get("suffix"):
+        return 2
+    return 1
+
+
+def ranked(found: list[tuple[int, Group]]) -> list[Group]:
+    """Least important first: less specific first, and on a tie the one written later first."""
+    return [g for _, g in sorted(found, key=lambda x: (specificity(x[1]), -x[0]))]
+
+
+def merged(key: str, low, high):
+    """One key of two layers: `high` wins. Tables merge key by key (environments and pages one level
+    deeper), lists add up, other values are replaced when `high` sets them."""
+    if key in MERGE_DICT:
+        return {**(low or {}), **(high or {})}
+    if key in MERGE_LIST:
+        return list(dict.fromkeys(list(low or []) + list(high or [])))
+    if key == "environments":
+        out = {n: dict(e) for n, e in (low or {}).items()}
+        for n, e in (high or {}).items():
+            out[n] = {**out.get(n, {}), **e}
+        return out
+    if key == "pages" and isinstance(low, dict) and isinstance(high, dict):
+        return {**low, **high}
+    if key == "changelog":
+        return list(high) if high else list(low or [])
+    return low if high is None else high
+
+
+def stack(layers: list[Group]) -> Group | None:
+    """Groups stacked into one, least important first. One layer: that group itself."""
+    if not layers:
+        return None
+    if len(layers) == 1:
+        return layers[0]
+    top = next((g for g in reversed(layers) if g.name != REPO_LAYER), layers[-1])
+    out = Group(name=top.name, match=top.match, source=top.source, origin=top.origin, layers=list(layers))
+    for g in layers:
+        for key in MERGE_DICT + MERGE_LIST + MERGE_SCALAR + ("environments", "pages", "changelog"):
+            setattr(out, key, merged(key, getattr(out, key), getattr(g, key)))
+    with_ref = next((g for g in reversed(layers) if g.reference), None)
+    if with_ref:  # a reference's file list belongs to that reference
+        out.reference = with_ref.reference
+        if isinstance(with_ref.files, list) or not out.files:
+            out.files = with_ref.files
+    return out
+
+
+REPO_LAYER = ".mason.toml"
+_repo_loaded = core.Scoped("repo_layer")
+
+
+def repo_layer(repo: str) -> Group | None:
+    """The settings a repo's own .mason.toml gives itself, as a group named ".mason.toml" (None without).
+    Its [release] table is read by versions.py; group-only keys (match, from, files, rulesets ...) are
+    left out: the repo's own rulesets are its .github/rulesets files."""
+    if repo in _repo_loaded:
+        return _repo_loaded[repo]
+    text = file_on(repo, REPO_LAYER)
+    found = None
+    if text:
+        raw = parse_defaults(text, f"{repo}/{REPO_LAYER}")
+        own = {k: v for k, v in raw.items() if k in REPO_KEYS}
+        if own:
+            found = make_group({**own, "name": REPO_LAYER}, 0)
+            found.origin = repo
+    _repo_loaded[repo] = found
+    return found
+
+
+def _environments(raw) -> dict:
+    """environments = { production = { reviewers = ["mike", "team:acme/ops"], wait = 5, branches = ["main"],
+    secrets = ["DEPLOY_TOKEN"], variables = { REGION = "eu" } } }; a bare name list makes them empty."""
+    if isinstance(raw, list):
+        return {str(n): {} for n in raw}
+    return {str(n): dict(e or {}) for n, e in (raw or {}).items()}
+
+
 @dataclass
 class Config:
     source: Source | None
@@ -293,30 +401,52 @@ class Config:
     raw: dict = field(default_factory=dict)
     org_defaults: bool = True  # look for each org's .mason repo
 
-    def group_of(self, repo: str, topics: list[str] | None = None) -> Group | None:
-        """The repo's group: your explicit group, else its org's .mason group, else your catch-all."""
-        mine = next((g for g in self.groups if g.matches(repo, topics)), None)
-        if mine and mine.match:
-            return mine
+    def layers_of(self, repo: str, topics: list[str] | None = None) -> list[Group]:
+        """Every group that matches the repo, least important first: your catch-all (only when no
+        group of the org's .mason matches), the org's .mason groups (a parent GitLab group's before its
+        subgroup's), then your groups that name the repo with `match`. Within one file a more specific
+        match wins (full names over prefixes and suffixes over orgs and topics over none); on a tie the
+        group written first wins."""
+        mine = [(i, g) for i, g in enumerate(self.groups) if g.matches(repo, topics)]
+        org: list[Group] = []
         if self.org_defaults:
-            for org in org_defaults_of(repo):
-                if org.error:
-                    raise RuntimeError(org.error)
-                got = next((g for g in org.groups if g.matches(repo, topics)), None)
-                if got:
-                    return got
-        return mine
+            for found in reversed(org_defaults_of(repo)):  # farthest first
+                if found.error:
+                    raise RuntimeError(found.error)
+                org += ranked([(i, g) for i, g in enumerate(found.groups) if g.matches(repo, topics)])
+        rest = ranked([(i, g) for i, g in mine if not g.match]) if not org else []
+        layers = rest + org + ranked([(i, g) for i, g in mine if g.match])
+        cut = max((i for i, g in enumerate(layers) if not g.inherit), default=0)
+        return layers[cut:]
+
+    def group_of(self, repo: str, topics: list[str] | None = None) -> Group | None:
+        """The repo's group: every group that matches it, stacked (see layers_of). It carries the name,
+        `match` and origin of the most important one; settings come from all of them, the more
+        important one winning key by key."""
+        return stack(self.layers_of(repo, topics))
+
+    def settings_of(self, repo: str, topics: list[str] | None = None) -> Group | None:
+        """What doctor holds the repo to: its stacked group, then its own .mason.toml on top (the repo wins)."""
+        group = self.group_of(repo, topics)
+        own = repo_layer(repo) if not repo.startswith("gitlab:") else None
+        if not own:
+            return group
+        merged = stack((group.layers or [group]) + [own] if group else [own])
+        if group:
+            merged.name, merged.match = group.name, group.match
+            merged.origin, merged.source = group.origin, group.source
+        return merged
 
     def in_group(self, repo: str, name: str, topics: list[str] | None = None) -> bool:
-        """Does a group filter take `repo`? `name` is a group's name, or an org: `acme/` for every
-        repo of the GitHub org acme, `gitlab:grp/` for every project under the GitLab group grp."""
+        """Does a group filter take `repo`? `name` is a group's name (any group the repo stacks, so
+        `--group all` takes every repo an "all" group matches), or an org: `acme/` for every repo of
+        the GitHub org acme, `gitlab:grp/` for every project under the GitLab group grp."""
         org = org_filter(name)
         if org is not None:
             if org.startswith("gitlab:") != repo.startswith("gitlab:"):
                 return False
             return in_org(repo.removeprefix("gitlab:"), org.removeprefix("gitlab:"))
-        group = self.group_of(repo, topics)
-        return bool(group) and group.name == name
+        return any(g.name == name for g in self.layers_of(repo, topics))
 
     def find_group(self, name: str, repo: str | None = None) -> Group | None:
         """A group by name: yours, or (`org:name`) one of `repo`'s org's .mason."""
@@ -341,7 +471,10 @@ class Config:
         return any(_glob(repo, p) for p in self.exclude)
 
     def rulesets_of(self, group: Group) -> dict[str, dict]:
-        """The ruleset JSON files of a group's `rulesets` folder in the defaults repo, by ruleset name."""
+        """The ruleset JSON files of a group's `rulesets` folder in the defaults repo, by ruleset name.
+        A stacked group: every layer's folder, the more important layer winning by name."""
+        if group.layers:
+            return {k: v for g in group.layers for k, v in self.rulesets_of(g).items()}
         source = group.source or self.source
         if not group.rulesets or not source:
             return {}
@@ -358,7 +491,9 @@ class Config:
         return out
 
     def files_of(self, group: Group) -> dict[str, str]:
-        """A group's `files` folder in the defaults repo: {path in the repo: text}."""
+        """A group's `files` folder in the defaults repo: {path in the repo: text}. Stacked: every layer's."""
+        if group.layers:
+            return {k: v for g in group.layers for k, v in self.files_of(g).items()}
         source = group.source or self.source
         if not isinstance(group.files, str) or not source:
             return {}
@@ -394,9 +529,17 @@ def make_group(raw: dict, i: int) -> Group:
         required_files=_list(raw.get("required_files")),
         branch=raw.get("branch"),
         visibility=raw.get("visibility"),
-        description=bool(raw.get("description")),
+        description=raw.get("description"),
         skip=_list(raw.get("skip")),
         workflows=raw.get("workflows"),
+        environments=_environments(raw.get("environments")),
+        variables={str(k): str(v) for k, v in (raw.get("variables") or {}).items()},
+        secrets=_list(raw.get("secrets")),
+        pages=raw.get("pages"),
+        homepage=raw.get("homepage"),
+        code_scanning=raw.get("code_scanning"),
+        autolinks={str(k): v for k, v in (raw.get("autolinks") or {}).items()},
+        inherit=raw.get("inherit") is not False,
         extra={k: v for k, v in raw.items() if k not in GROUP_KEYS},
     )
 
@@ -577,7 +720,7 @@ STARTER = """\
 # Check: mason doctor    Fix settings and rulesets: mason doctor --fix    Files: mason sync
 orgs = [{orgs}]
 
-# The first group that matches a repo is its group; a group without `match` takes the rest.
+# Every group that matches a repo applies; the more specific one wins (full names, then prefix, then the rest).
 #
 # [[group]]
 # name = "plugins"
@@ -604,4 +747,11 @@ security = {{ secret_scanning = "enabled", secret_scanning_push_protection = "en
 # skip = ["labels"]                      # checks to leave out for this group
 # rulesets = "rulesets/default"          # ruleset JSON files (export them from GitHub)
 # files = "files/default"                # files every repo of the group gets
+# variables = {{ NODE_VERSION = "22" }}    # Actions variables
+# secrets = ["NPM_TOKEN"]                # Actions secrets that must exist (names only: mason secrets set)
+# pages = {{ build = "workflow", cname = "docs.example.com", https = true }}
+# homepage = true                        # the Pages address
+# code_scanning = true                   # CodeQL default setup
+# autolinks = {{ "JIRA-" = "https://jira.example.com/browse/JIRA-<num>" }}
+# environments = {{ production = {{ reviewers = ["you"], wait = 5, branches = ["main"], secrets = ["DEPLOY_TOKEN"] }} }}
 """

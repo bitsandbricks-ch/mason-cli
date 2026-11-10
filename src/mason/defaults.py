@@ -13,7 +13,7 @@ import json
 import time
 import urllib.parse
 
-from mason import core, plugins, versions, workflows
+from mason import config, core, extras, plugins, versions, workflows
 from mason.config import Config, Group
 from mason.core import WEB, api, compact, file_on, for_each, get_file, git_blob_sha, open_pr, say, short
 
@@ -54,6 +54,7 @@ def repo_state(repo: str) -> dict:
         "immutable_releases": flag(repo, "immutable-releases"),
         "rulesets": live_rulesets(repo),
         "info": {"topics": info.get("topics") or [], "description": info.get("description") or "",
+                 "homepage": info.get("homepage") or "",
                  "visibility": info.get("visibility") or ("private" if info.get("private") else "public")},
     }
 
@@ -130,20 +131,39 @@ def baseline(cfg: Config, group: Group) -> dict:
     want.update(workflows=workflows.settings(group.workflows), topics=list(group.topics),
                 labels=dict(group.labels), actions=dict(group.actions),
                 required_files=list(group.required_files), branch=group.branch, visibility=group.visibility,
-                description=group.description, skip=set(group.skip))
+                description=group.description, skip=set(group.skip), environments=dict(group.environments),
+                variables=dict(group.variables), secrets=list(group.secrets), pages=group.pages,
+                homepage=group.homepage, code_scanning=group.code_scanning, autolinks=dict(group.autolinks))
     return skip(want)
+
+
+def overlay(want: dict, own: Group) -> dict:
+    """The group's wanted state with a repo's own .mason.toml on top: the repo wins key by key."""
+    out = {k: (dict(v) if isinstance(v, dict) else list(v) if isinstance(v, list) else set(v) if isinstance(v, set)
+               else v) for k, v in want.items()}
+    for key in ("settings", "security", "labels", "actions", "variables", "autolinks", "topics", "required_files",
+                "secrets", "environments", "pages", "immutable_releases", "vulnerability_reporting", "branch",
+                "visibility", "description", "homepage", "code_scanning"):
+        out[key] = config.merged(key, out.get(key), getattr(own, key))
+    if own.workflows is not None:
+        out["workflows"] = workflows.settings(own.workflows)
+    out["skip"] = set(out.get("skip") or ()) | set(own.skip)
+    out["label"] = f"{want['label']} + .mason.toml" if want.get("group") != config.REPO_LAYER else ".mason.toml"
+    return skip(out)
 
 
 def skip(want: dict) -> dict:
     """Leave out what the group's `skip` names."""
     off = want["skip"]
-    for key in ("settings", "security", "rulesets", "files", "labels", "actions"):
+    for key in ("settings", "security", "rulesets", "files", "labels", "actions", "environments", "variables",
+                "autolinks"):
         if key in off:
             want[key] = {}
-    for key in ("topics", "required_files"):
+    for key in ("topics", "required_files", "secrets"):
         if key in off:
             want[key] = []
-    for key in ("vulnerability_reporting", "immutable_releases", "branch", "visibility"):
+    for key in ("vulnerability_reporting", "immutable_releases", "branch", "visibility", "pages", "homepage",
+                "code_scanning"):
         if key in off:
             want[key] = None
     if "description" in off:
@@ -270,7 +290,7 @@ def required_drift(repo: str, want: dict, branch: str) -> list[str]:
 
 def repo_drift(repo: str, state: dict, want: dict) -> tuple[list[str], list[str]]:
     """Topics, labels and Actions permissions (doctor --fix sets them), then what's only checked:
-    the default branch, visibility and description."""
+    visibility and description."""
     info, label = state["info"], want["label"]
     fix: list[str] = []
     missing = [t for t in want.get("topics") or [] if t not in info["topics"]]
@@ -286,9 +306,7 @@ def repo_drift(repo: str, state: dict, want: dict) -> tuple[list[str], list[str]
                 fix.append(f"label {name} is #{got.get('color')}, {label} has #{spec['color']}")
     for key, value in actions_drift(repo, want.get("actions") or {}).items():
         fix.append(f"actions {key} is {compact(value[0])}, {label} has {compact(value[1])}")
-    check = []
-    if want.get("branch") and state["default_branch"] != want["branch"]:
-        check.append(f"default branch is {state['default_branch']}, {label} has {want['branch']}")
+    check = []  # the default branch's name: extras (--fix renames it)
     if want.get("visibility") and info["visibility"] != want["visibility"]:
         check.append(f"the repo is {info['visibility']}, {label} has {want['visibility']}")
     if want.get("description") and not info["description"].strip():
@@ -385,17 +403,39 @@ def apply(repo: str, want: dict, own: dict | None = None) -> None:
 # ── doctor ───────────────────────────────────────────────────────────────────
 
 
+def group_key(group: Group) -> tuple:
+    """Stacked groups with the same layers want the same: one baseline for all their repos."""
+    return tuple(x.name for x in group.layers) or (group.name,)
+
+
 def doctor_ctx(cfg: Config, repos: list[str], fix: bool = False) -> dict:
     from mason.repos import group_of
 
     groups = {r: group_of(cfg, r) for r in repos}
-    used = {g.name: g for g in groups.values() if g}
-    refs = {g.name: g for g in cfg.groups_for(repos) if g.reference and (g.name in used or g.reference in repos)}
-    wants = {}
-    for g in {**used, **refs}.values():
-        wants[g.name] = baseline(cfg, g)
-        wants[g.name]["live_names"] = set(wants[g.name]["rulesets"]) - set(cfg.rulesets_of(g))
-    return {"cfg": cfg, "groups": groups, "wants": wants, "refs": list(refs.values()), "fix": fix}
+    used = {group_key(g): g for g in groups.values() if g}
+    names = {x.name for g in used.values() for x in (g.layers or [g])}
+    refs = {g.name: g for g in cfg.groups_for(repos) if g.reference and (g.name in names or g.reference in repos)}
+    wants, ref_wants = {}, {}
+    for key, g in used.items():
+        wants[key] = baseline(cfg, g)
+        wants[key]["live_names"] = set(wants[key]["rulesets"]) - set(cfg.rulesets_of(g))
+    for g in refs.values():
+        ref_wants[g.name] = baseline(cfg, g)
+    return {"cfg": cfg, "groups": groups, "wants": wants, "ref_wants": ref_wants, "refs": list(refs.values()),
+            "fix": fix}
+
+
+def want_of(repo: str, ctx: dict) -> tuple[dict | None, Group | None]:
+    """What doctor holds `repo` to: its stacked group's baseline, then its own .mason.toml on top."""
+    group = ctx["groups"].get(repo)
+    want = ctx["wants"].get(group_key(group)) if group else None
+    own = config.repo_layer(repo)
+    if own:
+        if want is None:
+            want = baseline(ctx["cfg"], Group(config.REPO_LAYER))
+            want["group"] = config.REPO_LAYER
+        want = overlay(want, own)
+    return want, own
 
 
 def reference_check(group: Group, want: dict, fix: bool) -> None:
@@ -435,17 +475,21 @@ def doctor_all(cfg: Config, repos: list[str], fix: bool = False) -> None:
     ctx = doctor_ctx(cfg, repos, fix)
     for g in ctx["refs"]:
         say(f"== {g.reference} (the reference)")
-        reference_check(g, ctx["wants"][g.name], fix)
+        reference_check(g, ctx["ref_wants"][g.name], fix)
     references = {g.reference for g in ctx["refs"]}
     for_each([r for r in repos if r not in references], doctor, ctx)
 
 
 def doctor(repo: str, ctx: dict) -> None:
     group = ctx["groups"].get(repo)
-    want = ctx["wants"].get(group.name) if group else None
+    want, own_file = want_of(repo, ctx)
     own = ruleset_files(repo)
     checked: list[str] = []
     repo_fix: list[str] = []
+    found: list[extras.Finding] = []
+    if want and own and "own_rulesets" not in want["skip"] and set(own) & set(want["rulesets"]):
+        # the repo's own .github/rulesets win over the group's rulesets of the same name
+        want = {**want, "rulesets": {n: rs for n, rs in want["rulesets"].items() if n not in own}}
     if want:
         state = repo_state(repo)
         if "dependabot_alerts" in want["security"]:
@@ -457,6 +501,9 @@ def doctor(repo: str, ctx: dict) -> None:
                         if p not in fixable and not any(p.startswith(f"ruleset {n} (") for n in missing)]
         repo_fix, checked = repo_drift(repo, state, want)
         fixable += repo_fix
+        found = extras.findings(repo, state, want)
+        fixable += [f.text for f in found if f.area]
+        checked += [f.text for f in found if not f.area]
         branch = state["default_branch"]
     else:
         live = live_rulesets(repo)
@@ -475,18 +522,23 @@ def doctor(repo: str, ctx: dict) -> None:
 
     if fixable and ctx.get("fix"):
         if want:
-            if [p for p in fixable if p not in repo_fix]:
+            more = {f.text for f in found if f.area}
+            if [p for p in fixable if p not in repo_fix and p not in more]:
                 apply(repo, want, own)
             if repo_fix:
                 fix_repo(repo, state, want)
                 say(f"   set {len(repo_fix)} topics, labels or Actions permissions")
+            if more:
+                extras.fix(repo, state, want, found)
         else:
             import_rulesets(repo, {n: rs for n, (_, rs) in own.items() if not rs.get("_broken")})
             say(f"   rulesets ({', '.join(own)}) imported from .github/rulesets")
         problems = [p for p in problems if p not in fixable]
         say(f"   fixed {len(fixable)}")
 
-    where = f" (group {group.name})" if group else " (no group: only its own .github/rulesets)"
+    mine = " + .mason.toml" if own_file else ""
+    where = f" (group {group.name}{mine})" if group else \
+        " (its .mason.toml)" if own_file else " (no group: only its own .github/rulesets)"
     if not problems:
         say(f"   ok{where}")
         return
@@ -498,6 +550,8 @@ def doctor(repo: str, ctx: dict) -> None:
     if want and any(p.endswith(("is missing", f"differs from {want['label']}")) and not p.startswith("ruleset")
                     for p in problems):
         say(f"   fix: mason sync {repo}  (PR with the files)")
+    if any(" secret " in f" {p}" and "is missing" in p for p in problems):
+        say("   set secrets: mason secrets set NAME repo [--env ENV], or the repo's page in the web app")
     if any(p.startswith("workflow ") and "isn't pinned" in p for p in problems):
         say(f"   fix: mason workflows --fix {repo}  (PR that pins the actions)")
     for hint in plugins.hook("doctor_hints", repo, group, problems):
@@ -520,7 +574,7 @@ def sync_ctx(cfg: Config, repos: list[str], only: list[str] | None = None) -> di
 
 def sync(repo: str, ctx: dict) -> None:
     group = ctx["groups"].get(repo)
-    want = ctx["wants"].get(group.name) if group else None
+    want = ctx["wants"].get(group_key(group)) if group else None
     if not want or not want["files"]:
         say("   no files to sync" + ("" if group else " (no group)"))
         return
@@ -598,4 +652,9 @@ def create_repo(cfg: Config, repo: str, group_name: str | None = None, public: b
             api("PUT", f"/repos/{repo}/contents/{path}", body)
         say(f"   committed {len(own)} file(s): {', '.join(own)}")
     apply(repo, want)
+    if not core.dry_run():
+        state = repo_state(repo)
+        found = extras.findings(repo, state, want)
+        if any(f.area for f in found):
+            extras.fix(repo, state, want, found)
     say(f"   check it: mason doctor {repo}")

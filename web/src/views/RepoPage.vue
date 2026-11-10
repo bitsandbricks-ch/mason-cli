@@ -6,6 +6,7 @@ import { qs } from '../api.js'
 import { act, cached, forget } from '../load.js'
 import { useKeys } from '../keys.js'
 import ReleaseForm from '../components/ReleaseForm.vue'
+import SecretsPanel from '../components/SecretsPanel.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 
@@ -78,6 +79,7 @@ useKeys(keys)
         <div class="actions">
           <button v-for="a in actions" :key="a.k" :class="{ primary: a.k === 'n' }" @click="a.fn"><span class="k">{{ a.k }}</span> {{ a.label }}</button>
         </div>
+        <SecretsPanel v-if="!gitlab" :repo="repo" @done="({ text }) => (output = text)" />
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
       </div>
       <div class="pad">

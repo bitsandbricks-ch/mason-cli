@@ -223,7 +223,12 @@ def test_proxy_allowlist():
     assert allowed("POST", "/repos/acme/web/actions/runs/5/pending_deployments")
     assert not allowed("DELETE", "/repos/acme/web")  # never deletes a repo
     assert not allowed("PUT", "/repos/acme/web/collaborators/eve")
-    assert not allowed("GET", "/repos/acme/web/actions/secrets")
+    assert allowed("GET", "/repos/acme/web/actions/secrets")  # names only: GitHub never gives values out
+    assert allowed("PUT", "/repos/acme/web/actions/secrets/NPM_TOKEN")  # encrypted by the CLI
+    assert not allowed("DELETE", "/repos/acme/web/actions/secrets/NPM_TOKEN")
+    assert allowed("PUT", "/repos/acme/web/environments/production")
+    assert allowed("POST", "/repos/acme/web/pages") and allowed("PATCH", "/repos/acme/web/code-scanning/default-setup")
+    assert allowed("GET", "/orgs/acme/teams/ops") and not allowed("PUT", "/orgs/acme/teams/ops/members/eve")
     assert not allowed("POST", "/user/keys")
     assert not allowed("GET", "/admin/users")
 
@@ -890,3 +895,29 @@ def test_unreleased_versions_in_the_releases_list(op):
     assert got["unreleased"] == 3
     only = {r["repo"] for r in c.get("/api/v1/releases?unreleased=1", headers=H).json["releases"]}
     assert only == {"acme/plugin-b", "acme/web", "mike/dotfiles"}
+
+
+def test_secrets_names_and_set(op, monkeypatch, tmp_path):
+    """A repo's wanted secrets by name; a value goes to GitHub encrypted and never into the audit log."""
+    import base64
+    import json
+
+    from mason import sealedbox
+
+    _, c = op
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    monkeypatch.setenv("FAKE_GH_OWN",
+                       'secrets = ["NPM_TOKEN"]\n[environments.production]\nsecrets = ["DEPLOY_TOKEN"]\n')
+    rows = c.get("/api/v1/repo/secrets?repo=mike/dotfiles").json["secrets"]
+    assert {"env": None, "name": "NPM_TOKEN", "set": False, "wanted": True} in rows
+    assert {"env": "production", "name": "DEPLOY_TOKEN", "set": True, "wanted": True} in rows
+    r = c.post("/api/v1/repo/secrets", json={"repos": ["mike/dotfiles"], "name": "NPM_TOKEN", "value": "t0ken"},
+               headers=H)
+    assert r.json["ok"] and "set NPM_TOKEN in mike/dotfiles" in r.json["text"]
+    body = json.loads(log.read_text().split("BODY ", 1)[1].splitlines()[0])
+    assert sealedbox.open_box(base64.b64decode(body["encrypted_value"]), bytes(range(1, 33))) == b"t0ken"
+    audit = c.get("/api/v1/audit").json
+    assert "t0ken" not in json.dumps(audit) and "secret.set" in json.dumps(audit)
+    assert c.post("/api/v1/repo/secrets", json={"repos": ["mike/dotfiles"], "name": "X", "value": ""},
+                  headers=H).status_code == 400

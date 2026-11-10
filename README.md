@@ -45,7 +45,9 @@ Repos are named as `owner/name`, as a bare `name` when only one repo has it, or 
 | `mason release [names] [--yes] [--list]` | Pushes the tag `v<version>` on the default branch of each named repo whose version is newer than its latest release (and whose first changelog has the section), after asking. The repo's own workflow builds and publishes. When the tag is there already it shows its release run. No names (or `--list`): a table of version against latest release. |
 | `mason approve [--yes]` | Runs waiting for you: environments you review, and outside contributors' runs. A run that waits for someone else says why you can't approve it, for example "Prevent self-review" when you started it and are its only reviewer. |
 | `mason security` | Open Dependabot, secret scanning and code scanning alerts. |
-| `mason doctor [names] [--fix]` | Settings, security, release immutability, rulesets and files against the defaults. `--fix` applies them. |
+| `mason doctor [names] [--fix]` | Settings, security, release immutability, rulesets, environments, variables, secrets (by name), Pages and its domain, CodeQL, autolinks and files against the defaults and the repo's own `.mason.toml`. `--fix` applies them. |
+| `mason secrets [names]` | The Actions secrets the defaults name for each repo (and its environments): set or missing. Names only: GitHub never gives values out. |
+| `mason secrets set NAME [names] [--env ENV]` | Reads the value from stdin (or asks without echo), encrypts it with each repo's public key and stores it. One value can go to many repos. |
 | `mason sync [names] [--only PATH]` | Opens a PR per repo whose shared files differ. |
 | `mason issues [names] [--mine] [--label L] [--assignee X] [--stale DAYS] [--state open\|closed\|all] [--limit 20]` | Issues across repos, newest activity first; PRs are left out. `--assignee none` shows unassigned ones, `*` any assigned; `--label` repeats. |
 | `mason issue new name "title" [--body TEXT] [--label L] [--assignee X]` | Opens an issue (`--body -` reads it from stdin). `mason issue view\|close\|reopen name#12` shows, closes (`--not-planned`) or reopens one, `mason issue comment name#12 "text"` comments. An issue URL works too. |
@@ -107,7 +109,7 @@ The line over the log says what the list shows: `3 of 12 rows · F4 filter: fail
 
 Bump, release and New tag need to know which file holds a repo's version. Mason looks in this order:
 
-1. **The repo's `.mason.toml`.** Only its `[release]` table is read (groups and checks stay with your defaults and the org's `.mason` repo):
+1. **The repo's `.mason.toml`**, its `[release]` table (the rest of the file is the repo's own settings, see [A repo's own settings](#a-repos-own-settings-masontoml)):
 
    ```toml
    [release]
@@ -175,7 +177,7 @@ labels = { bug = "d73a4a", docs = { color = "0075ca", description = "Documentati
 actions = { allowed_actions = "selected", default_workflow_permissions = "read",
             can_approve_pull_request_reviews = false }
 required_files = ["README.md", "LICENSE", "CODEOWNERS|.github/CODEOWNERS"]   # A|B: either one
-branch = "main"                                    # the default branch's name
+branch = "main"                                    # the default branch's name (--fix renames it)
 visibility = "private"                             # public, private or internal
 description = true                                 # every repo has a description
 workflows = { allow_unpinned = ["actions/*"] }     # doctor checks the workflows too (or: workflows = true)
@@ -185,15 +187,64 @@ version = "pyproject.toml"                         # the file with the version (
 changelog = ["CHANGELOG.md"]                       # changelogs mason bump adds the section to
 rulesets = "rulesets/default"                      # ruleset JSON files (export them from GitHub)
 files = "files/default"                            # copied into each repo, path for path
+variables = { NODE_VERSION = "22" }                # Actions variables (not secret: the values live here)
+secrets = ["NPM_TOKEN"]                            # Actions secrets that must exist: names only
+pages = { build = "workflow", https = true }       # GitHub Pages (or true / false); cname = "docs.example.com"
+homepage = true                                    # the repo's website: its Pages address, or a URL
+code_scanning = true                               # CodeQL default setup
+autolinks = { "JIRA-" = "https://jira.example.com/browse/JIRA-<num>" }
+
+[group.environments.production]                    # deployment environments
+reviewers = ["mike", "team:your-org/ops"]          # required reviewers (users, or teams)
+wait = 5                                           # minutes before a deployment starts
+branches = ["main", "tag:v*"]                      # who may deploy: patterns, "protected" or "all"
+prevent_self_review = true
+secrets = ["DEPLOY_TOKEN"]                         # the environment's secrets (names)
+variables = { REGION = "eu" }
 ```
 
-The first group that matches a repo is its group. With `from`, the group takes everything from the reference repo as it is live on GitHub (settings, security, release immutability, rulesets), so changing the reference changes what every repo of the group should have. Explicit `settings`, `security` and `rulesets` go on top.
+`actions` also takes `retention_days = 30` (how long logs and artifacts are kept) and `fork_pr_approval`
+(`first_time_contributors_new_to_github`, `first_time_contributors` or `all_external_contributors`).
+
+#### Groups stack
+
+Every group that matches a repo applies, not only the first one. So one group can hold what every repo
+gets, another what all `plugin-*` repos get on top, and another what one repo gets:
+
+```toml
+[[group]]
+name = "all"                                       # no match: every repo
+settings = { delete_branch_on_merge = true }
+immutable_releases = true
+
+[[group]]
+name = "plugins"
+match = { prefix = "plugin-" }                     # every plugin
+secrets = ["SIGN_KEY"]
+
+[[group]]
+name = "site"
+match = { repos = ["your-org/website"] }           # one repo, by its full name
+pages = { cname = "www.example.com", https = true }
+```
+
+The more specific group wins key by key: a group naming full repos beats one with a `prefix` or `suffix`,
+which beats one with only an `org`, `topics` or `provider`, which beats one without `match`; on a tie the
+group written first wins. Tables (`settings`, `security`, `labels`, `actions`, `variables`, `autolinks`,
+each environment, `pages`) merge key by key; lists (`topics`, `secrets`, `required_files`, `release_assets`,
+`skip`) add up; rulesets and files folders merge by name and path; other values are replaced. A repo's group
+name (in lists and for its alias) is the most specific one's, and `--group all` takes every repo the "all"
+group matches. `inherit = false` on a group stops the less specific groups from stacking under it.
+
+With `from`, the group takes everything from the reference repo as it is live on GitHub (settings, security, release immutability, rulesets), so changing the reference changes what every repo of the group should have. Explicit `settings`, `security` and `rulesets` go on top. With `from`, the group takes everything from the reference repo as it is live on GitHub (settings, security, release immutability, rulesets), so changing the reference changes what every repo of the group should have. Explicit `settings`, `security` and `rulesets` go on top.
 
 A ruleset from the defaults folder only has to be covered: a repo may set more than the file says (GitHub fills in its own defaults). A reference repo's rulesets must match exactly. Each repo's own `.github/rulesets/*.json` must also match what's live, and `doctor --fix` imports them.
 
-`doctor --fix` sets settings, security (Dependabot alerts and security updates too), topics (it adds the missing ones and keeps the rest), labels (it creates missing ones and fixes colors, and leaves other labels alone) and the Actions permissions. `branch`, `visibility`, `description` and `required_files` are only checked, because changing them can break things: a missing required file is a job for `mason sync` or a PR.
+`doctor --fix` sets settings, security (Dependabot alerts and security updates too), topics (it adds the missing ones and keeps the rest), labels (it creates missing ones and fixes colors, and leaves other labels alone), the Actions permissions, retention and fork PR approval, environments (reviewers, wait timer, branch patterns, variables), variables, Pages (on, off, build, branch, domain, HTTPS), the homepage, CodeQL default setup and autolinks, and renames the default branch to `branch` (GitHub moves open PRs; clones need `git branch -m`). `visibility`, `description` and `required_files` are only checked, because changing them can break things: a missing required file is a job for `mason sync` or a PR. Secrets are only checked by name: mason never knows a value, so `mason secrets set` (or a repo's page in the web app) stores one. Pages HTTPS can only be turned on once GitHub has issued the domain's certificate: `--fix` says so and a later run sets it. DNS for a custom domain stays with you.
 
-`skip` turns checks off for a group: `settings`, `security`, `vulnerability_reporting`, `immutable_releases`, `rulesets`, `own_rulesets` (the repo's `.github/rulesets`), `files`, `required_files`, `topics`, `labels`, `actions`, `branch`, `visibility`, `description`, `workflows`, `plugins` (the plugins' doctor checks) and `version` (the version file).
+Every write needs admin rights on that repo (secrets: write access), and mason uses your own login, so `--fix` changes what you administer and reports the rest.
+
+`skip` turns checks off for a group: `settings`, `security`, `vulnerability_reporting`, `immutable_releases`, `rulesets`, `own_rulesets` (the repo's `.github/rulesets`), `files`, `required_files`, `topics`, `labels`, `actions`, `branch`, `visibility`, `description`, `workflows`, `environments`, `variables`, `secrets`, `pages`, `homepage`, `code_scanning`, `autolinks`, `plugins` (the plugins' doctor checks) and `version` (the version file).
 
 `workflows` makes doctor check the group's workflow files like `mason workflows` does. It takes `true` or a table: `pinned`, `permissions`, `pull_request_target` and `injection` turn single checks off with `false`, and `allow_unpinned = ["actions/*", "your-org/*"]` lets actions of owners you trust stay on a tag. `mason workflows --fix` keeps the tag as a comment (`uses: actions/checkout@<sha> # v4`), so Dependabot and Renovate keep updating the pins.
 
@@ -224,14 +275,47 @@ are ignored, so an org's file can't change which repos you look at. Its groups a
 (`your-org:services`, for `--group`). On GitLab the nearest group's `.mason` comes first, then its
 parents' (`grp/sub/.mason`, then `grp/.mason`).
 
-Which group a repo gets, first hit wins:
+Which groups stack for a repo, least important first:
 
-1. a group of your own defaults whose `match` takes the repo,
-2. a group of the repo's org's `.mason`,
-3. a group of your own defaults without `match` (your catch-all).
+1. a group of your own defaults without `match` (your catch-all), only when no group of the org's `.mason` matches,
+2. the groups of the repo's org's `.mason` that match (on GitLab a parent group's before its subgroup's),
+3. the groups of your own defaults whose `match` takes the repo,
+4. the repo's own `.mason.toml` (below).
 
-So the org's `.mason` replaces your catch-all for its repos, and a group you wrote for some of its repos
-on purpose still wins. Groups are never merged key by key: one group decides, as before.
+So the org's `.mason` replaces your catch-all for its repos, a group you wrote for some of its repos on
+purpose goes on top, and the repo itself has the last word.
+
+### A repo's own settings: `.mason.toml`
+
+A repo can set everything a group can for itself in a `.mason.toml` at its root, and it wins over every
+group, the org's `.mason` included. Plugins, indexes, apps and websites of one org can each carry what
+they need:
+
+```toml
+# your-org/website/.mason.toml
+secrets = ["CLOUDFLARE_TOKEN"]
+code_scanning = false
+
+[settings]
+has_wiki = false
+
+[pages]
+cname = "www.example.com"
+https = true
+
+[environments.production]
+reviewers = ["mike"]
+branches = ["main"]
+
+[release]                          # version files (above)
+version = "package.json"
+```
+
+Keys that only make sense for a group (`name`, `match`, `from`, `files`, `require`, `rulesets`, `version`,
+`changelog`, `inherit`) are ignored here; the repo's own rulesets are its `.github/rulesets/*.json`, and
+those now win over a group's ruleset of the same name. Anyone who can push to the repo can change this
+file, so it can also turn org rules off for that repo (`skip`, or a looser setting): review it like code.
+Only GitHub repos read it for now.
 
 mason reads the `.mason` repo with your own login (gh, your token, or your Mason account), so a private
 `.mason` only counts for people who can read it, and each user's answer is cached in their own cache

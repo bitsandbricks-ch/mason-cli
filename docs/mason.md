@@ -336,10 +336,22 @@ of your defaults and, below them, every org and GitLab group your repos are in, 
 matches can still be picked out. The API takes the same filter as `?group=acme/` or `?group=gitlab:grp/`.
 
 Each org (or GitLab group) can also keep its own defaults in a repo named `.mason` (see the README):
-its groups apply to that org's repos ahead of your catch-all group, and your own groups with a `match`
-still win. Mason reads it with the signed-in user's own token, so a user who can't read an org's
+its groups apply to that org's repos instead of your catch-all group, and your own groups with a `match`
+go on top. Every matching group stacks (the more specific one wins key by key), and a repo's own
+`.mason.toml` has the last word for that repo. Mason reads it with the signed-in user's own token, so a user who can't read an org's
 `.mason` doesn't get it, and caches it in that user's cache only. `GET /api/v1/config` lists the
 `.mason` repos found for your orgs; `org defaults` in Settings turns them off for you.
+
+### Secrets
+
+A repo's page lists the Actions secrets its defaults name (the repo's and each environment's), set or
+missing, and the ones set besides. Typing a value and pressing set sends it once: Mason encrypts it with
+the repo's public key (libsodium's sealed box, as GitHub wants) and passes it to GitHub with your token. It
+keeps nothing, and the audit log records which secret was set where, never the value. "also in" sends
+the same value to more repos. `GET /api/v1/repo/secrets?repo=owner/name` lists them, `POST
+/api/v1/repo/secrets` (`repos`, `name`, `env`, `value`, a write key) sets one. The CLI through Mason
+encrypts on your side, so the value never reaches Mason at all; the proxy passes secret writes but never
+deletes.
 
 ## Plugins and the marketplace
 
