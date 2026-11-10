@@ -23,6 +23,7 @@ import re
 import urllib.parse
 
 from mason import core
+from mason.config import group_label
 from mason.core import ago, compact, git_blob_sha, newest, say
 from mason.transport import HttpError, HttpTransport
 
@@ -190,14 +191,14 @@ def status_rows(gl: GitLab, cfg, repos: list[str]) -> list[dict]:
         node = info.get(repo)
         g = cfg.group_of(repo) if cfg else None
         if not node:
-            rows.append({"repo": repo, "provider": "gitlab", "group": g.name if g else "-", "released": "missing",
+            rows.append({"repo": repo, "provider": "gitlab", "group": group_label(g, repo), "released": "missing",
                          "ready": 0, "drafts": 0, "ci": "", "url": ""})
             continue
         mrs = node["mergeRequests"]
         drafts = sum(1 for m in mrs["nodes"] if m.get("draft"))
         pipes = ((((node.get("repository") or {}).get("tree") or {}).get("lastCommit") or {}).get("pipelines")
                  or {}).get("nodes") or []
-        rows.append({"repo": repo, "provider": "gitlab", "group": g.name if g else "-",
+        rows.append({"repo": repo, "provider": "gitlab", "group": group_label(g, repo),
                      "released": newest([r["tagName"] for r in node["releases"]["nodes"]]) or "-",
                      "ready": mrs["count"] - drafts, "drafts": drafts,
                      "ci": ci_word(pipes[0]["status"]) if pipes else "-", "url": node.get("webUrl", "")})

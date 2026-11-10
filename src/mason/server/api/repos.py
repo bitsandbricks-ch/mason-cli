@@ -16,7 +16,7 @@ from mason import packages as P
 from mason import releases as REL
 from mason import repos as R
 from mason import workflows as W
-from mason.config import orgs_of
+from mason.config import group_label, orgs_of
 from mason.server import gitlab as GL
 from mason.server.api.account import body
 from mason.server.auth import audit, can_write, need
@@ -109,17 +109,18 @@ def repos_list():
         out = []
         for r in gh_r:
             grp = R.group_of(cfg, r)
-            out.append({"repo": r, "provider": "github", "group": grp.name if grp else "", "url": f"{gh.web}/{r}",
+            out.append({"repo": r, "provider": "github", "group": group_label(grp, r), "url": f"{gh.web}/{r}",
                         "alias": grp.alias(r) if grp else core.short(r),
                         "topics": (R.listing(cfg).get(r) or {}).get("topics") or []})
         projects = gitlab_projects(gl, cfg) if gl else {}
         for r in gl_r:
             grp = cfg.group_of(r, projects.get(r, {}).get("topics"))
-            out.append({"repo": r, "provider": "gitlab", "group": grp.name if grp else "",
+            out.append({"repo": r, "provider": "gitlab", "group": group_label(grp, r),
                         "url": projects.get(r, {}).get("url", ""),
                         "alias": grp.alias(r) if grp else r.rsplit("/", 1)[-1],
                         "topics": projects.get(r, {}).get("topics") or []})
-        groups = list(dict.fromkeys([x.name for x in cfg.groups] + [x["group"] for x in out if x["group"]]))
+        named = [x["group"] for x in out if not x["group"].endswith("/")]  # a repo without a group shows its org
+        groups = list(dict.fromkeys([x.name for x in cfg.groups] + named))
         # every repo is in an org (GitHub) or GitLab group, also the ones no group of the defaults matches
         owners = sorted(dict.fromkeys(o for x in out for o in orgs_of(x["repo"])), key=str.lower)
         return jsonify({"repos": out, "groups": groups, "owners": owners, "orgs": cfg.orgs,
@@ -156,7 +157,7 @@ def repo_detail():
                 abort(409, "connect GitLab first")
             node = GL.nodes(gl, [repo]).get(repo) or {}
             grp = cfg.group_of(repo)
-            lines = [repo, node.get("webUrl", ""), "", f"group        {grp.name if grp else '-'}"]
+            lines = [repo, node.get("webUrl", ""), "", f"group        {group_label(grp, repo)}"]
             rels = [r["tagName"] for r in (node.get("releases") or {}).get("nodes") or []]
             lines.append(f"released     {core.newest(rels) or '-'}")
             mrs = (node.get("mergeRequests") or {}).get("nodes") or []
@@ -166,7 +167,7 @@ def repo_detail():
         node = R.nodes([repo]).get(repo) or {}
         grp = R.group_of(cfg, repo)
         last = core.newest([r["tagName"] for r in (node.get("releases") or {}).get("nodes") or []])
-        lines = [repo, f"{gh.web}/{repo}", "", f"group        {grp.name if grp else '-'}",
+        lines = [repo, f"{gh.web}/{repo}", "", f"group        {group_label(grp, repo)}",
                  f"released     {last or '-'}" + (f"  {gh.web}/{repo}/releases/tag/{last}" if last else "")]
         target = ((node.get("defaultBranchRef") or {}).get("target") or {})
         lines.append(f"CI           {((target.get('statusCheckRollup') or {}).get('state') or '-').lower()}")

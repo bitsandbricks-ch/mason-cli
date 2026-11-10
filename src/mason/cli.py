@@ -230,7 +230,7 @@ def list_repos(cfg, names: list[str]) -> None:
         g = repos.group_of(cfg, r)
         alias = g.alias(r) if g else ""
         extra = f"  ({alias})" if g and alias != core.short(r) else ""
-        print(f"{r:<45} {g.name if g else '-'}{extra}")
+        print(f"{r:<45} {config.group_label(g, r)}{extra}")
     print(f"{len(names)} repos")
 
 

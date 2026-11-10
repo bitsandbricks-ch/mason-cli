@@ -5,6 +5,7 @@ from __future__ import annotations
 from flask import Blueprint, abort, jsonify, request
 
 from mason import core, stats
+from mason.config import group_label
 from mason.server import gitlab as GL
 from mason.server.api.repos import all_repos, names_arg
 from mason.server.auth import need
@@ -28,7 +29,7 @@ def metrics():
         by_group: dict[str, list] = {}
         for r in rows:
             g = cfg.group_of(r["repo"])
-            by_group.setdefault(g.name if g else "-", []).append(r)
+            by_group.setdefault(group_label(g, r["repo"]), []).append(r)
         return jsonify({"days": days, "repos": rows, "totals": stats.totals(rows, days),
                         "groups": {k: stats.totals(v, days) for k, v in by_group.items()},
                         "cache": {"github": gh.cache_info() if hasattr(gh, "cache_info") else {},

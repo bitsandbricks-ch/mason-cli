@@ -212,7 +212,8 @@ def test_local_defaults_and_init(env, tmp_path):
 def test_no_config(env, tmp_path):
     e = {**env, "MASON_DEFAULTS": "", "XDG_CONFIG_HOME": str(tmp_path / "cfg")}
     assert "No repos" in mason(e, "status")
-    assert "dotfiles" in mason({**e, "MASON_ORGS": "mike"}, "repos")
+    out = mason({**e, "MASON_ORGS": "mike"}, "repos")
+    assert "mike/dotfiles" in out and out.split("mike/dotfiles")[1].split()[0] == "mike/"  # no group: its org
 
 
 def test_open_prints_link(env):

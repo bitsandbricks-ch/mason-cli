@@ -66,7 +66,7 @@ from mason import packages as P
 from mason import releases as REL
 from mason import repos as R
 from mason import versions as V
-from mason.config import Config
+from mason.config import Config, group_label
 
 BASE_TABS = [("repos", "Repos"), ("prs", "Pull requests"), ("runs", "Runs"), ("releases", "Releases"),
              ("packages", "Packages"), ("security", "Security"),
@@ -1330,7 +1330,7 @@ class MasonTui(App):
         last = core.newest(tags)
         ci = ((((node.get("defaultBranchRef") or {}).get("target") or {}).get("statusCheckRollup")) or {}).get("state")
         branch = (node.get("defaultBranchRef") or {}).get("name") or "main"
-        lines = [repo, f"{core.WEB}/{repo}", "", f"group        {g.name if g else '-'}"]
+        lines = [repo, f"{core.WEB}/{repo}", "", f"group        {group_label(g, repo)}"]
         lines.append(f"released     {last or '-'}" + (f"  {core.WEB}/{repo}/releases/tag/{last}" if last else ""))
         lines += self.version_lines(repo)
         lines.append(f"CI on {branch:<6} {(ci or '-').lower()}  {core.WEB}/{repo}/actions")

@@ -9,7 +9,7 @@ import re
 import webbrowser
 
 from mason import core, plugins
-from mason.config import Config, orgs_of
+from mason.config import Config, group_label, orgs_of
 from mason.core import WEB, ago, api, api_pages, for_each, graphql, newest, say, short, table
 
 # ── the repo list ────────────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ def status_rows(cfg: Config, repos: list[str]) -> list[list[str]]:
         node = info.get(repo)
         g = group_of(cfg, repo)
         if not node:
-            rows.append([repo, g.name if g else "-", "missing", "", "", *("" for _ in cols)])
+            rows.append([repo, group_label(g, repo), "missing", "", "", *("" for _ in cols)])
             continue
         last = newest([r["tagName"] for r in node["releases"]["nodes"]]) or "-"
         prs = node["pullRequests"]
@@ -211,7 +211,7 @@ def status_rows(cfg: Config, repos: list[str]) -> list[list[str]]:
                 extra.append(str(fn(repo, node)))
             except Exception:
                 extra.append("?")
-        rows.append([repo, g.name if g else "-", last, f"{prs['totalCount'] - drafts}/{drafts}", ci, *extra])
+        rows.append([repo, group_label(g, repo), last, f"{prs['totalCount'] - drafts}/{drafts}", ci, *extra])
     return rows
 
 
