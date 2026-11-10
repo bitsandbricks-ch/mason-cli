@@ -872,3 +872,20 @@ def test_bump_and_release_from_the_web(op):
     got = c.post("/api/v1/release/version", json={"repo": "acme/plugin-b", "dry_run": True}, headers=H).json
     assert "[dry-run] push tag v0.4.0 on main" in got["text"]
     assert c.post("/api/v1/bump", json={"repo": "gitlab:g/p"}, headers=H).status_code == 400
+
+
+def test_unreleased_versions_in_the_releases_list(op):
+    _, c = op
+    got = c.get("/api/v1/releases", headers=H).json
+    rows = {r["repo"]: r for r in got["releases"]}
+    b = rows["acme/plugin-b"]
+    assert b["version"]["todo"] and b["pending"] == "0.4.0 unreleased"
+    assert b["version"]["next"] == {"patch": "0.4.1", "minor": "0.5.0", "major": "1.0.0"}
+    a = rows["acme/plugin-a"]
+    assert not a["version"]["todo"] and a["version"]["pr"]["number"] == 12 and a["version"]["pr"]["version"] == "1.0.1"
+    assert a["pending"] == "1.0.0 · bump #12 → 1.0.1"
+    assert rows["mike/dotfiles"]["release"] == "-" and rows["mike/dotfiles"]["version"]["todo"]  # nothing released yet
+    assert rows["acme/api"]["version"] is None  # no version file
+    assert got["unreleased"] == 3
+    only = {r["repo"] for r in c.get("/api/v1/releases?unreleased=1", headers=H).json["releases"]}
+    assert only == {"acme/plugin-b", "acme/web", "mike/dotfiles"}

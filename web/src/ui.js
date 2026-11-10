@@ -2,19 +2,26 @@
 import { reactive } from 'vue'
 
 export const prompt = reactive({ open: false, question: '', detail: '', resolve: null, allowDry: true, input: null,
-  links: [], notice: false })
+  links: [], notice: false, choices: null })
 
 // ask('Merge acme/web#7 now?') -> 'yes' | 'dry' | null
 export function ask(question, { detail = '', allowDry = true, input = null } = {}) {
   return new Promise((resolve) => {
-    Object.assign(prompt, { open: true, question, detail, allowDry, input, resolve, links: [], notice: false })
+    Object.assign(prompt, { open: true, question, detail, allowDry, input, resolve, links: [], notice: false, choices: null })
+  })
+}
+
+// choose('Bump acme/web', [{ key: 'p', value: 'patch', label: 'patch → 1.2.4', hint: 'fixes' }, ...]) -> value | null
+export function choose(question, choices, { detail = '' } = {}) {
+  return new Promise((resolve) => {
+    Object.assign(prompt, { open: true, question, detail, allowDry: false, input: null, resolve, links: [], notice: false, choices })
   })
 }
 
 // tell('Revoke it at GitHub', { links: [{ href, label }] }): a message with links and an ok button.
 export function tell(question, { detail = '', links = [] } = {}) {
   return new Promise((resolve) => {
-    Object.assign(prompt, { open: true, question, detail, allowDry: false, input: null, resolve, links, notice: true })
+    Object.assign(prompt, { open: true, question, detail, allowDry: false, input: null, resolve, links, notice: true, choices: null })
   })
 }
 
@@ -30,7 +37,7 @@ export async function tellRevoked(got) {
 
 export function answer(value) {
   const r = prompt.resolve
-  Object.assign(prompt, { open: false, resolve: null })
+  Object.assign(prompt, { open: false, resolve: null, choices: null })
   if (r) r(value)
 }
 

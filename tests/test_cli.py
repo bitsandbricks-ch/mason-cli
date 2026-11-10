@@ -77,9 +77,16 @@ def test_releases(env):
     assert "missing *.zip" in out  # plugin-b's group wants a zip
     assert "acme/plugin-b: missing *.zip; Release failure" in out
     assert 'sign: failure at step "cosign"' in out and "runs/7/job/8" in out
-    assert "dotfiles" not in out  # no releases
+    rows = [line.split() for line in out.splitlines()]
+    assert rows[0][-1] == "version"
+    assert any(r[:2] == ["plugin-b", "v0.3.0"] and r[-2:] == ["0.4.0", "unreleased"] for r in rows)  # bumped
+    assert any(r[:2] == ["dotfiles", "-"] and r[-2:] == ["2.1.0", "unreleased"] for r in rows)  # no release
+    assert "1.0.0 · bump #12 → 1.0.1" in out  # plugin-a: released, a bump PR is open
+    assert "3 repo(s) have a version that isn't released yet: mason release plugin-b web dotfiles" in out
     out = mason(env, "releases", "--problems")
     assert "plugin-b" in out and "plugin-a" not in out and "api" not in out
+    out = mason(env, "releases", "--unreleased")
+    assert "plugin-b" in out and "dotfiles" in out and "plugin-a" not in out and "api" not in out
 
 
 def test_packages(env):
@@ -111,9 +118,12 @@ def test_bump_and_release(env, tmp_path):
     calls = log.read_text()
     assert "pr create --repo acme/plugin-a --base main --head bump/v1.1.0" in calls
     assert "PUT /repos/acme/plugin-a/contents/plugin.yaml" in calls
+    assert "note: the bump PR #12 to 1.0.1 is still open" in out
     assert "1.0.0 is not newer" in mason(env, "bump", "a", "1.0.0")
+    out = mason(env, "bump", "a", "patch")
+    assert "the bump PR to 1.0.1 is open already: https://github.com/acme/plugin-a/pull/12" in out
     rows = [line.split() for line in mason(env, "release").splitlines()]
-    assert ["plugin-a", "plugin.yaml", "1.0.0", "v1.0.0"] in rows
+    assert ["plugin-a", "plugin.yaml", "1.0.0", "v1.0.0", "#12", "→", "1.0.1"] in rows
     assert ["plugin-b", "plugin.yaml", "0.4.0", "v0.3.0", "v0.4.0"] in rows
     assert not any(r and r[0] == "api" for r in rows)  # its group names no version file
     out = mason(env, "release", "a")

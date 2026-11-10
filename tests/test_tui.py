@@ -85,11 +85,14 @@ def test_tui_flow(env, monkeypatch):
             await pilot.press("4")
             releases = app.query_one("#releases-table")
             await until(pilot, lambda: releases.row_count)
-            assert releases.row_count == 3 and app.tab() == "releases"
+            # 3 with a release, plus web and dotfiles: a version file, nothing released yet
+            assert releases.row_count == 5 and app.tab() == "releases"
+            assert "0.4.0 unreleased" in str(releases.get_row("acme/plugin-b")[-1])
             releases.move_cursor(row=releases.get_row_index("acme/plugin-b"))
             await until(pilot, lambda: "cosign" in str(app.query_one("#releases-detail").render()))
             assert "MISSING *.zip" in str(app.query_one("#releases-detail").render())
-            await until(pilot, lambda: "→ R releases v0.4.0" in str(app.query_one("#releases-detail").render()))
+            await until(pilot, lambda: "not released yet (latest v0.3.0): R releases v0.4.0"
+                        in str(app.query_one("#releases-detail").render()))
             assert "b bump version" in str(app.query_one("#releases-detail").render())
             await pilot.press("R")
             await until(pilot, lambda: "v0.4.0" in str(app.screen.query_one("Label").render()))

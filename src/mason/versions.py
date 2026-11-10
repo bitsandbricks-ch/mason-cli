@@ -195,8 +195,33 @@ def merged_since(repo: str, base: str, tag: str | None) -> list[dict]:
     return sorted(out, key=lambda p: p["merged_at"])
 
 
+BUMP_BRANCH = re.compile(r"^bump/v(.+)$")
+LEVELS = ("patch", "minor", "major")
+
+
+def bump_pr(repo: str) -> dict | None:
+    """The open bump PR of the repo (branch bump/v<version>), newest first: {number, url, version, title}."""
+    pulls = api("GET", f"/repos/{repo}/pulls?state=open&sort=created&direction=desc&per_page=100") or []
+    for p in pulls:
+        m = BUMP_BRANCH.match(((p.get("head") or {}).get("ref")) or "")
+        if m and p.get("state", "open") == "open":
+            return {"number": p.get("number"), "url": p.get("html_url") or f"{WEB}/{repo}/pull/{p.get('number')}",
+                    "version": m.group(1), "title": p.get("title") or ""}
+    return None
+
+
+def next_versions(current: str | None) -> dict:
+    """{patch, minor, major}: what each bump level would set, for pickers."""
+    if not current or not re.match(r"v?\d", current):
+        return {}
+    return {lv: next_version(current, lv) for lv in LEVELS}
+
+
 def state(cfg: Config, repo: str) -> dict:
-    """The version on the default branch against the latest release: what `release` would do."""
+    """The version on the default branch against the latest release: what `release` would do.
+
+    `todo` is true when the version file says something newer than the latest release: a bump was merged
+    but nothing is released yet. `next` has what patch, minor and major would bump to, `pr` the open bump PR."""
     src = source(cfg, repo)
     if not src:
         return {"repo": repo, "file": None}
@@ -206,7 +231,33 @@ def state(cfg: Config, repo: str) -> dict:
     last = newest(release_tags(repo))
     todo = bool(ver) and (not last or version_tuple(ver) > version_tuple(last))
     return {"repo": repo, "file": path, "base": base, "version": ver, "released": last,
-            "tag": tag_of(cfg, repo, ver) if ver else None, "todo": todo, "from": (spec(cfg, repo) or {}).get("from")}
+            "tag": tag_of(cfg, repo, ver) if ver else None, "todo": todo, "from": (spec(cfg, repo) or {}).get("from"),
+            "next": next_versions(ver), "pr": bump_pr(repo)}
+
+
+def states(cfg: Config, repos: list[str]) -> list[dict]:
+    """state() of every GitHub repo that has a version file; a repo that can't be read gets {"error"}."""
+    def one(repo: str) -> dict:
+        try:
+            return state(cfg, repo)
+        except core.RateLimited:
+            raise
+        except RuntimeError as err:
+            return {"repo": repo, "file": None, "error": str(err)}
+    found = core.pmap(one, [r for r in repos if not r.startswith("gitlab:")])
+    return [s for s in found if s.get("file")]
+
+
+def pending_word(st: dict | None) -> str:
+    """One cell for lists: "0.4.0 unreleased", "1.0.0", "1.0.0 · bump PR #12 → 1.1.0"."""
+    if not st or not st.get("file"):
+        return "-"
+    word = st.get("version") or "?"
+    if st.get("todo"):
+        word += " unreleased"
+    if st.get("pr"):
+        word += f" · bump #{st['pr']['number']} → {st['pr']['version']}"
+    return word
 
 
 def bump(cfg: Config, repo: str, level: str, auto: bool = False) -> None:
@@ -227,6 +278,11 @@ def bump(cfg: Config, repo: str, level: str, auto: bool = False) -> None:
     last = newest(release_tags(repo))
     if last and version_tuple(cur) > version_tuple(last):
         say(f"   note: {cur} isn't released yet (latest {last}); `mason release {core.short(repo)}` would publish it")
+    open_bump = bump_pr(repo)
+    if open_bump and open_bump["version"] == new:
+        raise RuntimeError(f"the bump PR to {new} is open already: {open_bump['url']}")
+    if open_bump:
+        say(f"   note: the bump PR #{open_bump['number']} to {open_bump['version']} is still open: {open_bump['url']}")
     notes = [f"- {p['title']} (#{p['number']})" for p in merged_since(repo, base, last)]
     files = {path: (write_version(found[0], path, new), found[1])}
     day = time.strftime("%Y-%m-%d")
@@ -331,14 +387,20 @@ def release_run(repo: str, tag: str, wait: int = 0) -> dict | None:
 
 def summary(cfg: Config, repos: list[str]) -> None:
     """mason release --list: the version of every repo against its latest release."""
-    rows = []
-    for repo in repos:
-        st = state(cfg, repo)
-        if st["file"]:
-            rows.append([core.short(repo), st["file"], st["version"] or "-", st["released"] or "-",
-                         st["tag"] if st["todo"] else ""])
-    if not rows:
+    found = states(cfg, repos)
+    if not found:
         say("no repo has a version file (set `version = ...` on a group in the defaults)")
         return
-    core.table(["repo", "file", "version", "released", "to release"], rows)
+    rows = [[core.short(st["repo"]), st["file"], st["version"] or "-", st["released"] or "-",
+             st["tag"] if st["todo"] else "", f"#{st['pr']['number']} → {st['pr']['version']}" if st.get("pr") else ""]
+            for st in found]
+    core.table(["repo", "file", "version", "released", "to release", "bump PR"], rows)
+    pending_hint(found)
+
+
+def pending_hint(found: list[dict]) -> None:
+    """The line under a list: which repos have a version that isn't released yet, and how to release it."""
+    todo = [core.short(st["repo"]) for st in found if st.get("todo")]
+    if todo:
+        say(f"\n{len(todo)} repo(s) have a version that isn't released yet: mason release {' '.join(todo)}")
 
