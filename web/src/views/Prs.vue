@@ -28,9 +28,9 @@ const rows = computed(() => {
 })
 const columns = [
   { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
-  { key: 'number', label: '#', right: true, fmt: (v, r) => (r.provider === 'gitlab' ? `!${v}` : `#${v}`) },
-  { key: 'title', label: 'title', cls: () => '' },
-  { key: 'state', label: 'state' },
+  { key: 'number', label: '#', right: true, fmt: (v, r) => (r.provider === 'gitlab' ? `!${v}` : `#${v}`), card: 'head' },
+  { key: 'title', label: 'title', cls: () => '', card: 'main' },
+  { key: 'state', label: 'state', card: 'head' },
   { key: 'checks', label: 'checks' },
   { key: 'flags', label: '' },
   { key: 'author', label: 'by', cls: () => 'dim' },
@@ -71,15 +71,15 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
     <div class="toolbar">
       <Scope :groups="scope.groups" />
       <span class="row"><button v-for="(l, k) in FILTERS" :key="k" class="chip" :class="{ on: filter === k }" @click="filter = k">{{ l }}</button></span>
-      <span class="dim">(v)</span>
+      <span class="dim k">(v)</span>
       <span class="spacer" />
       <button :disabled="!current || filter === 'merged'" @click="doMerge(false)"><span class="k">m</span> auto-merge</button>
       <button :disabled="!current || filter === 'merged'" @click="doMerge(true)"><span class="k">M</span> merge now</button>
       <button :disabled="!current?.draft" @click="ready"><span class="k">y</span> ready</button>
       <button :class="{ primary: diff }" @click="diff = !diff"><span class="k">d</span> diff</button>
-      <button @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
+      <button class="any" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
     </div>
-    <div class="split">
+    <div class="split ld">
       <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open pull requests'" @activate="open" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>

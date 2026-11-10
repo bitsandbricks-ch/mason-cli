@@ -3,9 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { get, loadMe, log, post, put, state } from './api.js'
 import { THEMES } from './themes.js'
-import { TABS } from './router.js'
+import { GROUPS, TABS } from './router.js'
 import { typing } from './keys.js'
-import { prompt } from './ui.js'
+import { closeDetail, phone, prompt } from './ui.js'
 import PromptDialog from './components/PromptDialog.vue'
 
 const route = useRoute()
@@ -52,6 +52,45 @@ function guard() {
 watch(() => route.fullPath, guard)
 watch(signedIn, guard)
 
+// Phones: a bar at the bottom with the views used most and "more", which opens a menu of every view,
+// the theme, dry run and sign out.
+const DOCK = [
+  { name: 'repos', path: '/', label: 'repos', icon: '▤' },
+  { name: 'prs', path: '/prs', label: 'PRs', icon: '⇅' },
+  { name: 'issues', path: '/issues', label: 'issues', icon: '◎' },
+  { name: 'runs', path: '/runs', label: 'runs', icon: '▶' },
+]
+const menu = ref(false)
+const detail = computed(() => phone.value && route.hash === '#detail')
+const current = computed(() => route.meta.tab || route.name)
+const inDock = computed(() => DOCK.some((d) => d.name === current.value))
+const title = computed(() => {
+  if (route.name === 'plugin-tab') return `${route.params.plugin}`
+  const t = TABS.find((x) => x.name === current.value)
+  const label = t ? t.label.replace(/ /g, '-') : route.name
+  return route.query.repo && route.name !== current.value ? `${label}/${route.query.repo}` : label
+})
+// ‹ in the title bar: closes a detail, or leaves a row's own page (a repo, its releases) for its list
+const canBack = computed(() => detail.value || (!!route.meta.tab && route.name !== route.meta.tab))
+function goBack() {
+  if (detail.value) return closeDetail()
+  if (window.history.state?.back) return router.back()
+  router.push(TABS.find((t) => t.name === current.value)?.path || '/')
+}
+const moreLabel = computed(() => (inDock.value || menu.value ? 'more' : TABS.find((x) => x.name === current.value)?.label || route.name))
+watch(() => route.path, () => { menu.value = false })
+watch(phone, (p) => { if (!p) menu.value = false })
+
+// the last log line, for a few seconds (errors longer), above the bottom bar
+const toast = ref(null)
+let toastTimer = null
+watch(() => state.log[0], (l) => {
+  if (!phone.value || !l) return
+  toast.value = l
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toast.value = null }, l.kind === 'error' ? 10000 : 4000)
+})
+
 async function logout() {
   try { await post('/auth/logout') } catch (e) { log(e.message, 'error') }
   state.me = { user: null, providers: state.me?.providers || [] }
@@ -73,6 +112,59 @@ window.addEventListener('keydown', (e) => {
 <template>
   <div v-if="!state.loaded" class="center"><span class="cursor">connecting</span></div>
   <router-view v-else-if="!signedIn || route.meta.public" />
+  <div v-else-if="phone" class="screen phone">
+    <header class="top">
+      <button v-if="canBack" class="back" aria-label="back" @click="goBack">‹</button>
+      <span class="title"><span class="prompt accent">mason</span><span class="dim">:~/</span>{{ title }}</span>
+      <span class="spacer" />
+      <span v-if="state.busy" class="warn cursor" aria-label="working" />
+      <button v-if="state.dryRun" class="chip on" title="dry run is on: changes only show what they would do" @click="state.dryRun = false">dry run ✕</button>
+    </header>
+    <main :class="{ detail }">
+      <router-view @rate="refreshRate" />
+      <div v-if="menu" class="sheet" role="dialog" aria-label="every view">
+        <section v-for="g in GROUPS" :key="g">
+          <h2>{{ g }}</h2>
+          <router-link v-for="t in TABS.filter((x) => x.group === g)" :key="t.name" :to="t.path" class="item"
+                       :class="{ active: current === t.name }">
+            <span>{{ t.label }}</span><span class="dim">{{ t.hint }}</span>
+          </router-link>
+          <template v-if="g === 'setup'">
+            <router-link v-for="p in plugins" :key="p.name" :to="`/plugins/${p.name}/${p.tabs[0].id}`" class="item"
+                         :class="{ active: route.params.plugin === p.name }">
+              <span>{{ p.tabs[0].title.toLowerCase() }}</span><span class="dim">plugin {{ p.name }}</span>
+            </router-link>
+            <router-link v-if="state.me.user.is_operator" to="/operator" class="item" :class="{ active: route.name === 'operator' }">
+              <span>operator</span><span class="dim">the server, accounts, plugins for everyone</span>
+            </router-link>
+          </template>
+        </section>
+        <section>
+          <h2>you</h2>
+          <div class="item static"><span>theme</span>
+            <span class="row"><button v-for="t in themes" :key="t" class="chip" :class="{ on: theme === t }" @click="theme = t">{{ t }}</button></span>
+          </div>
+          <label class="item static"><span>dry run</span>
+            <span class="row"><input v-model="state.dryRun" type="checkbox"> <span class="dim">changes only show what they would do</span></span>
+          </label>
+          <div class="item static"><span>{{ state.me.user.name }}</span>
+            <span class="row"><span class="dim grow">{{ who }}<template v-if="rate"> · {{ rate }} calls left</template></span>
+              <button @click="logout">sign out</button></span>
+          </div>
+        </section>
+      </div>
+    </main>
+    <nav class="dock" aria-label="views">
+      <router-link v-for="d in DOCK" :key="d.name" :to="d.path" :class="{ active: !menu && current === d.name }">
+        <span class="ico" aria-hidden="true">{{ d.icon }}</span>{{ d.label }}
+      </router-link>
+      <button :class="{ active: menu || !inDock }" :aria-expanded="menu" @click="menu = !menu">
+        <span class="ico" aria-hidden="true">{{ menu ? '✕' : '≡' }}</span>{{ moreLabel }}
+      </button>
+    </nav>
+    <div v-if="toast" class="toast" :class="toast.kind === 'error' ? 'bad' : toast.kind === 'ok' ? 'ok' : ''" role="status"
+         @click="toast = null">{{ toast.text }}</div>
+  </div>
   <div v-else class="screen">
     <header class="top">
       <span class="prompt accent">{{ state.me.user.name.toLowerCase().replace(/\s+/g, '') }}@mason</span><span class="dim hide-xs">:~$</span>

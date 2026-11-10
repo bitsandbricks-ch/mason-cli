@@ -26,7 +26,7 @@ useKeys({ r: () => load(true) })
 <template>
   <div class="view">
     <div class="toolbar"><Scope :groups="scope.groups" /><span v-if="data?.error" class="bad">{{ data.error }}</span></div>
-    <div class="split">
+    <div class="split ld">
       <div><DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no container images'" /></div>
       <div class="pad"><TextPane :text="current?.text" placeholder="pick an image" /></div>
     </div>

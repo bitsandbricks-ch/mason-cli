@@ -18,7 +18,7 @@ const columns = [
   { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
   { key: 'waits_for', label: 'waits for', cls: (r) => (r.blocked ? 'dim' : 'warn') },
   { key: 'blocked', label: 'you can approve', fmt: (v) => (v ? `no: ${v}` : 'yes'), cls: (r) => (r.blocked ? 'bad' : 'ok') },
-  { key: 'name', label: 'run', cls: () => '' },
+  { key: 'name', label: 'run', cls: () => '', card: 'main' },
   { key: 'branch', label: 'branch', cls: () => '' },
   { key: 'when', label: 'since', cls: () => 'dim' },
 ]
@@ -41,7 +41,7 @@ useKeys({ r: () => load(true), a: () => approve(), o: () => open(current.value) 
       <button class="primary" :disabled="!current" @click="approve()"><span class="k">a</span> approve</button>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
-    <div class="split">
+    <div class="split ld">
       <div><DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'nothing waits for you'" @activate="approve" /></div>
       <div class="pad"><TextPane :text="output" placeholder="a approves the selected run; Enter does too" /></div>
     </div>

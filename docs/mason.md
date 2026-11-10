@@ -33,9 +33,12 @@ scripts (key)        ─┘      │                  └─> GitLab REST/GraphQ
 ![theme grey](screenshots/15-theme-grey.png)
 ![theme grey, pull requests](screenshots/16-theme-grey-prs.png)
 
-On a phone (the layout adapts below 700px; it can be added to the home screen):
+On a phone (below 700px; it can be added to the home screen), Mason is one column. The bar at the bottom has
+repos, PRs, issues and runs, and **more** opens a menu of every view, the theme, dry run and sign out. Lists are
+cards; tapping one opens its detail with the view's actions at the bottom, and back (the ‹ or the phone's own back
+gesture) returns to the list:
 
-<img src="screenshots/phone/m01-login.png" alt="login" width="200"> <img src="screenshots/phone/m02-repos.png" alt="repos" width="200"> <img src="screenshots/phone/m03-prs.png" alt="prs" width="200"> <img src="screenshots/phone/m05-approvals.png" alt="approvals" width="200"> <img src="screenshots/phone/m06-stats.png" alt="stats" width="200"> <img src="screenshots/phone/m08-defaults.png" alt="defaults" width="200"> <img src="screenshots/phone/m12-settings.png" alt="settings" width="200"> <img src="screenshots/phone/m14-console-run.png" alt="console run" width="200">
+<img src="screenshots/phone/m01-login.png" alt="login" width="200"> <img src="screenshots/phone/m02-repos.png" alt="repos" width="200"> <img src="screenshots/phone/m04-repo-detail.png" alt="a repo and its actions" width="200"> <img src="screenshots/phone/m07-menu.png" alt="the menu of every view" width="200"> <img src="screenshots/phone/m03-prs.png" alt="prs" width="200"> <img src="screenshots/phone/m09-pr-detail.png" alt="a pull request" width="200"> <img src="screenshots/phone/m05-approvals.png" alt="approvals" width="200"> <img src="screenshots/phone/m06-stats.png" alt="stats" width="200"> <img src="screenshots/phone/m08-defaults.png" alt="defaults" width="200"> <img src="screenshots/phone/m12-settings.png" alt="settings" width="200"> <img src="screenshots/phone/m14-console-run.png" alt="console run" width="200">
 
 ## The web UI
 

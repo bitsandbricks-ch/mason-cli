@@ -10,6 +10,7 @@ import DataTable from '../components/DataTable.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
+import { openDetail } from '../ui.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,16 +57,16 @@ useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: ba
 <template>
   <div class="view">
     <div class="toolbar">
-      <button @click="back"><span class="k">esc</span> back</button>
-      <span class="accent">releases › {{ repo }}</span>
+      <button class="hide-xs" @click="back"><span class="k">esc</span> back</button>
+      <span class="accent hide-xs">releases › {{ repo }}</span>
       <span class="spacer" />
-      <button @click="load(sel || '', true)"><span class="k">r</span> reload</button>
-      <button class="primary" @click="form = 'release'"><span class="k">n</span> new release</button>
-      <button @click="form = 'tag'"><span class="k">T</span> new tag</button>
+      <button class="any" @click="load(sel || '', true)"><span class="k">r</span> reload</button>
+      <button class="primary any" @click="form = 'release'; openDetail()"><span class="k">n</span> new release</button>
+      <button class="any" @click="form = 'tag'; openDetail()"><span class="k">T</span> new tag</button>
       <button :disabled="!page" @click="open"><span class="k">o</span> open</button>
-      <router-link class="chip" :to="{ path: '/repo', query: { repo } }">repo page</router-link>
+      <router-link class="chip any" :to="{ path: '/repo', query: { repo } }">repo page</router-link>
     </div>
-    <div class="split">
+    <div class="split ld">
       <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.tag"
                       :empty="loading ? 'loading…' : 'no releases yet: n creates the first'" @activate="open" /></div>
       <div class="pad">

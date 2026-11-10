@@ -22,9 +22,9 @@ const clean = computed(() => (data.value?.workflows || []).filter((w) => w.workf
 const counts = computed(() => rows.value.reduce((m, r) => ({ ...m, [r.kind]: (m[r.kind] || 0) + 1 }), {}))
 const columns = [
   { key: 'kind', label: 'kind', cls: (r) => (BAD.has(r.raw) ? 'bad' : 'warn') },
-  { key: 'repo', label: 'repo', cls: () => '' },
+  { key: 'repo', label: 'repo', cls: () => '', card: 'head' },
   { key: 'file', label: 'where', cls: () => 'dim' },
-  { key: 'text', label: 'finding', cls: () => '' },
+  { key: 'text', label: 'finding', cls: () => '', card: 'main' },
 ]
 const current = computed(() => rows.value.find((r) => r.key === sel.value))
 const pinnable = computed(() => [...new Set(rows.value.filter((r) => r.raw === 'pinned').map((r) => r.repo))])
@@ -47,10 +47,10 @@ useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: 
       <span v-if="clean" class="chip ok">clean {{ clean }}</span>
       <span class="spacer" />
       <button class="primary" :disabled="!current || current.raw !== 'pinned'" @click="pinOne"><span class="k">p</span> pin repo</button>
-      <button :disabled="!pinnable.length" @click="pinRepos(pinnable)"><span class="k">A</span> pin all</button>
+      <button class="any" :disabled="!pinnable.length" @click="pinRepos(pinnable)"><span class="k">A</span> pin all</button>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
-    <div class="split">
+    <div class="split ld">
       <div><DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no risky workflows'" @activate="open" /></div>
       <div class="pad"><TextPane :text="output || (current ? `${current.repo}\n${current.path}:${current.line}\n\n${current.text}` : '')"
         placeholder="p opens a PR that pins the selected repo's actions to commit SHAs; A does it for every repo listed" /></div>
