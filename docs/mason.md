@@ -33,10 +33,6 @@ scripts (key)        ─┘      │                  └─> GitLab REST/GraphQ
 ![market](screenshots/10-market.png)
 ![settings](screenshots/11-settings.png)
 ![audit](screenshots/12-audit.png)
-![theme amber](screenshots/13-theme-amber.png)
-![theme paper](screenshots/14-theme-paper.png)
-![theme grey](screenshots/15-theme-grey.png)
-![theme grey, pull requests](screenshots/16-theme-grey-prs.png)
 
 On a phone (below 700px; it can be added to the home screen), Mason is one column. The bar at the bottom has
 repos, PRs, issues and runs, and **more** opens a menu of every view, the theme, dry run and sign out. Lists are
@@ -74,7 +70,7 @@ one-key shortcut (`1` to `9` for the first ones, `I` issues, `W` workflows, `D` 
 - **Settings** holds the defaults repo, orgs, extra and left-out repos, GitLab groups and projects,
   connected accounts, API keys, sessions and plugin secrets.
 - **Keys:** arrows or `j`/`k` move, Enter acts, `/` filters, `r` reloads, `t` switches the theme
-  (bricks, mortar, phosphor, amber, grey, paper) and saves your choice to your account, so every browser you sign in
+  (bricks, dark, or mortar, light) and saves your choice to your account, so every browser you sign in
   with uses it; `?` lists the keys.
 
 ## Run it

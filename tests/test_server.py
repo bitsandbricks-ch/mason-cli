@@ -92,11 +92,12 @@ def test_theme_is_a_per_user_setting(op):
     """The web app saves the theme to the account, so it follows the user to every browser."""
     _, c = op
     assert c.get("/api/v1/me").json["settings"]["theme"] == ""  # the default (bricks, or mortar on a light system)
-    assert c.put("/api/v1/settings", json={"theme": "grey"}, headers=H).json["theme"] == "grey"
-    assert c.get("/api/v1/me").json["settings"]["theme"] == "grey"
+    assert c.put("/api/v1/settings", json={"theme": "mortar"}, headers=H).json["theme"] == "mortar"
+    assert c.get("/api/v1/me").json["settings"]["theme"] == "mortar"
     assert c.get("/api/v1/settings").json["orgs"] == []  # saving the theme leaves the other settings alone
     assert c.put("/api/v1/settings", json={"theme": "neon"}, headers=H).status_code == 400
-    assert c.get("/api/v1/settings").json["theme"] == "grey"
+    assert c.put("/api/v1/settings", json={"theme": "phosphor"}, headers=H).status_code == 400  # removed
+    assert c.get("/api/v1/settings").json["theme"] == "mortar"
 
 
 def test_web_themes_match_the_server():
