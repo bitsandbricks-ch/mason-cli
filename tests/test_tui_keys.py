@@ -196,3 +196,38 @@ def test_sort_value():
     assert sorted(["10", "9", "100"], key=tui.sort_value) == ["9", "10", "100"]
     assert tui.sort_value(Text("Beta")) < tui.sort_value("gamma")
     assert tui.blank("-") and tui.blank(Text(" ")) and not tui.blank("0")
+
+
+def test_tui_arrows_work_after_a_confirmation(env, monkeypatch, tmp_path):
+    """Answering a y/N box gives the focus back to the list, so ↑/↓ move again without a click."""
+    for key in ("PATH", "FAKE_GH_LOG", "MASON_DEFAULTS", "MASON_OPEN"):
+        monkeypatch.setenv(key, env[key])
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("MASON_PLUGINS", "none")
+    from textual.widgets import DataTable
+
+    from mason import config, core, tui
+
+    core.DRY_RUN = True
+    config._loaded.clear()
+    cfg = config.load()
+
+    async def run():
+        app = tui.MasonTui(cfg, dry_run=True)
+        async with app.run_test(size=(160, 45)) as pilot:
+            await pilot.press("2")  # pull requests: m asks "Turn on auto-merge for ...?"
+            table = app.query_one("#prs-table", DataTable)
+            await until(pilot, lambda: table.row_count > 1)
+            for answer in ("n", "escape", "tab,enter"):  # no, escape, and Tab to the No button + Enter
+                assert app.focused is table
+                table.move_cursor(row=0)
+                await pilot.press("m")
+                await until(pilot, lambda: isinstance(app.screen, tui.Confirm), 5)
+                assert isinstance(app.screen, tui.Confirm)
+                await pilot.press(*answer.split(","))
+                await until(pilot, lambda: not isinstance(app.screen, tui.Confirm), 5)
+                assert app.focused is table
+                await pilot.press("down")
+                assert table.cursor_row == 1
+
+    asyncio.run(run())
