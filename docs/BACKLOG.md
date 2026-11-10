@@ -84,7 +84,6 @@ move it to "Done" when it ships.
 
 ## TUI and CLI
 
-- `mason tui` themes matching the rest of the web UI's themes (phosphor, amber, paper; bricks and mortar are the TUI's mason and mason-light).
 - `mason watch`: a live status line for a set of repos.
 - Shell completion for repo names and groups.
 - Your own keys for the TUI: a `[keys]` table in config.toml (Textual keymaps), e.g. to move F-keys a terminal keeps.

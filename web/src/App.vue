@@ -7,6 +7,7 @@ import { GROUPS, TABS } from './router.js'
 import { typing } from './keys.js'
 import { closeDetail, phone, prompt } from './ui.js'
 import PromptDialog from './components/PromptDialog.vue'
+import Logo from './components/Logo.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -115,7 +116,7 @@ window.addEventListener('keydown', (e) => {
   <div v-else-if="phone" class="screen phone">
     <header class="top">
       <button v-if="canBack" class="back" aria-label="back" @click="goBack">‹</button>
-      <span class="title"><span class="prompt accent">mason</span><span class="dim">:~/</span>{{ title }}</span>
+      <Logo :size="20" /><span class="title"><span class="prompt accent">mason</span><span class="dim">:~/</span>{{ title }}</span>
       <span class="spacer" />
       <span v-if="state.busy" class="warn cursor" aria-label="working" />
       <button v-if="state.dryRun" class="chip on" title="dry run is on: changes only show what they would do" @click="state.dryRun = false">dry run ✕</button>
@@ -167,7 +168,7 @@ window.addEventListener('keydown', (e) => {
   </div>
   <div v-else class="screen">
     <header class="top">
-      <span class="prompt accent">{{ state.me.user.name.toLowerCase().replace(/\s+/g, '') }}@mason</span><span class="dim hide-xs">:~$</span>
+      <Logo :size="18" /><span class="prompt accent">{{ state.me.user.name.toLowerCase().replace(/\s+/g, '') }}@mason</span><span class="dim hide-xs">:~$</span>
       <span class="dim hide-sm">{{ who }}</span>
       <span class="spacer" />
       <span v-if="state.busy" class="warn">working…</span>

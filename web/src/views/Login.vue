@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { state } from '../api.js'
 import { deviceSignIn } from '../signin.js'
+import Logo from '../components/Logo.vue'
 
 const route = useRoute()
 const next = computed(() => encodeURIComponent(String(route.query.next || '/')))
@@ -32,19 +33,12 @@ async function copy() {
 
 onBeforeUnmount(() => stop?.())
 const origin = window.location.origin
-const BANNER = [
-  '███    ███  █████  ███████  ██████  ███    ██',
-  '████  ████ ██   ██ ██      ██    ██ ████   ██',
-  '██ ████ ██ ███████ ███████ ██    ██ ██ ██  ██',
-  '██  ██  ██ ██   ██      ██ ██    ██ ██  ██ ██',
-  '██      ██ ██   ██ ███████  ██████  ██   ████',
-].join('\n')
 </script>
 
 <template>
   <div class="center">
     <div style="max-width: 720px; width: 100%">
-      <pre class="banner" aria-hidden="true">{{ BANNER }}</pre>
+      <h1 class="login-logo"><Logo word :size="56" /></h1>
       <p><span class="accent">$</span> mason login<span class="cursor" /></p>
       <p class="dim">Your GitHub and GitLab repos, pull requests, runs, approvals, releases, security alerts and
         defaults, from one terminal in the browser: Mason holds your bricks together. You sign in with your own account; Mason only ever acts

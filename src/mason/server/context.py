@@ -21,7 +21,7 @@ SETTING_KEYS = {"defaults": str, "ref": str, "orgs": list, "repos": list, "exclu
                 "gitlab_groups": list, "gitlab_repos": list, "theme": str, "plugins_off": list,
                 "org_defaults": bool}
 # The web app's themes (web/src/themes.js). "" is the default: bricks, or mortar on a light system.
-THEMES = ("bricks", "mortar", "phosphor", "amber", "grey", "paper")
+THEMES = ("bricks", "mortar")
 
 
 class NoTransport:
