@@ -7,7 +7,30 @@ import { state } from '../api.js'
 const box = ref(null)
 const field = ref(null)
 const text = ref('')
-watch(() => prompt.open, (open) => { if (open) { text.value = ''; nextTick(() => (field.value || box.value)?.focus()) } })
+// The dialog takes the focus while it is open. When it closes, the focus goes back where the keys work again:
+// to a field the user was typing in, or else to the view's list, so ↑/↓ keep moving without another click.
+let opener = null
+watch(() => prompt.open, (open) => {
+  if (open) {
+    opener = document.activeElement
+    text.value = ''
+    nextTick(() => (field.value || box.value)?.focus())
+  } else {
+    const was = opener
+    opener = null
+    nextTick(() => restoreFocus(was))
+  }
+})
+function restoreFocus(was) {
+  if (prompt.open) return // another prompt followed straight away (ask, then ask again)
+  const now = document.activeElement
+  if (now && now !== document.body && !box.value?.contains(now)) return // something else took the focus already
+  const alive = was && was !== document.body && was.isConnected
+  if (alive && was.matches('input, textarea, select, [contenteditable], table.table')) { was.focus(); return }
+  const list = document.querySelector('table.table[tabindex]')
+  if (list) list.focus({ preventScroll: true })
+  else if (alive) was.focus()
+}
 function key(e) {
   if (prompt.notice) { if (['Enter', 'Escape', 'y', 'n'].includes(e.key)) answer('ok'); return }
   if (prompt.choices) {
