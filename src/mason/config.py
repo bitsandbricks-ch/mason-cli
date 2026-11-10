@@ -93,7 +93,7 @@ GROUP_KEYS = {"name", "match", "from", "files", "require", "settings", "security
 # What doctor checks for a group; `skip = [...]` turns checks off.
 CHECKS = ("settings", "security", "vulnerability_reporting", "immutable_releases", "rulesets", "own_rulesets",
           "files", "required_files", "topics", "labels", "actions", "branch", "visibility", "description", "workflows",
-          "plugins")
+          "plugins", "version")
 
 
 def config_dir() -> Path:

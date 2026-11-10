@@ -13,7 +13,7 @@ import json
 import time
 import urllib.parse
 
-from mason import core, plugins, workflows
+from mason import core, plugins, versions, workflows
 from mason.config import Config, Group
 from mason.core import WEB, api, compact, file_on, for_each, get_file, git_blob_sha, open_pr, say, short
 
@@ -468,6 +468,8 @@ def doctor(repo: str, ctx: dict) -> None:
         if want.get("workflows"):
             problems += [f"workflow {f['path'].rsplit('/', 1)[-1]}:{f['line']} {f['text']}"
                          for f in workflows.findings(repo, want["workflows"])]
+    if not (want and "version" in want["skip"]):
+        problems += versions.doctor_problems(ctx["cfg"], repo)
     if not (want and "plugins" in want["skip"]):
         problems += plugins.hook("doctor", repo, group, ctx)
 
