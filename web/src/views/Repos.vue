@@ -67,10 +67,10 @@ useKeys({ l: () => sel.value && router.push({ path: '/release', query: { repo: s
       <button :disabled="!sel" @click="merge(false)"><span class="k">m</span> auto-merge</button>
       <button :disabled="!sel" @click="merge(true)"><span class="k">M</span> merge now</button>
       <button :disabled="!sel" @click="sel && router.push({ path: '/release', query: { repo: sel } })"><span class="k">l</span> releases</button>
-      <button @click="newRepo"><span class="k">n</span> new repo</button>
-      <button :disabled="!sel" @click="page()"><span class="k">⏎</span> page</button>
+      <button class="any" @click="newRepo"><span class="k">n</span> new repo</button>
+      <button :disabled="!sel" @click="page()"><span class="k">⏎</span> repo page</button>
     </div>
-    <div class="split">
+    <div class="split ld">
       <div>
         <DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.repo"
                    :empty="loading ? 'loading…' : 'no repos: set your orgs or a defaults repo under settings'" @activate="page" />

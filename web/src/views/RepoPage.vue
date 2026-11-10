@@ -67,8 +67,8 @@ useKeys(keys)
 <template>
   <div class="view">
     <div class="toolbar">
-      <button @click="back"><span class="k">esc</span> back</button>
-      <span class="accent">repos › {{ repo }}</span>
+      <button class="hide-xs" @click="back"><span class="k">esc</span> back</button>
+      <span class="accent hide-xs">repos › {{ repo }}</span>
       <span class="spacer" />
       <button @click="load(true)"><span class="k">r</span> reload</button>
     </div>

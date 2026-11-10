@@ -37,7 +37,7 @@ watch(sel, async (key) => {
   <div class="view">
     <div class="toolbar"><span class="accent">{{ route.params.plugin }}</span><span>{{ tab?.title }}</span>
       <span class="spacer" /><a v-if="url" :href="url" target="_blank" rel="noopener noreferrer">open ↗</a></div>
-    <div class="split">
+    <div class="split ld">
       <div class="scroll"><DataTable v-model="sel" :columns="[{ key: 'label', label: 'item' }]" :rows="rows" :row-key="(r) => r.key" /></div>
       <div class="scroll pad"><TextPane :text="text" placeholder="pick a row" /></div>
     </div>

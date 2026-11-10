@@ -16,8 +16,8 @@ const sel = ref(null)
 const rows = computed(() => (data.value?.runs || []).map((r) => ({ ...r, key: `${r.repo}|${r.id ?? r.error}`, when: ago(r.created) })))
 const columns = [
   { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
-  { key: 'state', label: 'state', fmt: (v, r) => r.error || v },
-  { key: 'name', label: 'workflow', cls: () => '' },
+  { key: 'state', label: 'state', fmt: (v, r) => r.error || v, card: 'head' },
+  { key: 'name', label: 'workflow', cls: () => '', card: 'main' },
   { key: 'event', label: 'event', cls: () => 'dim' },
   { key: 'branch', label: 'branch', cls: () => '' },
   { key: 'when', label: 'when', cls: () => 'dim' },
@@ -32,7 +32,7 @@ useKeys({ r: () => load(true), f: toggle, o: () => open(current.value) })
   <div class="view">
     <div class="toolbar">
       <Scope :groups="scope.groups" />
-      <label class="check"><input :checked="failed" type="checkbox" @change="toggle"> only failed <span class="dim">(f)</span></label>
+      <label class="check"><input :checked="failed" type="checkbox" @change="toggle"> only failed <span class="dim k">(f)</span></label>
       <label class="row">per repo <select v-model.number="limit" @change="load()"><option v-for="n in [1, 3, 5, 10, 20]" :key="n">{{ n }}</option></select></label>
       <span class="spacer" />
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>

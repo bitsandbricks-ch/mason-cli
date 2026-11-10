@@ -1,7 +1,10 @@
 <script setup>
 // A keyboard-driven table: ↑/↓ or j/k move, Enter activates, / filters, click a header to sort.
-import { computed, nextTick, ref, watch } from 'vue'
-import { stateClass } from '../ui.js'
+// On a phone it is a list of cards instead: the first column (and those with card: 'head') on top, a
+// card: 'main' column on its own line, the rest as small "label value" pairs. In a list and detail view
+// (.split.ld) a tap opens the detail; elsewhere a tap selects and the selected card offers activate.
+import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
+import { openDetail, phone, stateClass } from '../ui.js'
 
 const props = defineProps({
   columns: { type: Array, required: true }, // [{key, label, cls?: (row) => str, fmt?: (v,row) => str, right?}]
@@ -27,6 +30,22 @@ const shown = computed(() => {
     out.sort((a, b) => String(cell(c, a)).localeCompare(String(cell(c, b)), undefined, { numeric: true }) * sortDir.value)
   }
   return out
+})
+const head = computed(() => props.columns.filter((c, i) => i === 0 || c.card === 'head'))
+const main = computed(() => props.columns.filter((c) => c.card === 'main'))
+const meta = computed(() => props.columns.filter((c, i) => i > 0 && !c.card))
+const blank = (v) => v === '' || v === '-' || v == null
+const activates = !!getCurrentInstance()?.vnode.props?.onActivate
+const root = ref(null)
+const inSplit = ref(false)
+onMounted(() => { inSplit.value = !!root.value?.closest('.split.ld') })
+function tap(r) {
+  emit('update:modelValue', props.rowKey(r))
+  if (inSplit.value) openDetail()
+}
+const sortChoice = computed({
+  get: () => (sortKey.value ? `${sortKey.value}:${sortDir.value}` : ''),
+  set: (v) => { const [k, d] = v.split(':'); sortKey.value = k; sortDir.value = Number(d) || 1 },
 })
 const index = computed(() => shown.value.findIndex((r) => props.rowKey(r) === props.modelValue))
 
@@ -55,14 +74,38 @@ defineExpose({ focus: () => table.value?.focus(), shown })
 </script>
 
 <template>
-  <div>
+  <div ref="root">
     <div class="row pad" style="padding-bottom: 4px">
       <span class="dim">/</span>
       <input ref="filterInput" v-model="filter" class="grow" placeholder="filter" aria-label="filter the list"
              @keydown.esc="filter = ''; table?.focus()" @keydown.enter="table?.focus()">
       <span class="dim nowrap">{{ shown.length }}<template v-if="shown.length !== rows.length">/{{ rows.length }}</template></span>
+      <select v-if="phone && rows.length > 1" v-model="sortChoice" class="sort" aria-label="sort by">
+        <option value="">sort</option>
+        <template v-for="c in columns" :key="c.key">
+          <option :value="`${c.key}:1`">{{ c.label || c.key }} ↑</option>
+          <option :value="`${c.key}:-1`">{{ c.label || c.key }} ↓</option>
+        </template>
+      </select>
     </div>
-    <table ref="table" class="table" tabindex="0" @keydown="key">
+    <ul v-if="phone" class="cards" role="listbox" aria-label="list">
+      <li v-for="r in shown" :key="rowKey(r)" role="option" :aria-selected="rowKey(r) === modelValue"
+          :class="{ sel: rowKey(r) === modelValue }" @click="tap(r)">
+        <div class="head">
+          <span v-for="c in head" :key="c.key" :class="c.cls ? c.cls(r) : stateClass(cell(c, r))">{{ cell(c, r) }}</span>
+          <span v-if="inSplit" class="go dim" aria-hidden="true">›</span>
+        </div>
+        <div v-for="c in main" :key="c.key" class="main">{{ cell(c, r) }}</div>
+        <div class="meta">
+          <template v-for="c in meta" :key="c.key">
+            <span v-if="!blank(cell(c, r))"><span v-if="c.label && c.label !== '#'" class="dim">{{ c.label }} </span><span
+              :class="c.cls ? c.cls(r) : stateClass(cell(c, r))">{{ cell(c, r) }}</span></span>
+          </template>
+        </div>
+        <button v-if="activates && !inSplit && rowKey(r) === modelValue" class="open" @click.stop="emit('activate', r)">open ↗</button>
+      </li>
+    </ul>
+    <table v-else ref="table" class="table" tabindex="0" @keydown="key">
       <thead>
         <tr>
           <th v-for="c in columns" :key="c.key" :class="{ right: c.right }" @click="sort(c)">

@@ -6,7 +6,7 @@ import { get, log, qs } from '../api.js'
 import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
-import { ago, ask } from '../ui.js'
+import { ago, ask, openDetail } from '../ui.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
@@ -28,8 +28,8 @@ const rows = computed(() => (data.value?.issues || []).map((i) => ({
 })))
 const columns = [
   { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
-  { key: 'number', label: '#', right: true, fmt: (v) => `#${v}` },
-  { key: 'title', label: 'title', cls: () => '' },
+  { key: 'number', label: '#', right: true, fmt: (v) => `#${v}`, card: 'head' },
+  { key: 'title', label: 'title', cls: () => '', card: 'main' },
   { key: 'tags', label: 'labels', cls: () => 'accent' },
   { key: 'who', label: 'assigned', cls: () => 'dim' },
   { key: 'state', label: 'state', cls: (r) => (r.state === 'open' ? 'ok' : 'dim') },
@@ -65,6 +65,7 @@ const form = reactive({ open: false, repo: '', title: '', body: '', labels: '', 
 const repoNames = ref([])
 async function newIssue() {
   form.open = true
+  openDetail()
   if (!form.repo && current.value) form.repo = current.value.repo
   if (!repoNames.value.length) {
     try { repoNames.value = (await get('/repos')).repos.map((r) => r.repo) } catch (e) { log(e.message, 'error') }
@@ -94,13 +95,13 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
       <select v-model="f.label" aria-label="label"><option value="">any label</option><option v-for="l in data?.labels || []" :key="l" :value="l">{{ l }}</option></select>
       <select v-model.number="f.stale" aria-label="age"><option :value="0">any age</option><option :value="30">untouched 30d</option><option :value="90">untouched 90d</option></select>
       <span class="spacer" />
-      <button class="primary" @click="newIssue"><span class="k">n</span> new</button>
+      <button class="primary any" @click="newIssue"><span class="k">n</span> new</button>
       <button :disabled="!current" @click="comment"><span class="k">m</span> comment</button>
       <button :disabled="current?.state !== 'open'" @click="setState(true)"><span class="k">c</span> close</button>
       <button :disabled="!current || current.state === 'open'" @click="setState(false)"><span class="k">u</span> reopen</button>
       <button :disabled="!current" @click="open"><span class="k">o</span> open</button>
     </div>
-    <div class="split">
+    <div class="split ld">
       <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no issues'" @activate="open" /></div>
       <div class="pad">
         <div v-if="form.open" class="box">
