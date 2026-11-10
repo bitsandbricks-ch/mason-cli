@@ -168,6 +168,37 @@ def tag_of(cfg: Config, repo: str, version: str) -> str:
     return (sp.get("tag") or "v{version}").format(version=version)
 
 
+def doctor_problems(cfg: Config, repo: str) -> list[str]:
+    """What `mason doctor` says about the version file: missing although the repo makes releases, unreadable,
+    or behind the latest release. A repo without releases and without a version file is fine."""
+    if repo.startswith("gitlab:"):
+        return []
+    try:
+        sp = spec(cfg, repo)
+    except core.RateLimited:
+        raise
+    except RuntimeError as err:
+        return [str(err).removeprefix(f"{repo}/")]
+    tags = release_tags(repo)
+    if not sp:
+        if not tags:
+            return []
+        return ['no version file found, so bump, release and New tag skip it: set [release] version = "..." '
+                f"in {REPO_FILE}, or version on its group"]
+    path = sp["file"]
+    text = core.file_on(repo, path)
+    where = {"group": " (named by its group)", REPO_FILE: f" (named in {REPO_FILE})"}.get(sp.get("from"), "")
+    if text is None:
+        return [f"version file {path}{where} is missing"]
+    ver = read_version(text, path)
+    if not ver:
+        return [f"no version in {path}{where}"]
+    last = newest(tags)
+    if last and version_tuple(ver) < version_tuple(last):
+        return [f"{path} says {ver}, behind the latest release {last}"]
+    return []
+
+
 def release_tags(repo: str) -> list[str]:
     return [r["tag_name"] for r in api("GET", f"/repos/{repo}/releases?per_page=100") or [] if not r.get("draft")]
 
