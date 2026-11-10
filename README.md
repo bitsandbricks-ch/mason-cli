@@ -1,5 +1,10 @@
 # Mason
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/mason-dark.svg">
+  <img src="docs/logo/mason-light.svg" alt="Mason" height="56">
+</picture>
+
 Mason (the `mason` command) is a terminal tool, TUI and web app for looking after many GitHub (and, in the web app, GitLab) repositories at once, across orgs and user accounts: status, pull requests, merges, workflow runs and approvals, security alerts, stats, and drift checks against shared defaults. It holds your bricks together.
 
 The defaults live in a repository you choose. Point `mason` at any repo (or local folder) that holds a `mason.toml`, and it checks your repos against it. Nothing is tied to one org: every user can keep their own defaults repo.

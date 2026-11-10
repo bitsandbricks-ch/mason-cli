@@ -1,5 +1,10 @@
 # Mason
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="logo/mason-dark.svg">
+  <img src="logo/mason-light.svg" alt="Mason" height="56">
+</picture>
+
 Mason is mason as a web app: it holds the bricks together. People sign in with their own GitHub and GitLab accounts and get every
 CLI and TUI view in a terminal-style browser UI: repos, pull requests, runs, approvals, releases, packages,
 issues, security alerts, doctor/fix/sync, workflow hardening, stats, a defaults editor, a `mason` console,

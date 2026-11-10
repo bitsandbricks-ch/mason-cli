@@ -284,3 +284,8 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
 @media (max-width: 900px) { .split.page { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); } }
 .choices { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 .choices button { text-align: left; }
+
+/* the logo (components/Logo.vue) glows with the phosphor and amber themes, like their text */
+.logo { flex: none; display: block; filter: drop-shadow(var(--glow)); }
+.top .logo { margin-right: -6px; }
+.login-logo { margin: 0 0 22px; line-height: 0; }
