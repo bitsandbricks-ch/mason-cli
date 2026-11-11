@@ -40,6 +40,7 @@ async function release() {
   if (text !== null) emit('done', { text, repo: props.repo, ok: !text.startsWith('error') && !text.includes('[dry-run]') })
 }
 useKeys({ b: bump, R: release })
+defineExpose({ bump, release })
 </script>
 
 <template>

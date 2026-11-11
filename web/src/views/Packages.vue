@@ -4,11 +4,12 @@ import { computed, ref } from 'vue'
 import { useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
+import ErrorNote from '../components/ErrorNote.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 
-const { data, loading, load } = useLoad((q) => `/packages${q}`)
+const { data, error, loading, load } = useLoad((q) => `/packages${q}`)
 loadGroups()
 const sel = ref(null)
 const rows = computed(() => (data.value?.packages || []).map((p) => ({
@@ -25,9 +26,9 @@ useKeys({ r: () => load(true) })
 
 <template>
   <div class="view">
-    <div class="toolbar"><Scope :groups="scope.groups" /><span v-if="data?.error" class="bad">{{ data.error }}</span></div>
+    <div class="toolbar"><Scope :groups="scope.groups" /><ErrorNote v-if="data?.error" :error="data.error" what="couldn't read the packages" /></div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no container images'" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no container images'" /></div>
       <div class="pad"><TextPane :text="current?.text" placeholder="pick an image" /></div>
     </div>
   </div>

@@ -11,7 +11,7 @@ import TextPane from '../components/TextPane.vue'
 
 const KIND = { pinned: 'unpinned', permissions: 'token', pull_request_target: 'pr target', injection: 'injection' }
 const BAD = new Set(['pull_request_target', 'injection'])
-const { data, loading, load } = useLoad((q) => `/workflows${q}`)
+const { data, error, loading, load } = useLoad((q) => `/workflows${q}`)
 loadGroups()
 const sel = ref(null)
 const output = ref('')
@@ -51,7 +51,7 @@ useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: 
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no risky workflows'" @activate="open" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ every action is pinned to a commit'" @activate="open" /></div>
       <div class="pad"><TextPane :text="output || (current ? `${current.repo}\n${current.path}:${current.line}\n\n${current.text}` : '')"
         placeholder="p opens a PR that pins the selected repo's actions to commit SHAs; A does it for every repo listed" /></div>
     </div>

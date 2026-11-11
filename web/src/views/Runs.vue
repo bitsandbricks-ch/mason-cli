@@ -12,7 +12,7 @@ import Scope from '../components/Scope.vue'
 
 const failed = ref(false)
 const limit = ref(3)
-const { data, loading, load } = useLoad((q) => `/runs${q}${q ? '&' : '?'}limit=${limit.value}${failed.value ? '&failed=1' : ''}`)
+const { data, error, loading, load } = useLoad((q) => `/runs${q}${q ? '&' : '?'}limit=${limit.value}${failed.value ? '&failed=1' : ''}`)
 loadGroups()
 const sel = ref(null)
 const rows = computed(() => (data.value?.runs || []).map((r) => ({ ...r, key: `${r.repo}|${r.id ?? r.error}`, when: ago(r.created) })))
@@ -42,7 +42,7 @@ useKeys({ r: () => load(true), f: toggle, o: () => open(current.value), p: () =>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
       <button :disabled="!current?.id" @click="page()"><span class="k">p</span> page</button>
     </div>
-    <div class="scroll"><DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no runs'" @activate="page" /></div>
+    <div class="scroll"><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no workflow runs yet: repos with GitHub Actions or GitLab CI show theirs here'" @activate="page" /></div>
     <EventLog band :repo="current?.id ? current.repo : ''" kind="run" :number="current?.id || ''" :title="current?.id ? `${current.repo} ${current.name}` : ''" />
   </div>
 </template>

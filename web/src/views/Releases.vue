@@ -21,7 +21,7 @@ import { openDetail } from '../ui.js'
 const router = useRouter()
 const problems = ref(false)
 const unreleased = ref(false)
-const { data, loading, load, keep } = useLoad((q) => {
+const { data, error, loading, load, keep } = useLoad((q) => {
   const extra = [problems.value && 'problems=1', unreleased.value && 'unreleased=1'].filter(Boolean).join('&')
   return `/releases${q}${extra ? (q ? '&' : '?') + extra : ''}`
 })
@@ -82,7 +82,7 @@ useKeys({ r: () => load(true), p: toggle, u: toggleUnreleased, n: () => newRelea
       <button :disabled="!sel" @click="page()"><span class="k">⏎</span> releases of the repo</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : 'no releases'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : 'no releases yet: pick a repo page and press n to create one'" @activate="page" /></div>
       <div class="pad">
         <VersionBar v-if="current?.version && !form" :key="current.repo" :repo="current.repo" :version="current.version" @done="done" />
         <ReleaseForm v-if="form" :key="form" :mode="form" :repo="sel || ''" :repos="repoNames" @done="done" @cancel="form = ''" />

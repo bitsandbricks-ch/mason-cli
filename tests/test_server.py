@@ -1013,3 +1013,17 @@ def test_detail_pages_event_logs(op):
     assert "[dry-run] POST /repos/acme/web/actions/runs/9/rerun-failed-jobs" in text
     run = c.get("/api/v1/events?repo=acme/web&kind=run&id=9").json["events"]
     assert run[0]["what"] == "dry run: rerun" and run[0]["source"] == "mason"
+
+
+def test_repo_detail_has_info_for_the_status_header(op):
+    """A repo page's header reads /repo's info (the text stays what the CLI prints)."""
+    _, c = op
+    got = c.get("/api/v1/repo?repo=acme/web").json
+    assert got["text"].startswith("acme/web\n")
+    info = got["info"]
+    assert info["repo"] == "acme/web" and info["url"].endswith("/acme/web") and info["ci"] == "success"
+    assert info["released"] == "" and info["group"] == "default"
+    prs = {p["number"]: p for p in info["prs"]}
+    assert set(prs) == {7, 8, 9}
+    assert prs[8]["draft"] and prs[8]["merge"] == "draft" and prs[9]["merge"] == "conflicts"
+    assert c.get("/api/v1/repo?repo=acme/api").json["info"]["released"] == "v1.10.0"

@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { get, loadMe, log, post, put, state } from './api.js'
 import { THEMES } from './themes.js'
-import { GROUPS, TABS } from './router.js'
+import { GROUPS, SECTIONS, TABS, sectionOf } from './router.js'
 import { typing } from './keys.js'
 import { closeDetail, phone, prompt } from './ui.js'
 import PromptDialog from './components/PromptDialog.vue'
@@ -56,6 +56,22 @@ function guard() {
 }
 watch(() => route.fullPath, guard)
 watch(signedIn, guard)
+
+// The desktop tab bar: sections, and the views of the open section as sub-tabs (plugins and the operator
+// page belong to setup).
+const section = computed(() => sectionOf(route.meta.tab || route.name))
+const subtabs = computed(() => {
+  const s = SECTIONS.find((x) => x.name === section.value)
+  if (!s) return []
+  const out = s.views.map((t) => ({ to: t.path, key: t.key, label: t.label, hint: t.hint,
+    active: route.name === t.name || route.meta.tab === t.name }))
+  if (s.name === 'setup') {
+    for (const p of plugins.value) out.push({ to: `/plugins/${p.name}/${p.tabs[0].id}`, key: '+', label: p.tabs[0].title.toLowerCase(),
+      hint: `plugin ${p.name}`, active: route.params.plugin === p.name })
+    if (state.me?.user?.is_operator) out.push({ to: '/operator', key: '#', label: 'operator', hint: 'the server', active: route.name === 'operator' })
+  }
+  return out
+})
 
 // Phones: a bar at the bottom with the views used most and "more", which opens a menu of every view,
 // the theme, dry run and sign out.
@@ -193,25 +209,26 @@ window.addEventListener('keydown', (e) => {
       <button title="t switches the theme" aria-label="switch the theme" @click="theme = themes[(themes.indexOf(theme) + 1) % themes.length]"><span class="hide-xs">{{ theme }}</span><span class="show-xs">◐</span></button>
       <button @click="logout"><span class="hide-xs">logout</span><span class="show-xs">exit</span></button>
     </header>
-    <nav class="tabs" aria-label="views">
-      <router-link v-for="t in TABS" :key="t.name" :to="t.path" :class="{ active: route.name === t.name || route.meta.tab === t.name }">
-        <span class="k">{{ t.key }}</span>{{ t.label }}
-      </router-link>
-      <router-link v-for="p in plugins" :key="p.name" :to="`/plugins/${p.name}/${p.tabs[0].id}`"
-                   :class="{ active: route.params.plugin === p.name }">
-        <span class="k">+</span>{{ p.tabs[0].title.toLowerCase() }}
-      </router-link>
-      <router-link v-if="state.me.user.is_operator" to="/operator" :class="{ active: route.name === 'operator' }">
-        <span class="k">#</span>operator
-      </router-link>
-    </nav>
+    <div class="navs">
+      <nav class="tabs" aria-label="sections">
+        <router-link v-for="sct in SECTIONS" :key="sct.name" :to="sct.path" :class="{ active: section === sct.name, end: sct.name === 'setup' }"
+                     :title="sct.views.length > 1 ? sct.views.map((v) => v.label).join(', ') : ''">
+          <span class="k">{{ sct.key }}</span>{{ sct.label }}
+        </router-link>
+      </nav>
+      <nav v-if="subtabs.length > 1" class="subtabs" :aria-label="`${section} views`">
+        <router-link v-for="t in subtabs" :key="t.to" :to="t.to" :class="{ active: t.active }" :title="t.hint">
+          <span class="k">{{ t.key }}</span>{{ t.label }}
+        </router-link>
+      </nav>
+    </div>
     <main><router-view @rate="refreshRate" /></main>
     <footer class="foot">
       <span v-if="last" class="last" :class="last.kind === 'error' ? 'bad' : last.kind === 'ok' ? 'ok' : 'dim'"
             :title="'the session log (`)'" role="button" :aria-expanded="logOpen" @click="logOpen = !logOpen">
         {{ logOpen ? '▾' : '▸' }} [{{ last.at }}] {{ last.text }}<span v-if="state.log.length > 1" class="dim"> (+{{ state.log.length - 1 }})</span></span>
       <span v-else class="last dim">ready</span>
-      <span class="keys"><b>1-9</b> tabs <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b>?</b> help</span>
+      <span class="keys"><b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b>?</b> help</span>
     </footer>
     <section v-if="logOpen" class="session-log" aria-label="the session log">
       <div class="row"><h2 style="margin: 0">log <span class="dim">({{ state.log.length }}, this session)</span></h2><span class="spacer" />

@@ -19,7 +19,7 @@ function issuesUrl(q) {
   const extra = qs({ state: f.state, mine: f.mine, label: f.label, stale: f.stale || '' }).slice(1)
   return `/issues${q || (extra ? '?' : '')}${q && extra ? '&' : ''}${extra}`
 }
-const { data, loading, load } = useLoad((q) => issuesUrl(q))
+const { data, error, loading, load } = useLoad((q) => issuesUrl(q))
 watch(f, () => load())
 loadGroups()
 const sel = ref(null)
@@ -107,7 +107,7 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
       <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no issues'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" /></div>
       <div class="pad">
         <div v-if="form.open" class="box">
           <div class="form">

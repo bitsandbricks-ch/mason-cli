@@ -6,6 +6,7 @@
 import { ref, watch } from 'vue'
 import { get, qs } from '../api.js'
 import { act } from '../load.js'
+import ErrorNote from './ErrorNote.vue'
 
 const props = defineProps({ repo: { type: String, required: true } })
 const emit = defineEmits(['done'])
@@ -39,9 +40,9 @@ async function save(r) {
 <template>
   <div v-if="rows.length || error" class="secrets">
     <h2 style="margin-top: 16px">secrets</h2>
-    <div v-if="error" class="bad">{{ error }}</div>
+    <ErrorNote v-if="error" :error="error.replace(/^couldn't read the secrets:\s*/i, '')" what="couldn't read the secrets" />
     <div v-for="r in rows" :key="id(r)" class="secret">
-      <span :class="r.set ? 'ok' : 'bad'">{{ r.set ? 'set' : 'missing' }}</span>
+      <span :class="r.set ? 'ok' : 'bad'">{{ r.set ? '✓ set' : '✗ missing' }}</span>
       <span>{{ r.env ? `${r.env}: ` : '' }}{{ r.name }}<span v-if="!r.wanted" class="dim"> (not in the defaults)</span></span>
       <input v-model="values[id(r)]" type="password" autocomplete="off" :placeholder="r.set ? 'new value' : 'value'" @keydown.enter="save(r)">
       <input v-model="also[id(r)]" class="hide-xs" placeholder="also in: api web" style="min-width: 14ch">

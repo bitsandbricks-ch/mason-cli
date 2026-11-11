@@ -310,6 +310,68 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
 .session-log pre.text { margin: 4px 0 2px; padding: 6px 8px; background: var(--bg2); border-left: 2px solid var(--line);
   max-height: 30vh; overflow: auto; }
 .session-log .where { margin-left: 8px; }
+
+/* the tab bar: sections, then the open section's views */
+.navs { display: flex; flex-direction: column; }
+.tabs a.end { margin-left: auto; }
+.subtabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); overflow-x: auto; background: var(--bg3); }
+.subtabs a { padding: 4px 10px; color: var(--dim); white-space: nowrap; border-bottom: 2px solid transparent; }
+.subtabs a .k { color: var(--accent); margin-right: 4px; opacity: .8; }
+.subtabs a.active { color: var(--fg); border-bottom-color: var(--accent2); }
+.subtabs a:hover { text-decoration: none; color: var(--fg); }
+
+/* errors in plain words (components/ErrorNote.vue) */
+.error-note { margin: 4px 0 8px; }
+.error-note pre.text { margin-top: 4px; padding: 6px 8px; background: var(--bg2); border-left: 2px solid var(--bad); }
+button.link { border: 0; padding: 0 4px; color: var(--dim); text-decoration: underline; min-height: 0; }
+button.link:hover { color: var(--accent); }
+
+/* status marks in tables and headers */
+.mark { margin-right: .6ch; }
+.badge { display: inline-flex; gap: .6ch; align-items: baseline; border: 1px solid var(--line); padding: 1px 8px; white-space: nowrap; }
+.badge .l { color: var(--dim); }
+.badge.ok { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); }
+.badge.bad { border-color: color-mix(in srgb, var(--bad) 60%, var(--line)); }
+.badge.warn { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.badge .v.ok { color: var(--ok); } .badge .v.bad { color: var(--bad); } .badge .v.warn { color: var(--warn); }
+a.badge:hover { text-decoration: none; border-color: var(--accent); }
+
+/* a detail page's header (components/StatusHeader.vue) and grouped actions (components/ActionList.vue) */
+.status-head { padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--bg2); display: flex;
+  flex-direction: column; gap: 8px; }
+.status-head .name { font-size: 15px; font-weight: 600; display: flex; gap: 1.5ch; align-items: baseline; flex-wrap: wrap; }
+.status-head .name a { color: var(--fg); }
+.status-head .name a:hover { color: var(--accent); }
+.status-head .name .sub { font-weight: 400; font-size: 13px; }
+.status-head .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.status-head .blockers { list-style: none; margin: 0; padding: 0; }
+.status-head .next { display: flex; gap: 1ch; align-items: center; flex-wrap: wrap; }
+.status-head .next button { margin-left: 1ch; }
+.action-groups section + section { margin-top: 10px; }
+.action-groups h3 { margin-bottom: 4px; color: var(--dim); font-weight: 400; }
+.action-groups h3::before { content: ""; }
+.view > .status-head + .split { border-top: 0; }
+@media (max-width: 700px) {
+  .status-head .name { font-size: 15px; }
+  .status-head .next button { margin-left: 0; width: 100%; min-height: 40px; }
+  button.action-sheet { width: 100%; min-height: 44px; }
+}
+
+/* a repo page's open PRs */
+.pull-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.pull-list li { display: flex; gap: 1.5ch; align-items: baseline; flex-wrap: wrap; padding: 3px 0; border-bottom: 1px dotted var(--bg3); }
+.pull-list li a { color: var(--fg); min-width: 0; overflow-wrap: anywhere; }
+.pull-list li a:hover { color: var(--accent); }
+/* the compact actions button: on a phone (and in a list's toolbar); a page shows the full list on the left instead */
+.show-compact { display: none; }
+@media (max-width: 700px) { .show-compact { display: inline-flex; } }
+.preview { padding: 0 !important; }
+button.wide { width: 100%; text-align: left; }
+@media (max-width: 700px) {
+  .toolbar > button.action-sheet { flex: 1 1 auto; width: auto; justify-content: center; align-items: center; }
+  .toolbar:has(> .action-sheet) { flex-wrap: nowrap; }
+}
+
 /* the event log as a full-width bar at the bottom of a view; it folds to its header */
 .events.band { flex: 0 0 auto; height: 34vh; min-height: 120px; overflow: auto; margin: 0; padding: 0 12px 6px;
   border-top: 1px solid var(--line); background: var(--bg); }
@@ -324,4 +386,12 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
   .view:has(> .split.ld) > .events.band { display: none; } /* a list: the events show with the picked row */
   main.detail .view:has(> .split.ld) > .events.band { display: block; order: 1; height: 38vh; }
   .events.band .about { max-width: 100%; flex-basis: 100%; order: 9; }
+}
+/* a detail page on a phone: header, content and the event log scroll as one page, so the log never squeezes
+   the content away */
+@media (max-width: 700px) {
+  .view:has(> .split.page) { display: block; overflow-y: auto; }
+  .view:has(> .split.page) > .split.page { overflow: visible; }
+  .view:has(> .split.page) > .events.band { height: auto; min-height: 0; overflow: visible; }
+  .view:has(> .split.page) > .events.band .events-head { position: static; }
 }

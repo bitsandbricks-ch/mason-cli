@@ -173,7 +173,10 @@ def repo_detail():
             mrs = (node.get("mergeRequests") or {}).get("nodes") or []
             lines += ["", f"open merge requests ({len(mrs)})"] + [f"  !{m['iid']} {m['title']}  {m['webUrl']}"
                                                                     for m in mrs]
-            return jsonify({"text": "\n".join(lines)})
+            info = {"repo": repo, "url": node.get("webUrl", ""), "group": group_label(grp, repo),
+                    "released": core.newest(rels) or "", "ci": "",
+                    "prs": [{"number": m["iid"], "title": m["title"], "url": m["webUrl"]} for m in mrs]}
+            return jsonify({"text": "\n".join(lines), "info": info})
         node = R.nodes([repo]).get(repo) or {}
         grp = R.group_of(cfg, repo)
         last = core.newest([r["tagName"] for r in (node.get("releases") or {}).get("nodes") or []])
@@ -190,7 +193,18 @@ def repo_detail():
             lines += ["", "recently merged"] + [f"  #{p['number']} {p['title']} ({core.ago(p.get('mergedAt'))})"
                                                 for p in merged]
         lines += ["", f"Actions  {gh.web}/{repo}/actions"]
-        return jsonify({"text": "\n".join(lines)})
+        # the same, for the page's status header (the text stays what the CLI prints)
+        def rollup(p: dict) -> dict | None:
+            return (((p.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}).get("statusCheckRollup")
+
+        info = {"repo": repo, "url": f"{gh.web}/{repo}", "group": group_label(grp, repo), "released": last or "",
+                "released_url": f"{gh.web}/{repo}/releases/tag/{last}" if last else "",
+                "ci": ((target.get("statusCheckRollup") or {}).get("state") or "").lower(),
+                "actions_url": f"{gh.web}/{repo}/actions",
+                "prs": [{"number": p["number"], "title": p["title"], "url": p["url"], "draft": bool(p.get("isDraft")),
+                         "merge": R.merge_word(p), "checks": R.checks_word(rollup(p))}
+                        for p in prs]}
+        return jsonify({"text": "\n".join(lines), "info": info})
 
 
 @bp.get("/prs")
