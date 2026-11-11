@@ -9,6 +9,7 @@ import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
+import DoctorPanel from '../components/DoctorPanel.vue'
 import TextPane from '../components/TextPane.vue'
 
 const emit = defineEmits(['rate'])
@@ -27,7 +28,20 @@ const rows = computed(() => (data.value?.rows || []).map((r) => {
 const columns = computed(() => [
   { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
   ...head.value.map((h) => ({ key: h, label: h.toLowerCase() })),
+  { key: 'doctor', label: 'doctor', fmt: (_, r) => doctorCell(r.repo), cls: (r) => doctorClass(r.repo) },
 ])
+// the last doctor check of each repo (Checks, a repo page, c): ok, how many issues, or - when not checked yet
+const checks = computed(() => data.value?.doctor || {})
+function doctorCell(repo) {
+  const d = checks.value[repo]
+  if (!d) return '-'
+  if (d.error) return 'error'
+  return d.ok ? 'ok' : `${d.issues} issue${d.issues === 1 ? '' : 's'}`
+}
+function doctorClass(repo) {
+  const d = checks.value[repo]
+  return !d ? 'dim' : d.error ? 'bad' : d.ok ? 'ok' : 'warn'
+}
 
 watch(sel, async (repo) => {
   output.value = ''
@@ -77,6 +91,7 @@ useKeys({ l: () => sel.value && router.push({ path: '/release', query: { repo: s
       </div>
       <div class="pad">
         <TextPane :text="detail" placeholder="pick a repo" />
+        <DoctorPanel v-if="sel && checks[sel]" :key="sel" :repo="sel" :stamp="checks[sel].checked" />
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
       </div>
     </div>

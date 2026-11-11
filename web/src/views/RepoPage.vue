@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { qs } from '../api.js'
 import { act, cached, forget, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
+import DoctorPanel from '../components/DoctorPanel.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import SecretsPanel from '../components/SecretsPanel.vue'
 import TextPane from '../components/TextPane.vue'
@@ -22,6 +23,7 @@ const suggest = ref('')
 const publishes = ref('')
 const version = ref(null)
 const busy = ref(false) // a release run is going
+const checked = ref(0) // bumped after c or f: the doctor panel shows the new result
 
 async function load(fresh = false) {
   if (!repo.value) return
@@ -35,6 +37,7 @@ async function run(q, path, body) {
   if (t === null) return
   output.value = t
   forget('/status'); forget('/repo'); forget('/release')
+  if (path === '/doctor') checked.value++
   load(true)
   follow.now([repo.value])
 }
@@ -89,6 +92,7 @@ useKeys(keys)
         <div class="actions">
           <button v-for="a in actions" :key="a.k" :class="{ primary: a.k === 'n' }" @click="a.fn"><span class="k">{{ a.k }}</span> {{ a.label }}</button>
         </div>
+        <DoctorPanel :repo="repo" :stamp="checked" />
         <SecretsPanel v-if="!gitlab" :repo="repo" @done="({ text }) => (output = text)" />
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
       </div>

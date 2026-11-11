@@ -382,7 +382,7 @@ An installed plugin runs inside Mason for every user, so plugins are installed w
 Everything the UI does is JSON under `/api/v1` and works with an API key (`Authorization: Bearer mason_…`):
 
 `/me`, `/config`, `/repos`, `/repo`, `/status`, `/prs`, `/pr`, `/merge`, `/ready`, `/issues`, `/issue`,
-`/runs`, `/approvals`, `/approve`, `/releases` (GET lists, POST creates), `/tags` (POST pushes a tag only), `/bump`, `/release/version`, `/release?repo=&tag=`, `/releases/jobs`, `/packages`, `/security`, `/doctor`, `/sync`,
+`/runs`, `/approvals`, `/approve`, `/releases` (GET lists, POST creates), `/tags` (POST pushes a tag only), `/bump`, `/release/version`, `/release?repo=&tag=`, `/releases/jobs`, `/packages`, `/security`, `/doctor` (POST checks or fixes and answers with `repos`, the result per repo; GET `?repo=` a repo's kept result, checked when there is none; GET alone every kept result), `/sync`,
 `/workflows`, `/workflows/pin`, `/new`, `/metrics?days=`, `/console`, `/defaults…`, `/plugins…`, `/market…`,
 `/settings`, `/keys`, `/sessions`, `/secrets`, `/audit`, `/rate` and `/cache/clear`, each only ever about
 the caller, and for operators (in the browser) `/operator`, `/operator/plugins/NAME` and

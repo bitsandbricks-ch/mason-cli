@@ -21,6 +21,7 @@ repo of your orgs. --org and --group narrow that down.
   mason approve                       runs waiting for you (environments, outside contributors)
   mason security                      Dependabot, secret and code scanning alerts
   mason doctor [names] [--fix]        settings, security, rulesets, environments, Pages and files against the defaults
+  mason doctor --summary              one line per repo: ok, or how many issues
   mason secrets [names]               the Actions secrets the defaults name: set or missing (names only)
   mason secrets set NAME [names]      store a secret's value (read from stdin) in each repo (--env ENV)
   mason issues [names] [--mine]       open issues; mason issue new|view|close|comment name[#12] ...
@@ -100,6 +101,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
                             help="only repos whose version file is newer than the latest release")
         if cmd == "doctor":
             sp.add_argument("--fix", action="store_true", help="apply settings and rulesets where they drifted")
+            sp.add_argument("--summary", action="store_true", help="one line per repo: ok, or how many issues")
         if cmd == "issues":
             sp.add_argument("--state", choices=("open", "closed", "all"), default="open")
             sp.add_argument("--label", action="append", metavar="LABEL", help="only with this label (repeatable)")
@@ -429,6 +431,8 @@ def run(cfg, args, names: list[str], pick: dict) -> None:
     if args.cmd == "security":
         return repos.security(names)
     if args.cmd == "doctor":
+        if args.summary and not args.fix:
+            return defaults.doctor_summary(cfg, names)
         return defaults.doctor_all(cfg, names, args.fix)
     if args.cmd == "workflows":
         return workflows.workflows(cfg, names, args.fix)
