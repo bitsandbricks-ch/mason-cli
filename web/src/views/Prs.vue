@@ -13,7 +13,7 @@ import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 
-const { data, loading, load, keep } = useLoad((q) => `/prs${q}`)
+const { data, error, loading, load, keep } = useLoad((q) => `/prs${q}`)
 loadGroups()
 const filter = ref('all')
 const sel = ref(null)
@@ -109,7 +109,7 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <button class="any" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open pull requests'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
   </div>

@@ -9,6 +9,7 @@ import { cached, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
 import DataTable from '../components/DataTable.vue'
 import EventLog from '../components/EventLog.vue'
+import StatusHeader from '../components/StatusHeader.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
@@ -46,6 +47,14 @@ const columns = [
   { key: 'assets', label: 'assets', right: true },
 ]
 const current = computed(() => rows.value.find((r) => r.tag === sel.value))
+const badges = computed(() => {
+  if (!page.value) return []
+  const v = page.value.version
+  const out = [{ label: 'latest', value: rows.value[0]?.tag || 'none yet', cls: rows.value.length ? '' : 'warn' }]
+  if (v) out.push({ label: v.file || 'version', value: v.todo ? `${v.version} not released` : v.version, cls: v.todo ? 'warn' : 'ok' })
+  if (page.value.busy) out.push({ label: 'release run', value: 'running', cls: 'warn' })
+  return out
+})
 const open = () => { const url = current.value?.url || page.value?.url; if (url) window.open(url, '_blank', 'noopener') }
 const back = () => (window.history.state?.back ? router.back() : router.push('/releases'))
 
@@ -81,14 +90,15 @@ useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: ba
   <div class="view">
     <div class="toolbar">
       <button class="hide-xs" @click="back"><span class="k">esc</span> back</button>
-      <span class="accent hide-xs">releases › {{ repo }}</span>
+      <router-link class="dim hide-xs" to="/releases">releases ›</router-link>
       <span class="spacer" />
       <button class="any" @click="load(sel || '', true)"><span class="k">r</span> reload</button>
       <button class="primary any" @click="form = 'release'; openDetail()"><span class="k">n</span> new release</button>
       <button class="any" @click="form = 'tag'; openDetail()"><span class="k">T</span> new tag</button>
       <button :disabled="!page" @click="open"><span class="k">o</span> open</button>
-      <router-link class="chip any" :to="{ path: '/repo', query: { repo } }">repo page</router-link>
+      <router-link class="btn any" :to="{ path: '/repo', query: { repo } }">repo page</router-link>
     </div>
+    <StatusHeader :title="repo" sub="releases" :url="page?.url || ''" :badges="badges" />
     <div class="split ld">
       <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.tag"
                       :empty="loading ? 'loading…' : 'no releases yet: n creates the first'" @activate="open" /></div>
@@ -97,7 +107,7 @@ useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: ba
         <ReleaseForm v-if="form" :key="form" :mode="form" :repo="repo" :suggest="page?.suggest" :publishes="page?.publishes"
                      @done="done" @cancel="form = ''" />
         <template v-if="output"><h2>output</h2><TextPane :text="output" /></template>
-        <TextPane v-if="!form" :text="text" :placeholder="loading ? 'loading…' : 'pick a release'" />
+        <TextPane v-if="!form" :text="text" :skip="text.split('\n')[0] === repo ? 1 : 0" :placeholder="loading ? 'loading…' : 'pick a release'" />
         <EventLog v-if="!form && sel" ref="log" :repo="repo" kind="release" :tag="sel" />
       </div>
     </div>

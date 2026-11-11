@@ -67,9 +67,9 @@ useKeys({ c: doctor, f: fix, s: sync })
     <div class="toolbar">
       <GroupSelect :groups="scope.groups" />
       <input v-model="only" placeholder="repos (empty: all), e.g. web api gitlab:grp/x" style="min-width: 28ch">
-      <button class="primary" :disabled="!!running" @click="doctor"><span class="k">c</span> doctor</button>
-      <button :disabled="!!running" @click="fix"><span class="k">f</span> fix drift</button>
-      <button :disabled="!!running" @click="sync"><span class="k">s</span> sync files</button>
+      <button class="primary" :disabled="!!running" @click="doctor"><span class="k">c</span> check every repo</button>
+      <button :disabled="!!running" @click="fix"><span class="k">f</span> fix the drift</button>
+      <button :disabled="!!running" @click="sync"><span class="k">s</span> open PRs with the shared files</button>
       <span class="spacer" />
       <button v-for="c in pluginChecks" :key="c.plugin + c.key" :disabled="!!running" @click="plugin(c)">{{ c.label }} <span class="dim">[{{ c.plugin }}]</span></button>
     </div>

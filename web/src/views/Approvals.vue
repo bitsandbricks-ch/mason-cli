@@ -9,7 +9,7 @@ import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 
-const { data, loading, load } = useLoad((q) => `/approvals${q}`)
+const { data, error, loading, load } = useLoad((q) => `/approvals${q}`)
 loadGroups()
 const sel = ref(null)
 const output = ref('')
@@ -42,7 +42,7 @@ useKeys({ r: () => load(true), a: () => approve(), o: () => open(current.value) 
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'nothing waits for you'" @activate="approve" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ no run waits for your approval'" @activate="approve" /></div>
       <div class="pad"><TextPane :text="output" placeholder="a approves the selected run; Enter does too" /></div>
     </div>
   </div>

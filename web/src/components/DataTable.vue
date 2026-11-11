@@ -4,13 +4,15 @@
 // card: 'main' column on its own line, the rest as small "label value" pairs. In a list and detail view
 // (.split.ld) a tap opens the detail; elsewhere a tap selects and the selected card offers activate.
 import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
-import { openDetail, phone, stateClass } from '../ui.js'
+import ErrorNote from './ErrorNote.vue'
+import { glyph, openDetail, phone, stateClass } from '../ui.js'
 
 const props = defineProps({
-  columns: { type: Array, required: true }, // [{key, label, cls?: (row) => str, fmt?: (v,row) => str, right?}]
+  columns: { type: Array, required: true }, // [{key, label, cls?: (row) => str, fmt?: (v,row) => str, right?, mark?: false}]
   rows: { type: Array, default: () => [] },
   rowKey: { type: Function, default: (r) => r.key ?? r.repo ?? JSON.stringify(r) },
   empty: { type: String, default: 'nothing here' },
+  error: { type: String, default: '' }, // the list couldn't load: said in plain words instead of "empty"
   modelValue: { default: null }, // the selected row's key
 })
 const emit = defineEmits(['update:modelValue', 'activate'])
@@ -21,6 +23,9 @@ const filterInput = ref(null)
 const table = ref(null)
 
 const cell = (c, r) => (c.fmt ? c.fmt(r[c.key], r) : r[c.key] ?? '')
+const cls = (c, r) => (c.cls ? c.cls(r) : stateClass(cell(c, r)))
+// a status cell (ok, bad, warn) gets its mark: ✓ ✗ ●; mark: false on a column leaves it plain
+const mark = (c, r) => (c.mark === false || c === props.columns[0] ? '' : glyph(cls(c, r)))
 const shown = computed(() => {
   const f = filter.value.trim().toLowerCase()
   let out = f ? props.rows.filter((r) => props.columns.some((c) => String(cell(c, r)).toLowerCase().includes(f)))
@@ -92,14 +97,14 @@ defineExpose({ focus: () => table.value?.focus(), shown })
       <li v-for="r in shown" :key="rowKey(r)" role="option" :aria-selected="rowKey(r) === modelValue"
           :class="{ sel: rowKey(r) === modelValue }" @click="tap(r)">
         <div class="head">
-          <span v-for="c in head" :key="c.key" :class="c.cls ? c.cls(r) : stateClass(cell(c, r))">{{ cell(c, r) }}</span>
+          <span v-for="c in head" :key="c.key" :class="cls(c, r)"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</span>
           <span v-if="inSplit" class="go dim" aria-hidden="true">›</span>
         </div>
         <div v-for="c in main" :key="c.key" class="main">{{ cell(c, r) }}</div>
         <div class="meta">
           <template v-for="c in meta" :key="c.key">
             <span v-if="!blank(cell(c, r))"><span v-if="c.label && c.label !== '#'" class="dim">{{ c.label }} </span><span
-              :class="c.cls ? c.cls(r) : stateClass(cell(c, r))">{{ cell(c, r) }}</span></span>
+              :class="cls(c, r)"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</span></span>
           </template>
         </div>
         <button v-if="activates && !inSplit && rowKey(r) === modelValue" class="open" @click.stop="emit('activate', r)">open ↗</button>
@@ -116,11 +121,12 @@ defineExpose({ focus: () => table.value?.focus(), shown })
       <tbody>
         <tr v-for="r in shown" :key="rowKey(r)" :class="{ sel: rowKey(r) === modelValue }"
             @click="emit('update:modelValue', rowKey(r))" @dblclick="emit('activate', r)">
-          <td v-for="c in columns" :key="c.key" :class="[c.cls ? c.cls(r) : stateClass(cell(c, r)), { right: c.right }]"
-              :title="String(cell(c, r))">{{ cell(c, r) }}</td>
+          <td v-for="c in columns" :key="c.key" :class="[cls(c, r), { right: c.right }]"
+              :title="String(cell(c, r))"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</td>
         </tr>
       </tbody>
     </table>
-    <div v-if="!shown.length" class="empty">{{ rows.length ? 'nothing matches the filter' : empty }}</div>
+    <div v-if="error && !rows.length" class="empty"><ErrorNote :error="error" what="couldn't load the list" /><span class="dim">r tries again.</span></div>
+    <div v-else-if="!shown.length" class="empty">{{ rows.length ? 'nothing matches the filter' : empty }}</div>
   </div>
 </template>

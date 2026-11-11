@@ -43,11 +43,25 @@ gesture) returns to the list:
 
 ## The web UI
 
-The tabs are repos, pull requests, issues, runs, approvals, releases, packages, security, checks, workflows,
-stats, defaults, console, plugins, market, settings and audit, plus tabs that plugins add. Each has a
-one-key shortcut (`1` to `9` for the first ones, `I` issues, `W` workflows, `D` defaults, `:` console,
-`P` plugins, `K` market, `S` settings, `L` audit).
+The tab bar has seven sections: **repos**, **pull requests**, **issues**, **runs** (with approvals),
+**releases**, **health** (checks, security, packages, workflows, stats) and **setup** (settings, defaults,
+plugins, market, audit, console, plus tabs that plugins add and the operator page). A section with more
+than one view shows them as a second row of tabs. Every view keeps its one-key shortcut (`1` to `9` for the
+first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `K` market, `S` settings,
+`L` audit).
 
+- **Every detail page starts with its status:** the repo, PR, issue, release or run named once (a link to
+  GitHub or GitLab), its state as badges (CI, released, version, PRs, defaults; a PR's checks, review and
+  merge state), what stops it (a PR that can't merge says which check fails and which review is missing; a
+  run says which jobs failed), and the next step with a button: fix the drift, release the version, merge
+  the ready PRs, mark ready, run the failed jobs again.
+- **Actions are grouped** (defaults, pull requests, releases) on a page's left. In the repos list they sit
+  behind one **actions** button (`.`), next to **repo page** (Enter); their keys work as before. On a phone
+  every page has the one **actions** button, which opens them as a sheet.
+- **Lists read at a glance:** status cells have a mark (✓ fine, ✗ needs you, ● on its way), "2 ready · 1
+  draft" instead of `2/1`, "never" instead of `-`. A drift's fixes are buttons (fix the drift, open a PR
+  with the shared files) instead of commands to copy. Errors say what went wrong in plain words; what
+  GitHub or the command said is behind **details**.
 - **Enter opens a page.** On repos it opens the repo's own page: its whole detail on the right and what
   you can do with it on the left (check, fix, sync, merge, create a release, its releases), with the output
   below. On releases it opens the repo's releases: every recent release on the left, the picked one in full
@@ -61,7 +75,7 @@ one-key shortcut (`1` to `9` for the first ones, `I` issues, `W` workflows, `D` 
   text opens on a click. It asks again every 30s, and every few seconds after a change, so a merge, a ready
   or a release shows up on its own; a PR's state flips at once in the list and on its page.
 - **A repo's page checks it against the defaults** when it opens (doctor, nothing changes): the drift shows
-  under the actions, and its open PRs link to their pages.
+  under the actions, and its open PRs link to their pages with their merge and check state.
 - **The bottom line is the session log:** click it (or press `` ` ``) for every line of this session, and a
   change's whole output on a click.
 - **Releases** creates releases: **n** opens a form with the tag (the next patch is suggested on a repo's
