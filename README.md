@@ -48,6 +48,7 @@ Repos are named as `owner/name`, as a bare `name` when only one repo has it, or 
 | `mason doctor [names] [--fix] [--no-auto]` | Settings, security, release immutability, rulesets, environments, variables, secrets (by name), Pages and its domain, CodeQL, autolinks and files against the defaults and the repo's own `.mason.toml`. `--fix` applies them; repos with `auto_fix` get them applied without it (`--no-auto`: only check). |
 | `mason secrets [names]` | The Actions secrets the defaults name for each repo (and its environments): set or missing. Names only: GitHub never gives values out. |
 | `mason secrets set NAME [names] [--env ENV]` | Reads the value from stdin (or asks without echo), encrypts it with each repo's public key and stores it. One value can go to many repos. |
+| `mason auto [names]` | Everything the repos' `auto_*` keys let mason do on its own, in one run: fix drift, push the version tag, update PRs that are behind, close stale PRs and issues, rerun failed runs, delete merged branches, auto-merge Dependabot updates and send drift alerts. Repos with nothing switched on are left alone, so it's safe from cron or a scheduled workflow. |
 | `mason sync [names] [--only PATH]` | Opens a PR per repo whose shared files differ (with `auto_push`: pushes them to the default branch). |
 | `mason issues [names] [--mine] [--label L] [--assignee X] [--stale DAYS] [--state open\|closed\|all] [--limit 20]` | Issues across repos, newest activity first; PRs are left out. `--assignee none` shows unassigned ones, `*` any assigned; `--label` repeats. |
 | `mason issue new name "title" [--body TEXT] [--label L] [--assignee X]` | Opens an issue (`--body -` reads it from stdin). `mason issue view\|close\|reopen name#12` shows, closes (`--not-planned`) or reopens one, `mason issue comment name#12 "text"` comments. An issue URL works too. |
@@ -262,6 +263,69 @@ Checks page stays a plain check, and in the web console a read-only API key neve
 `auto_push`, a push the default branch refuses (a ruleset that wants PRs, no `workflow` scope for a
 workflow file) becomes a PR after all. Turn it on only where nobody needs to review those changes.
 
+### More repo keys
+
+These work on a group and in a repo's `.mason.toml` like the rest (tables merge key by key, lists add up,
+the repo wins):
+
+```toml
+owner = "mike"                     # who to ask; shown by doctor and on the repo's page in the web app
+team = "web"
+notes = "Deploys from main to Cloudflare"
+
+protect = { reviews = 1, checks = ["test"], signed_commits = true }   # a ruleset named "protect"
+# also: linear_history, merge_queue = true (or a table of GitHub's merge queue settings), code_owners,
+# resolve_threads, dismiss_stale, up_to_date, branches = ["main", "release/*"], name = "protect"
+skip_until = { code_scanning = 2027-01-01 }   # skip a check until that day; after it, doctor says so
+
+dependabot = { ecosystems = ["pip", "github-actions"], interval = "weekly", group = true, auto_merge = "minor" }
+renovate = true                    # or { extends = ["config:recommended"] }
+codeowners = { "*" = ["@mike"], "/docs/" = ["@acme/docs"] }
+release_notes = { categories = { Features = ["feature"], Fixes = ["bug"] }, exclude = ["chore"] }
+templates = true                   # an issue template and a PR template must exist
+release_drafts = true              # `mason release new` and the web app's New release make drafts
+
+discussions = ["Announcements", "Q&A"]   # categories that must exist (GitHub only adds them on the web)
+social_preview = true              # a custom social preview image must be set
+archive_after = 12                 # months without a push; --fix (or auto_fix) archives the repo
+properties = { tier = "1" }        # custom property values (--fix sets them)
+webhooks = ["https://ci.example.com/hook"]   # must exist; checked only
+deploy_keys = ["deploy"]           # titles that must exist; checked only
+
+# what `mason auto` does on its own
+auto_release = true                # push the tag once the version file is ahead of the latest release
+auto_update_branch = true          # update open PRs that are behind their base
+auto_close_stale = 60              # close PRs and issues untouched for 60 days (labels keep, pinned, security stay)
+auto_rerun_failed = 1              # rerun the failed jobs of each workflow's latest run on the default branch, once
+auto_delete_branches = 14          # delete branches of PRs merged more than 14 days ago
+alerts = "https://hooks.slack.com/services/..."   # Slack, Discord or any https webhook: new drift only
+```
+
+`dependabot`, `renovate`, `codeowners` and `release_notes` write their files: `mason sync` brings them in
+(a PR, or straight onto the default branch with `auto_push`), and doctor reports them like shared files.
+`allow_forking` and `is_template` are settings like the others (`[settings]`); a template reference
+doesn't make its repos templates. `skip` takes `protect`, `dependabot`, `renovate`, `codeowners`,
+`templates`, `release_notes`, `discussions`, `social_preview`, `archive`, `properties`, `webhooks` and
+`deploy_keys` too.
+
+`mason auto` keeps what it last saw in `~/.config/mason/alerts.json`, so an alert only lists what's new.
+Alerts are sent only from the command line, never from the web app. Run it on a schedule, for example
+from a workflow in your defaults repo:
+
+```yaml
+on: { schedule: [{ cron: "0 6 * * *" }] }
+jobs:
+  auto:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pipx install "mason-cli @ git+https://github.com/bitsandbricks-ch/mason-cli" && mason auto
+        env: { GH_TOKEN: "${{ secrets.MASON_TOKEN }}", MASON_DEFAULTS: "your-org/your-defaults" }
+```
+
+A GitLab project's own `.mason.toml` counts too: its `[gitlab]` table (settings, protected_branches,
+approvals_before_merge) goes on top of the group's, and `auto_push` / `auto_merge` decide how `mason sync`
+lands the files there.
+
 Unknown keys on a group stay there for plugins (`group.extra`).
 
 ### An org's own defaults: the `.mason` repo
@@ -329,7 +393,7 @@ Keys that only make sense for a group (`name`, `match`, `from`, `files`, `requir
 `changelog`, `inherit`) are ignored here; the repo's own rulesets are its `.github/rulesets/*.json`, and
 those now win over a group's ruleset of the same name. Anyone who can push to the repo can change this
 file, so it can also turn org rules off for that repo (`skip`, or a looser setting): review it like code.
-Only GitHub repos read it for now.
+GitLab projects read it too, for their `[gitlab]` table and the auto switches (see More repo keys).
 
 mason reads the `.mason` repo with your own login (gh, your token, or your Mason account), so a private
 `.mason` only counts for people who can read it, and each user's answer is cached in their own cache

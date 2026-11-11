@@ -11,6 +11,11 @@ a group to GitLab); a group's `gitlab` table says what its GitLab projects shoul
 
 A group's `files` (a folder in the defaults repo) are synced the same way as on GitHub.
 
+A project's own `.mason.toml` wins over its group, as on GitHub: its `[gitlab]` table (settings,
+protected_branches, approvals_before_merge) goes on top of the group's, and `auto_push` / `auto_merge`
+decide how `mason sync` lands the files (straight onto the default branch, or a merge request that
+merges once its pipeline passes).
+
 Like core, output goes through say(), so the same text shows in the web console and the TUI.
 """
 
@@ -22,7 +27,7 @@ import json
 import re
 import urllib.parse
 
-from mason import core
+from mason import config, core
 from mason.config import group_label
 from mason.core import ago, compact, git_blob_sha, newest, say
 from mason.transport import HttpError, HttpTransport
@@ -565,12 +570,54 @@ def want_of(gl: GitLab, cfg, group) -> dict:
     return want
 
 
-def doctor(gl: GitLab, cfg, repo: str, fix: bool = False) -> None:
+def own_file(gl: GitLab, repo: str) -> dict:
+    """What a project's own .mason.toml says ({} without one): the GitHub keys it may set, and `gitlab`."""
+    text = gl.file(repo, config.REPO_LAYER)
+    if not text:
+        return {}
+    raw = config.parse_defaults(text, f"{full(repo)}/{config.REPO_LAYER}")
+    return {k: v for k, v in raw.items() if k in config.REPO_KEYS or k == "gitlab"}
+
+
+def auto_of(gl: GitLab, cfg, repo: str, key: str) -> bool:
+    """auto_push / auto_merge / auto_fix of a project: its .mason.toml, else its group."""
+    own = own_file(gl, repo)
+    if isinstance(own.get(key), bool):
+        return own[key]
     group = cfg.group_of(repo)
-    if not group:
+    return bool(group and getattr(group, key, None))
+
+
+def with_own(want: dict, own: dict) -> dict:
+    """The group's wanted state with the project's own [gitlab] table on top."""
+    spec = own.get("gitlab") or {}
+    if not spec:
+        return want
+    want = {**want, "settings": {**want["settings"], **(spec.get("settings") or {})},
+            "protected": {**want["protected"], **(spec.get("protected_branches") or {})}}
+    if spec.get("approvals_before_merge") is not None:
+        want["settings"]["approvals_before_merge"] = spec["approvals_before_merge"]
+    want["label"] = f"{want['label']} + .mason.toml" if want["label"] != config.REPO_LAYER else want["label"]
+    return want
+
+
+def no_group_want() -> dict:
+    return {"settings": {}, "protected": {}, "label": config.REPO_LAYER, "files": {}, "texts": {}}
+
+
+def doctor(gl: GitLab, cfg, repo: str, fix: bool = False, auto: bool = False) -> None:
+    group = cfg.group_of(repo)
+    own = own_file(gl, repo)
+    if not group and not own.get("gitlab"):
         say("   ok (no group)")
         return
-    want = want_of(gl, cfg, group)
+    want = with_own(want_of(gl, cfg, group) if group else no_group_want(), own)
+    if not fix and auto and auto_of(gl, cfg, repo, "auto_fix"):
+        fix = True
+        say("   auto_fix: fixing what drifted")
+    gname = f"group {group.name}" if group else "its .mason.toml"
+    if group and own:
+        gname += " + .mason.toml"
     live = gl.api("GET", gl.project(repo)) or {}
     problems, fixable = [], {}
     for k, v in want["settings"].items():
@@ -610,9 +657,9 @@ def doctor(gl: GitLab, cfg, repo: str, fix: bool = False) -> None:
         say(f"   fixed {len(fixable)} settings, {len(set(bad_branches))} protected branches")
         problems = [p for p in problems if p.endswith(("is missing", f"differs from {want['label']}"))]
     if not problems:
-        say(f"   ok (group {group.name})")
+        say(f"   ok ({gname})")
         return
-    say(f"   (group {group.name})")
+    say(f"   ({gname})")
     for p in problems:
         say(f"   - {p}")
     if not fix and (fixable or bad_branches):
@@ -643,9 +690,21 @@ def sync(gl: GitLab, cfg, repo: str, only: list[str] | None = None) -> None:
     if open_mrs:
         say(f"   merge request already open: {open_mrs[0].get('web_url')}")
         return
+    push = auto_of(gl, cfg, repo, "auto_push")
     if core.dry_run():
-        say(f"   [dry-run] merge request on {branch} with {len(changed)} file(s)")
+        say(f"   [dry-run] push {len(changed)} file(s) to {base}" if push
+            else f"   [dry-run] merge request on {branch} with {len(changed)} file(s)")
         return
+    actions = [{"action": "update" if p in ours else "create", "file_path": p, "content": t}
+               for p, t in changed.items()]
+    if push:
+        try:
+            gl.api("POST", f"{gl.project(repo)}/repository/commits", {
+                "branch": base, "commit_message": f"chore: sync shared files with {want['label']}", "actions": actions})
+            say(f"   pushed {', '.join(changed)} to {base} (auto_push)")
+            return
+        except RuntimeError as err:
+            say(f"   can't push to {base} ({str(err).strip()[:150]}), so it's a merge request")
     gl.api("POST", f"{gl.project(repo)}/repository/commits", {
         "branch": branch, "start_branch": base, "commit_message": f"chore: sync shared files with {want['label']}",
         "actions": [{"action": "update" if p in ours else "create", "file_path": p, "content": t}
@@ -657,6 +716,13 @@ def sync(gl: GitLab, cfg, repo: str, only: list[str] | None = None) -> None:
                        + "\n\nCheck the diff for changes this project made on purpose before merging.\n\n"
                          "Opened by `mason sync`."}) or {}
     say(f"   merge request: {mr.get('web_url', '')}")
+    if mr.get("iid") and auto_of(gl, cfg, repo, "auto_merge"):
+        try:
+            gl.api("PUT", f"{gl.project(repo)}/merge_requests/{mr['iid']}/merge",
+                   {"merge_when_pipeline_succeeds": True, "auto_merge": True})
+            say("   auto-merge on")
+        except RuntimeError as err:
+            say(f"   auto-merge not set: {str(err).strip()[:150]}")
 
 
 def create(gl: GitLab, cfg, repo: str, group_name: str | None = None, public: bool = False,

@@ -639,3 +639,53 @@ def test_secrets_list_and_set(env, tmp_path):
     assert sealedbox.open_box(box, bytes(range(1, 33))) == b"s3cret"  # the newline from stdin is dropped
     assert "s3cret" not in calls
     assert "Not a secret name" in mason(e, "secrets", "set", "GITHUB_X", "dotfiles")
+
+
+MORE_TOML = '''orgs = ["acme"]
+[[group]]
+name = "default"
+owner = "mike"
+team = "web"
+auto_update_branch = true
+auto_close_stale = 60
+auto_rerun_failed = 1
+auto_delete_branches = 14
+dependabot = { ecosystems = ["pip"], auto_merge = "minor" }
+codeowners = { "*" = ["@mike"], "/docs/" = ["@ghost"] }
+protect = { reviews = 1, checks = ["test"] }
+properties = { tier = "1" }
+webhooks = ["https://ci.acme.example/hook", "https://chat.acme.example/hook"]
+deploy_keys = ["deploy"]
+archive_after = 12
+skip_until = { pages = 2020-01-01, code_scanning = 2999-01-01 }
+'''
+
+
+def test_more_repo_keys(env, tmp_path):
+    folder = tmp_path / "defaults"
+    folder.mkdir()
+    (folder / "mason.toml").write_text(MORE_TOML)
+    e = {**env, "MASON_DEFAULTS": str(folder), "FAKE_GH_AUTO": "1"}
+    out = mason(e, "doctor", "web").split("== acme/web")[1]
+    for line in ("(group default; owner mike, team web)", "ruleset protect is missing",
+                 ".github/dependabot.yml is missing", ".github/CODEOWNERS is missing",
+                 "CODEOWNERS line 2: Unknown owner on line 2: make sure @ghost exists",
+                 "property tier is 2, defaults has 1", "webhook https://chat.acme.example/hook is missing",
+                 "deploy key deploy is missing", "(defaults archives after 12): archive it",
+                 "skip of pages ran out on 2020-01-01: it's checked again"):
+        assert line in out, line
+    assert "webhook https://ci.acme.example/hook" not in out
+    out = mason(e, "doctor", "--fix", "--dry-run", "web")
+    assert "[dry-run] PATCH /repos/acme/web/properties/values" in out and "archived it" in out
+    assert "[dry-run] POST /repos/acme/web/rulesets" in out
+    out = mason(e, "sync", "--dry-run", "web")
+    assert "add .github/dependabot.yml" in out and "add .github/CODEOWNERS" in out
+
+    out = mason(e, "auto", "--dry-run", "web", "api")
+    web = out.split("== acme/web")[1].split("==")[0]
+    assert "updated #23 with main" in web
+    assert "closed issue #4 Dark mode" in web and "#3" not in web  # #3 was touched lately
+    assert "reran the failed jobs of CI (attempt 2)" in web and "Images" not in web  # Images had its rerun
+    assert "deleted 1 merged branches: old-feature" in web
+    assert "#21 Bump requests" in web and "#22" not in web  # a major update waits for a person
+    assert "== acme/api" in out
