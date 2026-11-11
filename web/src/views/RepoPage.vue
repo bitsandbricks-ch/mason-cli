@@ -1,13 +1,14 @@
 <script setup>
 // One repo as a page (Enter on Repos): its whole detail, what you can do with it, and what that printed;
-// its drift against the defaults (doctor, checked when the page opens), its open PRs as links to their
+// its drift against the defaults (doctor: the kept check, or checked when the page opens), its open PRs as links to their
 // pages, and its event log at the bottom. After a change, and while a release run is going, the page reads
 // the repo again by itself (see useFollow).
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { post, qs } from '../api.js'
+import { qs } from '../api.js'
 import { act, cached, forget, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
+import DoctorPanel from '../components/DoctorPanel.vue'
 import EventLog from '../components/EventLog.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import SecretsPanel from '../components/SecretsPanel.vue'
@@ -32,23 +33,8 @@ async function load(fresh = false) {
   try { detail.value = (await cached(`/repo${qs({ repo: repo.value, fresh })}`, fresh)).text } catch (e) { detail.value = `error: ${e.message}` }
 }
 
-// doctor for this repo alone, when the page opens: what differs from the defaults (nothing changes)
-const drift = ref('')
-const checking = ref(false)
-const driftMemo = new Map() // repo -> {at, text}: back on the page within a minute shows the last answer
-async function checkDrift(fresh = false) {
-  const name = repo.value
-  if (!name) return
-  const hit = driftMemo.get(name)
-  if (!fresh && hit && Date.now() - hit.at < 60_000) { drift.value = hit.text; return }
-  checking.value = true
-  try {
-    const t = (await post('/doctor', { repos: [name] })).text || 'ok'
-    driftMemo.set(name, { at: Date.now(), text: t })
-    if (name === repo.value) drift.value = t
-  } catch (e) { if (name === repo.value) drift.value = `error: ${e.message}` } finally { checking.value = false }
-}
-const problems = computed(() => drift.value.split('\n').filter((l) => /^\s*-\s/.test(l)).length)
+// doctor for this repo (DoctorPanel): the check kept for the repo list, else checked when the page opens
+const checked = ref(0) // bumped after c or f: the panel shows the new result (r checks again)
 // the open PRs (and MRs) the detail lists, as links to their pages
 const pulls = computed(() => detail.value.split('\n').map((l) => l.match(/^\s+[#!](\d+) (.*?)\s{2}https?:\S+$/))
   .filter(Boolean).map((m) => ({ number: Number(m[1]), title: m[2] })))
@@ -62,7 +48,7 @@ async function run(q, path, body) {
   load(true)
   follow.now([repo.value])
   log.value?.burst()
-  if (path === '/doctor') checkDrift(true)
+  if (path === '/doctor') checked.value++
 }
 const r = () => [repo.value]
 const actions = computed(() => [
@@ -96,11 +82,13 @@ async function newRelease(mode) {
 function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); follow.now([repo.value]); log.value?.burst() } }
 const open = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
 const back = () => (window.history.state?.back ? router.back() : router.push('/'))
-const keys = { Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => { load(true); log.value?.refresh(); checkDrift(true) } }
+const doctorPanel = ref(null)
+const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true) }
+const keys = { Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => reload() }
 watch(actions, (list) => list.forEach((a) => { keys[a.k] = a.fn }), { immediate: true })
 useKeys(keys)
 // last: the immediate watch uses everything above
-watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; version.value = null; suggest.value = ''; drift.value = ''; load(); loadReleases(); checkDrift() }, { immediate: true })
+watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; version.value = null; suggest.value = ''; load(); loadReleases() }, { immediate: true })
 </script>
 
 <template>
@@ -109,7 +97,7 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
       <button class="hide-xs" @click="back"><span class="k">esc</span> back</button>
       <span class="accent hide-xs">repos › {{ repo }}</span>
       <span class="spacer" />
-      <button @click="load(true); log?.refresh(); checkDrift(true)"><span class="k">r</span> reload</button>
+      <button @click="reload"><span class="k">r</span> reload</button>
     </div>
     <div class="split page">
       <div class="pad">
@@ -117,10 +105,9 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
         <div class="actions">
           <button v-for="a in actions" :key="a.k" :class="{ primary: a.k === 'n' }" @click="a.fn"><span class="k">{{ a.k }}</span> {{ a.label }}</button>
         </div>
+        <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" />
         <SecretsPanel v-if="!gitlab" :repo="repo" @done="({ text }) => (output = text)" />
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
-        <h2 style="margin-top: 16px">drift <span class="dim">{{ checking ? '(checking…)' : drift ? (problems ? `(${problems})` : '(none)') : '' }}</span></h2>
-        <TextPane :text="drift" :placeholder="checking ? 'checking against the defaults…' : 'not checked'" />
         <template v-if="pulls.length">
           <h2 style="margin-top: 16px">{{ gitlab ? 'merge requests' : 'pull requests' }}</h2>
           <div class="actions">

@@ -7,6 +7,10 @@ the audit log and take `dry_run`.
 
 from __future__ import annotations
 
+import threading
+import time
+from collections import OrderedDict
+
 from flask import Blueprint, abort, g, jsonify, request
 
 from mason import config, core, plugins
@@ -18,6 +22,7 @@ from mason import packages as P
 from mason import releases as REL
 from mason import repos as R
 from mason import workflows as W
+from mason.cache import TTLDict
 from mason.config import group_label, orgs_of
 from mason.server import gitlab as GL
 from mason.server.api.account import body
@@ -145,7 +150,10 @@ def status():
             rows.append({"repo": row["repo"], "provider": "gitlab",
                          "cells": [row["group"], row["released"], f"{row['ready']}/{row['drafts']}", row["ci"],
                                    *([""] * extra)]})
-        return jsonify({"head": head[1:], "rows": rows})
+        # the last doctor check of each repo (kept from Checks, a repo page or c): the list's doctor column
+        doctor = {r: {"ok": d["ok"], "issues": len(d["problems"]), "error": bool(d["error"]), "checked": d["checked"]}
+                  for r, d in seen(gh_r + gl_r).items()}
+        return jsonify({"head": head[1:], "rows": rows, "doctor": doctor})
 
 
 @bp.get("/repo")
@@ -817,12 +825,70 @@ def doctor():
     with as_user(dry) as (gh, gl):
         cfg = load_config()
         gh_r, gl_r, _ = all_repos(cfg, gh, gl, [str(x) for x in data.get("repos") or []], data.get("group"))
-        text = capture_rate(D.doctor_all, cfg, gh_r, fix) if gh_r else ""
-        for repo in gl_r:
-            text += f"== {repo}\n" + capture_rate(GL.doctor, gl, cfg, repo, fix)
+        text = run_doctor(cfg, gl, gh_r, gl_r, fix)
+        found = D.parse_report(text)
+        if not (fix and dry):  # a dry-run fix leaves out what it would fix: not what the repo has
+            remember(found)
     if fix:
         audit("doctor.fix", ", ".join(data.get("repos") or []) or "all", dry, detail=text)
-    return jsonify({"text": text})
+    return jsonify({"text": text, "repos": list(found.values())})
+
+
+# The last doctor check of each repo, per user, in memory only (like the API caches: nothing about a
+# repo is written to the database). A day old, it goes; the repo list and repo pages show it until then.
+_doctor: OrderedDict[int, TTLDict] = OrderedDict()
+_doctor_lock = threading.Lock()
+DOCTOR_TTL = 86400
+DOCTOR_USERS = 2000
+
+
+def _kept_checks() -> TTLDict:
+    with _doctor_lock:
+        got = _doctor.pop(g.user.id, None) or TTLDict(DOCTOR_TTL)
+        _doctor[g.user.id] = got
+        while len(_doctor) > DOCTOR_USERS:
+            _doctor.popitem(last=False)
+        return got
+
+
+def remember(found: dict[str, dict]) -> None:
+    kept, now = _kept_checks(), int(time.time())
+    for repo, r in found.items():
+        kept[repo] = {**r, "checked": now}
+
+
+def seen(repos: list[str] | None = None) -> dict[str, dict]:
+    kept = _kept_checks()
+    return {r: kept[r] for r in (repos if repos is not None else list(kept)) if r in kept}
+
+
+def run_doctor(cfg, gl, gh_r: list[str], gl_r: list[str], fix: bool = False) -> str:
+    text = capture_rate(D.doctor_all, cfg, gh_r, fix) if gh_r else ""
+    for repo in gl_r:
+        text += f"== {repo}\n" + capture_rate(GL.doctor, gl, cfg, repo, fix)
+    return text
+
+
+@bp.get("/doctor")
+@need("read")
+def doctor_seen():
+    """What doctor found per repo. ?repo=x: that repo, checked now unless a check of it is kept (fresh=1
+    checks again). No repo: the last check of each repo, for the repo list (checks nothing)."""
+    with as_user() as (gh, gl):
+        repo = request.args.get("repo")
+        if not repo:
+            return jsonify({"repos": seen()})
+        repo = valid_repo(repo)
+        got = seen([repo]).get(repo)
+        if got is None or request.args.get("fresh") == "1":
+            if is_gl(repo) and gl is None:
+                abort(409, "connect GitLab first")
+            cfg = load_config()
+            found = D.parse_report(run_doctor(cfg, gl, [] if is_gl(repo) else [repo], [repo] if is_gl(repo) else []))
+            remember(found)
+            got = seen([repo]).get(repo) or {"repo": repo, "ok": False, "where": "", "problems": [], "fixes": [],
+                                                "error": "doctor printed nothing for it", "reference": False}
+        return jsonify(got)
 
 
 @bp.post("/sync")
