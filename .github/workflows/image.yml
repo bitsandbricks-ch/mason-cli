@@ -1,7 +1,8 @@
 name: Image
 
 # Builds the Mason web server image (Dockerfile) and pushes it to GHCR:
-#   main       -> ghcr.io/<owner>/<repo>:main, :sha-<short>
+#   main       -> ghcr.io/<owner>/<repo>:main, :sha-<short>, :main-<UTC commit time>-<short>
+#                 (sortable, so Flux image automation can follow main)
 #   v1.2.3 tag -> :1.2.3, :1.2, :latest, :sha-<short>
 # Pull requests that touch the image only build it (nothing is pushed).
 # Only actions/checkout is used (pinned); the rest is the docker CLI on the runner.
@@ -58,7 +59,10 @@ jobs:
             tags+=("$image:${REF_NAME#v}")
             version="${REF_NAME#v}"
           elif [[ "$REF_NAME" == main ]]; then
-            tags+=("$image:main")
+            # main-YYYYMMDDHHMMSS-<short>: commit time in UTC, so tags sort by
+            # age. Oak's Flux ImagePolicy follows the newest one.
+            ts="$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M%S)"
+            tags+=("$image:main" "$image:main-$ts-$short")
             version="main-$short"
           else
             version="pr-$short"
