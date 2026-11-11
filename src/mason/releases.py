@@ -140,7 +140,8 @@ def page(cfg: Config | None, repo: str, tag: str | None = None) -> dict:
             "selected": (rel or {}).get("tag_name") or "", "url": rel_url,
             "text": detail_text(cfg, repo, rel, runs, rels),
             "suggest": (vs or {}).get("tag") or suggest_from(rels),
-            "publishes": publishing_workflow(repo), "version": vs}
+            "publishes": publishing_workflow(repo), "version": vs,
+            "busy": R.running([r for r in runs if R.is_release_run(r)])}
 
 
 def view(cfg: Config, repo: str, tag: str | None = None) -> None:

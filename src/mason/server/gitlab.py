@@ -69,6 +69,10 @@ class GitLab(HttpTransport):
             return "/".join(parts[:3]), full(urllib.parse.unquote(parts[2]))
         return "", ""
 
+    def repo_scope(self, repo: str) -> tuple[str, tuple[str, ...]]:
+        path = json.dumps(path_of(repo))
+        return self.project(repo), (path, json.dumps(path)[1:-1])  # in the variables, or in the query
+
     def project(self, repo: str) -> str:
         return "/projects/" + urllib.parse.quote(path_of(repo), safe="")
 
@@ -767,7 +771,8 @@ def release_page(gl: GitLab, cfg, repo: str, tag: str | None = None) -> dict:
     url = (rel or {}).get("html_url") or f"{gl.web}/{path_of(repo)}/-/releases"
     return {"repo": repo, "provider": "gitlab", "releases": [REL.row(r) for r in rels],
             "selected": (rel or {}).get("tag_name") or "", "url": url,
-            "text": REL.detail_text(cfg, repo, rel, runs, rels), "suggest": REL.suggest_from(rels)}
+            "text": REL.detail_text(cfg, repo, rel, runs, rels), "suggest": REL.suggest_from(rels),
+            "busy": REL.R.running(runs)}
 
 
 def create_release(gl: GitLab, repo: str, tag: str, title: str = "", notes: str = "", draft: bool = False,

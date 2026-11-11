@@ -686,6 +686,15 @@ def run_state(run: dict) -> str:
     return run.get("conclusion") or run.get("status") or "?"
 
 
+RUNNING = ("queued", "in_progress", "waiting", "requested", "pending", "running", "created", "preparing",
+           "waiting_for_resource")
+
+
+def running(runs: list[dict]) -> bool:
+    """A release run that hasn't finished: the web app keeps reading the repo until it has."""
+    return any((r.get("conclusion") or r.get("status")) in RUNNING for r in runs[:5])
+
+
 def release_info(cfg: Config, repo: str) -> dict:
     """The newest release, the assets the group wants but the release lacks, and recent release runs.
     Two REST calls per repo."""

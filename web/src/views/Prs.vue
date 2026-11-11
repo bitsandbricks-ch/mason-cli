@@ -1,10 +1,12 @@
 <script setup>
 // Pull and merge requests: all open ones, with checks, review, conflicts and auto-merge. Enter (or page)
 // opens one as its own page, with its event log.
+// A change shows at once: the row changes right away, and its repo is read again (only that one) a moment later
+// and then while a PR of it waits for auto-merge, so a PR that merges by itself leaves the list without r.
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { get, qs } from '../api.js'
-import { act, useLoad } from '../load.js'
+import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
@@ -12,7 +14,7 @@ import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 
-const { data, loading, load } = useLoad((q) => `/prs${q}`)
+const { data, loading, load, keep } = useLoad((q) => `/prs${q}`)
 loadGroups()
 const filter = ref('all')
 const sel = ref(null)
@@ -40,6 +42,22 @@ const columns = [
 ]
 const current = computed(() => rows.value.find((p) => keyOf(p) === sel.value))
 
+// Read these repos again (fresh, only them) and put their PRs in place of the ones shown.
+async function refresh(repos) {
+  const got = await get(`/prs${qs({ repo: repos, fresh: true })}`, { quiet: true })
+  if (!data.value) return
+  keep({ ...data.value, prs: splice(data.value.prs, got.prs, repos), merged: splice(data.value.merged, got.merged, repos) })
+}
+const follow = useFollow({ pending: () => (data.value?.prs || []).filter((p) => p.auto).map((p) => p.repo), refresh })
+
+// What the change will have done, shown before GitHub says so (the follow-up a moment later has the last word).
+// { gone: true }: merged away.
+function expect(p, { gone, ...fields }) {
+  if (!data.value) return
+  const same = (x) => x.repo === p.repo && x.number === p.number
+  keep({ ...data.value, prs: gone ? data.value.prs.filter((x) => !same(x)) : data.value.prs.map((x) => (same(x) ? { ...x, ...fields } : x)) })
+}
+
 async function show() {
   const p = current.value
   if (!p) { detail.value = ''; return }
@@ -48,22 +66,15 @@ async function show() {
 }
 watch([sel, diff], show)
 
-// A change shows in the list at once (auto-merge on, no longer a draft, merged away), then the list is
-// asked again now and a few seconds later, when GitHub or GitLab has caught up.
-function changed(p, flip, text) {
-  if (!text.startsWith('error') && !/\[dry-run\]/.test(text) && data.value?.prs) {
-    const k = keyOf(p)
-    data.value = { ...data.value, prs: flip.gone ? data.value.prs.filter((x) => keyOf(x) !== k)
-      : data.value.prs.map((x) => (keyOf(x) === k ? { ...x, ...flip } : x)) }
-  }
-  setTimeout(() => load(true), 1500)
-  setTimeout(() => load(true), 6000)
-}
 async function doMerge(now) {
   const p = current.value
   if (!p) return
-  const text = await act(`${now ? 'Merge' : 'Auto-merge'} ${keyOf(p)} ${p.title}?`, '/merge', { targets: [keyOf(p)], now, ready: p.draft })
-  if (text !== null) { detail.value = text; changed(p, now ? { gone: true } : { auto: true, draft: false }, text) }
+  const got = await change(`${now ? 'Merge' : 'Auto-merge'} ${keyOf(p)} ${p.title}?`, '/merge', { targets: [keyOf(p)], now, ready: p.draft })
+  if (!got) return
+  detail.value = got.text
+  if (got.dry) return
+  if (got.ok) expect(p, now ? { gone: true } : { auto: true, draft: false })
+  follow.now([p.repo])
 }
 async function mergeAll() {
   const text = await act('Auto-merge every ready PR (drafts and conflicts stay open)?', '/merge', { all: true })
@@ -72,8 +83,12 @@ async function mergeAll() {
 async function ready() {
   const p = current.value
   if (!p || !p.draft) return
-  const text = await act(`Mark ${keyOf(p)} ready for review?`, '/ready', { repo: p.repo, number: p.number })
-  if (text !== null) { detail.value = text; changed(p, { draft: false }, text) }
+  const got = await change(`Mark ${keyOf(p)} ready for review?`, '/ready', { repo: p.repo, number: p.number })
+  if (!got) return
+  detail.value = got.text
+  if (got.dry) return
+  if (got.ok) expect(p, { draft: false })
+  follow.now([p.repo])
 }
 const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
 const router = useRouter()

@@ -189,6 +189,14 @@ class Store:
                 self.bytes -= self.entries.pop(k).size
         return n
 
+    def drop_where(self, pick) -> int:
+        """Drop the entries whose key `pick(key)` picks (GraphQL answers, which can't be revalidated)."""
+        with self.lock:
+            gone = [k for k in self.entries if pick(k)]
+            for k in gone:
+                self.bytes -= self.entries.pop(k).size
+        return len(gone)
+
     def clear(self) -> None:
         with self.lock:
             self.entries.clear()
