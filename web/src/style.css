@@ -371,3 +371,27 @@ button.wide { width: 100%; text-align: left; }
   .toolbar > button.action-sheet { flex: 1 1 auto; width: auto; justify-content: center; align-items: center; }
   .toolbar:has(> .action-sheet) { flex-wrap: nowrap; }
 }
+
+/* the event log as a full-width bar at the bottom of a view; it folds to its header */
+.events.band { flex: 0 0 auto; height: 34vh; min-height: 120px; overflow: auto; margin: 0; padding: 0 12px 6px;
+  border-top: 1px solid var(--line); background: var(--bg); }
+.events.band.folded { height: auto; min-height: 0; overflow: visible; }
+.events.band .events-head { position: sticky; top: 0; z-index: 1; background: var(--bg); padding: 6px 0; margin: 0;
+  border-bottom: 1px dotted var(--bg3); }
+.events.band.folded .events-head { border-bottom: 0; }
+.events .fold { border: 0; padding: 0 4px; color: var(--accent); }
+.events .about { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50ch; }
+@media (max-width: 900px) { .events.band { height: 40vh; } }
+@media (max-width: 700px) {
+  .view:has(> .split.ld) > .events.band { display: none; } /* a list: the events show with the picked row */
+  main.detail .view:has(> .split.ld) > .events.band { display: block; order: 1; height: 38vh; }
+  .events.band .about { max-width: 100%; flex-basis: 100%; order: 9; }
+}
+/* a detail page on a phone: header, content and the event log scroll as one page, so the log never squeezes
+   the content away */
+@media (max-width: 700px) {
+  .view:has(> .split.page) { display: block; overflow-y: auto; }
+  .view:has(> .split.page) > .split.page { overflow: visible; }
+  .view:has(> .split.page) > .events.band { height: auto; min-height: 0; overflow: visible; }
+  .view:has(> .split.page) > .events.band .events-head { position: static; }
+}

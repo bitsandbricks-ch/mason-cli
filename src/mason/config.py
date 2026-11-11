@@ -93,7 +93,7 @@ GROUP_KEYS = {"name", "match", "from", "files", "require", "settings", "security
               "vulnerability_reporting", "rulesets", "release_assets",
               "version", "changelog", "topics", "labels", "actions", "required_files", "branch",
               "visibility", "description", "skip", "workflows", "environments", "variables", "secrets", "pages",
-              "homepage", "code_scanning", "autolinks", "inherit"}
+              "homepage", "code_scanning", "autolinks", "inherit", "auto_fix", "auto_push", "auto_merge"}
 # What a repo's own .mason.toml may set for itself (besides [release]): it wins over every group.
 REPO_KEYS = GROUP_KEYS - {"name", "match", "from", "files", "require", "rulesets", "version", "changelog", "inherit"}
 # What doctor checks for a group; `skip = [...]` turns checks off.
@@ -224,6 +224,9 @@ class Group:
     homepage: bool | str | None = None  # the repo's website: a URL, or true for its Pages address
     code_scanning: bool | None = None  # CodeQL default setup on or off
     autolinks: dict = field(default_factory=dict)  # {"HUB-": "https://tracker/HUB-<num>"}
+    auto_fix: bool | None = None  # plain `mason doctor` fixes the drift too, as with --fix
+    auto_push: bool | None = None  # mason's file changes go straight onto the default branch, not a PR
+    auto_merge: bool | None = None  # the PRs mason opens get auto-merge
     extra: dict = field(default_factory=dict)
     source: Source | None = None  # where its rulesets and files folders live (None: the config's defaults)
     origin: str = ""  # "" for your defaults; "acme/.mason" for a group of an org's .mason repo
@@ -304,7 +307,8 @@ def _glob(repo: str, pattern: str) -> bool:
 MERGE_DICT = ("require", "settings", "security", "labels", "actions", "variables", "autolinks", "extra")
 MERGE_LIST = ("topics", "required_files", "release_assets", "skip", "secrets")
 MERGE_SCALAR = ("reference", "files", "rulesets", "version", "immutable_releases", "vulnerability_reporting",
-                "branch", "visibility", "description", "workflows", "homepage", "code_scanning")
+                "branch", "visibility", "description", "workflows", "homepage", "code_scanning", "auto_fix",
+                "auto_push", "auto_merge")
 
 
 def specificity(group: Group) -> int:
@@ -539,9 +543,30 @@ def make_group(raw: dict, i: int) -> Group:
         homepage=raw.get("homepage"),
         code_scanning=raw.get("code_scanning"),
         autolinks={str(k): v for k, v in (raw.get("autolinks") or {}).items()},
+        auto_fix=_flag(raw, "auto_fix"),
+        auto_push=_flag(raw, "auto_push"),
+        auto_merge=_flag(raw, "auto_merge"),
         inherit=raw.get("inherit") is not False,
         extra={k: v for k, v in raw.items() if k not in GROUP_KEYS},
     )
+
+
+def _flag(raw: dict, key: str) -> bool | None:
+    value = raw.get(key)
+    if value is not None and not isinstance(value, bool):
+        raise RuntimeError(f"{key} must be true or false, not {value!r}")
+    return value
+
+
+AUTO = ("auto_fix", "auto_push", "auto_merge")
+
+
+def auto(cfg: Config, repo: str, key: str) -> bool:
+    """`auto_fix`, `auto_push` or `auto_merge` for one repo: its own .mason.toml, else its stacked group."""
+    from mason.repos import listing
+
+    group = cfg.settings_of(repo, (listing(cfg).get(repo) or {}).get("topics"))
+    return bool(group and getattr(group, key))
 
 
 _loaded = core.Scoped("config")

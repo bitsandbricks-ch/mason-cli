@@ -1,6 +1,6 @@
 <script setup>
 // One repo as a page (Enter on Repos): its whole detail, what you can do with it, and what that printed;
-// its drift against the defaults (doctor, checked when the page opens), its open PRs as links to their
+// its drift against the defaults (doctor: the kept check, or checked when the page opens), its open PRs as links to their
 // pages, and its event log at the bottom. After a change, and while a release run is going, the page reads
 // the repo again by itself (see useFollow).
 import { computed, ref, watch } from 'vue'
@@ -89,10 +89,10 @@ async function run(q, path, body) {
   if (t === null) return
   output.value = t
   forget('/status'); forget('/repo'); forget('/release')
-  if (path === '/doctor') checked.value++
   load(true)
   follow.now([repo.value])
   log.value?.burst()
+  if (path === '/doctor') checked.value++
 }
 const r = () => [repo.value]
 const fixFrom = (kind) => actions.value.find((a) => a.k === (kind === 'sync' ? 's' : 'f'))?.fn()
@@ -127,7 +127,9 @@ async function newRelease(mode) {
 function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); follow.now([repo.value]); log.value?.burst() } }
 const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
 const back = () => (window.history.state?.back ? router.back() : router.push('/'))
-const keys = { '.': () => sheet.value?.pick(), Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => { load(true); log.value?.refresh(); checked.value++ } }
+const doctorPanel = ref(null)
+const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true) }
+const keys = { '.': () => sheet.value?.pick(), Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => reload() }
 watch(actions, (list) => list.forEach((a) => { keys[a.k] = () => !a.off && a.fn() }), { immediate: true })
 useKeys(keys)
 // last: the immediate watch uses everything above
@@ -141,13 +143,13 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
       <span class="dim hide-xs">repos ›</span>
       <span class="spacer" />
       <ActionList ref="sheet" class="show-compact" :actions="actions" :title="repo" compact />
-      <button class="any" @click="load(true); log?.refresh(); checked++"><span class="k">r</span> reload</button>
+      <button class="any" @click="reload"><span class="k">r</span> reload</button>
     </div>
     <StatusHeader :title="repo" :url="info?.url" :badges="badges" :next="next" />
     <div class="split page">
       <div class="pad">
         <div class="hide-xs"><h2>actions</h2><ActionList :actions="actions" /></div>
-        <DoctorPanel :repo="repo" :stamp="checked" @result="(d) => (doctor = d)" @run="fixFrom" />
+        <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" @result="(d) => (doctor = d)" @run="fixFrom" />
         <SecretsPanel v-if="!gitlab" :repo="repo" @done="({ text }) => (output = text)" />
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
       </div>
@@ -167,8 +169,8 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
         </ul>
         <div v-else-if="info" class="empty" style="padding: 0 0 8px">no open {{ gitlab ? 'merge' : 'pull' }} requests</div>
         <TextPane v-if="rest || !info" :text="info ? rest : detail" placeholder="loading…" />
-        <EventLog ref="log" :repo="repo" kind="repo" />
       </div>
     </div>
+    <EventLog ref="log" band :repo="repo" kind="repo" :title="repo" />
   </div>
 </template>

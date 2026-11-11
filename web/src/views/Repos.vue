@@ -8,6 +8,7 @@ import { act, cached, useLoad } from '../load.js'
 import { useRouter } from 'vue-router'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
+import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import DoctorPanel from '../components/DoctorPanel.vue'
@@ -152,5 +153,6 @@ useKeys({ '.': () => sheet.value?.pick(), l: () => sel.value && router.push({ pa
         </div>
       </div>
     </div>
+    <EventLog band :repo="sel || ''" kind="repo" :title="sel || ''" />
   </div>
 </template>

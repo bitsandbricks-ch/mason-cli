@@ -98,8 +98,8 @@ useKeys(keys)
       </div>
       <div class="pad">
         <TextPane :text="detail" :skip="url ? 2 : 0" placeholder="loading…" />
-        <EventLog ref="log" :repo="repo" kind="issue" :number="number" />
       </div>
     </div>
+    <EventLog ref="log" band :repo="repo" kind="issue" :number="number" :title="name" />
   </div>
 </template>

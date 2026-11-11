@@ -10,6 +10,7 @@ import { get, log, qs } from '../api.js'
 import { splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
+import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import Scope from '../components/Scope.vue'
@@ -37,6 +38,7 @@ const columns = [
   { key: 'assets', label: 'assets' }, { key: 'run', label: 'release run' }, { key: 'issues', label: 'problems' },
 ]
 const current = computed(() => rows.value.find((r) => r.repo === sel.value))
+const relTag = computed(() => { const m = String(current.value?.url || '').match(/\/releases\/tag\/([^/?#]+)$/); return m ? decodeURIComponent(m[1]) : '' })
 const toggle = () => { problems.value = !problems.value; load() }
 const toggleUnreleased = () => { unreleased.value = !unreleased.value; load() }
 const page = (r) => { const repo = r?.repo || sel.value; if (repo) router.push({ path: '/release', query: { repo } }) }
@@ -88,5 +90,6 @@ useKeys({ r: () => load(true), p: toggle, u: toggleUnreleased, n: () => newRelea
         <TextPane v-if="!form" :text="current?.text" placeholder="pick a repo; Enter shows all its releases" />
       </div>
     </div>
+    <EventLog band :repo="relTag ? current.repo : ''" kind="release" :tag="relTag" :title="relTag ? `${current.repo} ${relTag}` : ''" />
   </div>
 </template>

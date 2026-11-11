@@ -69,7 +69,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   too (Enter, or **p** on the list): a PR's page merges, auto-merges, marks ready and shows the diff; an
   issue's page comments, closes and reopens; a run's page lists every job and step with its time and runs
   the failed jobs again (**R**). `Esc` goes back.
-- **Every page has an event log at the bottom:** what happened to the repo, PR, issue, release or run on
+- **An event log runs full width along the bottom** of the lists (repos, pull requests, issues, runs,
+  releases: about the selected row) and of every detail page. It folds away with ▾ and stays folded. It shows
+  what happened to the repo, PR, issue, release or run on
   GitHub or GitLab (commits, reviews, comments, labels, ready, auto-merge, merges, checks, runs, tags,
   releases, assets), with your own changes from the audit log marked *yours*, newest first. A row with more
   text opens on a click. It asks again every 30s, and every few seconds after a change, so a merge, a ready

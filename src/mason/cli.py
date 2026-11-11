@@ -101,6 +101,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
                             help="only repos whose version file is newer than the latest release")
         if cmd == "doctor":
             sp.add_argument("--fix", action="store_true", help="apply settings and rulesets where they drifted")
+            sp.add_argument("--no-auto", action="store_true",
+                            help="only check, also repos whose .mason.toml or group sets auto_fix")
             sp.add_argument("--summary", action="store_true", help="one line per repo: ok, or how many issues")
         if cmd == "issues":
             sp.add_argument("--state", choices=("open", "closed", "all"), default="open")
@@ -432,8 +434,8 @@ def run(cfg, args, names: list[str], pick: dict) -> None:
         return repos.security(names)
     if args.cmd == "doctor":
         if args.summary and not args.fix:
-            return defaults.doctor_summary(cfg, names)
-        return defaults.doctor_all(cfg, names, args.fix)
+            return defaults.doctor_summary(cfg, names)  # only checks, also where auto_fix is set
+        return defaults.doctor_all(cfg, names, args.fix, not args.no_auto)
     if args.cmd == "workflows":
         return workflows.workflows(cfg, names, args.fix)
     if args.cmd == "issues":

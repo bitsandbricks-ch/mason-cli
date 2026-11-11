@@ -45,10 +45,10 @@ Repos are named as `owner/name`, as a bare `name` when only one repo has it, or 
 | `mason release [names] [--yes] [--list]` | Pushes the tag `v<version>` on the default branch of each named repo whose version is newer than its latest release (and whose first changelog has the section), after asking. The repo's own workflow builds and publishes. When the tag is there already it shows its release run. No names (or `--list`): a table of version against latest release. |
 | `mason approve [--yes]` | Runs waiting for you: environments you review, and outside contributors' runs. A run that waits for someone else says why you can't approve it, for example "Prevent self-review" when you started it and are its only reviewer. |
 | `mason security` | Open Dependabot, secret scanning and code scanning alerts. |
-| `mason doctor [names] [--fix]` | Settings, security, release immutability, rulesets, environments, variables, secrets (by name), Pages and its domain, CodeQL, autolinks and files against the defaults and the repo's own `.mason.toml`. `--fix` applies them. `--summary`: one line per repo (ok, or how many issues). |
+| `mason doctor [names] [--fix] [--no-auto]` | Settings, security, release immutability, rulesets, environments, variables, secrets (by name), Pages and its domain, CodeQL, autolinks and files against the defaults and the repo's own `.mason.toml`. `--fix` applies them; repos with `auto_fix` get them applied without it (`--no-auto`: only check). `--summary`: one line per repo (ok, or how many issues), only checking. |
 | `mason secrets [names]` | The Actions secrets the defaults name for each repo (and its environments): set or missing. Names only: GitHub never gives values out. |
 | `mason secrets set NAME [names] [--env ENV]` | Reads the value from stdin (or asks without echo), encrypts it with each repo's public key and stores it. One value can go to many repos. |
-| `mason sync [names] [--only PATH]` | Opens a PR per repo whose shared files differ. |
+| `mason sync [names] [--only PATH]` | Opens a PR per repo whose shared files differ (with `auto_push`: pushes them to the default branch). |
 | `mason issues [names] [--mine] [--label L] [--assignee X] [--stale DAYS] [--state open\|closed\|all] [--limit 20]` | Issues across repos, newest activity first; PRs are left out. `--assignee none` shows unassigned ones, `*` any assigned; `--label` repeats. |
 | `mason issue new name "title" [--body TEXT] [--label L] [--assignee X]` | Opens an issue (`--body -` reads it from stdin). `mason issue view\|close\|reopen name#12` shows, closes (`--not-planned`) or reopens one, `mason issue comment name#12 "text"` comments. An issue URL works too. |
 | `mason workflows [names] [--fix]` | Risky GitHub Actions workflows: actions not pinned to a commit, `write-all` or missing `permissions`, `pull_request_target` that checks out the PR, script injection from `${{ github.event... }}`. `--fix` opens a PR per repo that pins the actions to commit SHAs. |
@@ -249,6 +249,20 @@ Every write needs admin rights on that repo (secrets: write access), and mason u
 `skip` turns checks off for a group: `settings`, `security`, `vulnerability_reporting`, `immutable_releases`, `rulesets`, `own_rulesets` (the repo's `.github/rulesets`), `files`, `required_files`, `topics`, `labels`, `actions`, `branch`, `visibility`, `description`, `workflows`, `environments`, `variables`, `secrets`, `pages`, `homepage`, `code_scanning`, `autolinks`, `plugins` (the plugins' doctor checks) and `version` (the version file).
 
 `workflows` makes doctor check the group's workflow files like `mason workflows` does. It takes `true` or a table: `pinned`, `permissions`, `pull_request_target` and `injection` turn single checks off with `false`, and `allow_unpinned = ["actions/*", "your-org/*"]` lets actions of owners you trust stay on a tag. `mason workflows --fix` keeps the tag as a comment (`uses: actions/checkout@<sha> # v4`), so Dependabot and Renovate keep updating the pins.
+
+Three switches say what mason may do on its own, on a group or in a repo's `.mason.toml` (the repo wins,
+so `auto_push = false` there turns a group's `auto_push` off):
+
+```toml
+auto_fix = true     # plain `mason doctor` fixes what --fix would (on the command line and in the web console)
+auto_push = true    # sync, pinned actions and version bumps go straight onto the default branch, no PR
+auto_merge = true   # the PRs mason opens on the repo (sync, pins, bumps) get auto-merge
+```
+
+`auto_fix` needs the same admin rights as `--fix`; `mason doctor --no-auto` only checks. The web app's
+Checks page stays a plain check, and in the web console a read-only API key never fixes. With
+`auto_push`, a push the default branch refuses (a ruleset that wants PRs, no `workflow` scope for a
+workflow file) becomes a PR after all. Turn it on only where nobody needs to review those changes.
 
 Unknown keys on a group stay there for plugins (`group.extra`).
 

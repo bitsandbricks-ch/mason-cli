@@ -1,7 +1,8 @@
 <script setup>
 // One repo's releases as a page (Enter on Releases or on a repo's page): every recent release on the
-// left, the picked one in full on the right with its event log (its runs too, live); n creates a release, Esc goes
-// back. After a release, a tag or a bump, and while a release run is going, the page reads the repo again by itself.
+// left, the picked one in full on the right with its event log (its runs too, live); n creates a release,
+// Esc goes back. After a release, a tag or a bump, and while a release run is going, the page reads the repo
+// again by itself until the run is done.
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { qs } from '../api.js'
@@ -108,8 +109,8 @@ useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: ba
                      @done="done" @cancel="form = ''" />
         <template v-if="output"><h2>output</h2><TextPane :text="output" /></template>
         <TextPane v-if="!form" :text="text" :skip="text.split('\n')[0] === repo ? 1 : 0" :placeholder="loading ? 'loading…' : 'pick a release'" />
-        <EventLog v-if="!form && sel" ref="log" :repo="repo" kind="release" :tag="sel" />
       </div>
     </div>
+    <EventLog ref="log" band :repo="sel ? repo : ''" kind="release" :tag="sel || ''" :title="sel ? `${repo} ${sel}` : ''" />
   </div>
 </template>

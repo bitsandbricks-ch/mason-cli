@@ -92,8 +92,8 @@ useKeys(keys)
       </div>
       <div class="pad">
         <TextPane :text="detail" :skip="url ? 2 : 0" placeholder="loading…" />
-        <EventLog ref="log" :repo="repo" kind="run" :number="id" />
       </div>
     </div>
+    <EventLog ref="log" band :repo="repo" kind="run" :number="id" :title="`${repo} ${gitlab ? 'pipeline' : 'run'} ${id}`" />
   </div>
 </template>
