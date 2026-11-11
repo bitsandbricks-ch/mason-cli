@@ -179,7 +179,8 @@ def info(repo):
     owner, name = repo.split("/")
     settings = REPOS[repo][0]
     return {"full_name": repo, "name": name, "owner": {"login": owner}, "archived": name == "old",
-            "default_branch": "main", "is_template": name == "plugin-tpl", "topics": TOPICS.get(name, []), "private": owner == "mike",
+            "default_branch": "main", "is_template": name == "plugin-tpl", "pushed_at": "2024-01-01T00:00:00Z" if name == "web" else "2026-11-01T00:00:00Z",
+            "topics": TOPICS.get(name, []), "private": owner == "mike",
             "security_and_analysis": {"secret_scanning": {"status": "enabled" if repo != "acme/web" else "disabled"}},
             **settings}
 
@@ -273,6 +274,38 @@ if argv[0] == "api":
         out(info(repo))
     if rest == "/immutable-releases":
         out({"enabled": True}) if immutable else fail("gh: Not Found (HTTP 404)")
+    if os.environ.get("FAKE_GH_AUTO") and repo == "acme/web":  # what `mason auto` finds on acme/web
+        if rest == "/pulls" and params.get("state") == "open":
+            out([{"number": 21, "title": "Bump requests from 2.31.0 to 2.31.1", "user": {"login": "dependabot[bot]"},
+                  "draft": False, "auto_merge": None, "head": {"ref": "dependabot/pip/requests-2.31.1"}},
+                 {"number": 22, "title": "Bump django from 4.2.0 to 5.0.0", "user": {"login": "dependabot[bot]"},
+                  "draft": False, "auto_merge": None, "head": {"ref": "dependabot/pip/django-5.0.0"}},
+                 {"number": 23, "title": "Add search", "user": {"login": "ann"}, "draft": False, "auto_merge": None,
+                  "head": {"ref": "search"}}])
+        if rest == "/pulls" and params.get("state") == "closed":
+            out([{"number": 15, "merged_at": "2025-06-01T09:00:00Z", "head": {"ref": "old-feature",
+                  "repo": {"full_name": "acme/web"}}},
+                 {"number": 16, "merged_at": None, "head": {"ref": "abandoned", "repo": {"full_name": "acme/web"}}},
+                 {"number": 17, "merged_at": "2025-06-01T09:00:00Z", "head": {"ref": "fork-branch",
+                  "repo": {"full_name": "eve/web"}}}])
+        m2 = re.match(r"/pulls/(\d+)$", rest)
+        if m2:
+            out({"number": int(m2.group(1)), "mergeable_state": "behind" if m2.group(1) == "23" else "clean",
+                 "base": {"ref": "main"}})
+        if rest == "/actions/runs" and params.get("branch"):
+            out({"workflow_runs": [
+                {"id": 31, "workflow_id": 1, "name": "CI", "status": "completed", "conclusion": "failure", "run_attempt": 1},
+                {"id": 30, "workflow_id": 1, "name": "CI", "status": "completed", "conclusion": "success", "run_attempt": 1},
+                {"id": 29, "workflow_id": 2, "name": "Images", "status": "completed", "conclusion": "failure",
+                 "run_attempt": 2}]})
+        if rest == "/codeowners/errors":
+            out({"errors": [{"line": 2, "message": "Unknown owner on line 2: make sure @ghost exists\n\n/docs/ @ghost"}]})
+        if rest == "/properties/values":
+            out([{"property_name": "tier", "value": "2"}])
+        if rest == "/hooks":
+            out([{"config": {"url": "https://ci.acme.example/hook"}}])
+        if rest == "/keys":
+            out([])
     if rest == "/issues":
         if repo != "acme/web":
             out([])

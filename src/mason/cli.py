@@ -27,6 +27,7 @@ repo of your orgs. --org and --group narrow that down.
   mason issues [names] [--mine]       open issues; mason issue new|view|close|comment name[#12] ...
   mason workflows [names] [--fix]     unpinned actions, write-all tokens, script injection; --fix: PRs that pin
   mason sync [names]                  PRs that bring shared files in line
+  mason auto [names]                  what the auto_* keys allow: fix, release, update, close stale, rerun
   mason new owner/name [--group G]    a new repo, set up the way its group wants
   mason tui                           all of it, full screen
   mason login https://mason          go through Mason (the web app) with an API key: no gh needed
@@ -40,10 +41,10 @@ from __future__ import annotations
 import argparse
 import sys
 
-from mason import __version__, config, core, defaults, issues, packages, plugins, repos, versions, workflows
+from mason import __version__, auto, config, core, defaults, issues, packages, plugins, repos, versions, workflows
 
 ON_REPOS = ("status", "prs", "merge", "runs", "rerun", "releases", "packages", "approve", "security", "doctor", "sync",
-            "repos", "stats", "workflows", "issues")
+            "repos", "stats", "workflows", "issues", "auto")
 
 
 def common_parser() -> argparse.ArgumentParser:
@@ -78,6 +79,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
         "stats": "PRs merged, time to merge, CI success, releases over the last days",
         "workflows": "risky workflows: unpinned actions, write-all tokens, script injection",
         "issues": "open issues across repos, by label, assignee or age",
+        "auto": "what the repos' auto_* keys let mason do on its own: fix, release, tidy up (cron-friendly)",
     }
     for cmd in ON_REPOS:
         sp = sub.add_parser(cmd, parents=[common], help=helps[cmd])
@@ -379,6 +381,9 @@ def release_new_or_view(cfg, args) -> None:
     if not tag:
         sys.exit("Name the tag: mason release new name v1.4.0")
     notes = sys.stdin.read() if args.notes == "-" else args.notes
+    if not args.draft and not repo.startswith("gitlab:") and config.more_of(cfg, repo).get("release_drafts"):
+        args.draft = True
+        print("a draft: the repo's release_drafts says so (publish it on GitHub)")
     if not args.yes and not core.dry_run():
         what = "draft" if args.draft else "pre-release" if args.prerelease else "release"
         try:
@@ -446,6 +451,8 @@ def run(cfg, args, names: list[str], pick: dict) -> None:
         if unknown:
             sys.exit(f"not among the synced files: {', '.join(unknown)}")
         return core.for_each(names, defaults.sync, ctx)
+    if args.cmd == "auto":
+        return auto.run(cfg, names)
     if args.cmd == "merge":
         ctx = {"pick": pick, "now": args.now, "ready": args.ready, "method": args.method}
         return core.for_each(names, repos.merge, ctx)

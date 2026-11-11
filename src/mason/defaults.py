@@ -13,13 +13,13 @@ import json
 import time
 import urllib.parse
 
-from mason import config, core, extras, plugins, versions, workflows
+from mason import config, core, extras, plugins, rules, versions, workflows
 from mason.config import Config, Group
 from mason.core import WEB, api, compact, file_on, for_each, get_file, git_blob_sha, say, short
 
-REPO_SETTINGS = ("allow_auto_merge", "allow_merge_commit", "allow_rebase_merge", "allow_squash_merge",
+REPO_SETTINGS = ("allow_auto_merge", "allow_forking", "allow_merge_commit", "allow_rebase_merge", "allow_squash_merge",
                  "allow_update_branch", "delete_branch_on_merge", "has_discussions", "has_issues",
-                 "has_projects", "has_wiki", "merge_commit_message", "merge_commit_title",
+                 "has_projects", "has_wiki", "is_template", "merge_commit_message", "merge_commit_title",
                  "squash_merge_commit_message", "squash_merge_commit_title", "web_commit_signoff_required")
 PATCHABLE_SECURITY = ("advanced_security", "secret_scanning", "secret_scanning_push_protection",
                       "secret_scanning_non_provider_patterns", "secret_scanning_validity_checks")
@@ -108,6 +108,7 @@ def baseline(cfg: Config, group: Group) -> dict:
                                          "immutable_releases", "rulesets")})
         want["label"] = short(group.reference)
         want["ref_settings"] = dict(ref["settings"])
+        want["settings"].pop("is_template", None)  # a template reference doesn't make its repos templates
         want["ref_files"] = ruleset_files(group.reference)
         want["ref_branch"] = ref["default_branch"]
         if isinstance(group.files, list):
@@ -134,8 +135,8 @@ def baseline(cfg: Config, group: Group) -> dict:
                 description=group.description, skip=set(group.skip), environments=dict(group.environments),
                 variables=dict(group.variables), secrets=list(group.secrets), pages=group.pages,
                 homepage=group.homepage, code_scanning=group.code_scanning, autolinks=dict(group.autolinks),
-                auto_fix=group.auto_fix)
-    return skip(want)
+                auto_fix=group.auto_fix, more=dict(group.more))
+    return skip(rules.prepare(want))
 
 
 def overlay(want: dict, own: Group) -> dict:
@@ -149,8 +150,9 @@ def overlay(want: dict, own: Group) -> dict:
     if own.workflows is not None:
         out["workflows"] = workflows.settings(own.workflows)
     out["skip"] = set(out.get("skip") or ()) | set(own.skip)
+    out["more"] = config.merged_more(out.get("more") or {}, own.more)
     out["label"] = f"{want['label']} + .mason.toml" if want.get("group") != config.REPO_LAYER else ".mason.toml"
-    return skip(out)
+    return skip(rules.prepare(out))
 
 
 def skip(want: dict) -> dict:
@@ -191,6 +193,8 @@ def covers(have, want) -> bool:
     """True when `have` has every key and value of `want` (ruleset files leave out GitHub's defaults)."""
     if isinstance(want, dict) and isinstance(have, dict):
         return all(k in have and covers(have[k], v) for k, v in want.items())
+    if isinstance(want, list) and isinstance(have, list) and len(want) == len(have):
+        return all(covers(h, w) for h, w in zip(have, want))
     return have == want
 
 
@@ -420,7 +424,8 @@ def doctor_ctx(cfg: Config, repos: list[str], fix: bool = False, auto: bool = Fa
     wants, ref_wants = {}, {}
     for key, g in used.items():
         wants[key] = baseline(cfg, g)
-        wants[key]["live_names"] = set(wants[key]["rulesets"]) - set(cfg.rulesets_of(g))
+        wants[key]["live_names"] = (set(wants[key]["rulesets"]) - set(cfg.rulesets_of(g))
+                                    - set(wants[key].get("generated_rulesets") or ()))
     for g in refs.values():
         ref_wants[g.name] = baseline(cfg, g)
     return {"cfg": cfg, "groups": groups, "wants": wants, "ref_wants": ref_wants, "refs": list(refs.values()),
@@ -540,8 +545,10 @@ def doctor(repo: str, ctx: dict) -> None:
         say(f"   fixed {len(fixable)}" + (" (auto_fix)" if auto else ""))
 
     mine = " + .mason.toml" if own_file else ""
-    where = f" (group {group.name}{mine})" if group else \
-        " (its .mason.toml)" if own_file else " (no group: only its own .github/rulesets)"
+    who = rules.about((want or {}).get("more") or {})
+    who = f"; {who}" if who else ""
+    where = f" (group {group.name}{mine}{who})" if group else \
+        f" (its .mason.toml{who})" if own_file else " (no group: only its own .github/rulesets)"
     if not problems:
         say(f"   ok{where}")
         return
@@ -638,16 +645,19 @@ def sync_ctx(cfg: Config, repos: list[str], only: list[str] | None = None) -> di
             want["files"] = {p: s for p, s in want["files"].items() if p in only}
             want["unknown"] = unknown
         file_texts(want)
+    ctx["only"] = only
     return ctx
 
 
 def sync(repo: str, ctx: dict) -> None:
     group = ctx["groups"].get(repo)
-    want = ctx["wants"].get(group_key(group)) if group else None
+    want, _ = want_of(repo, ctx)  # the group's files and the ones its keys generate (dependabot, CODEOWNERS ...)
+    if want and ctx.get("only"):
+        want = {**want, "files": {p: s for p, s in want["files"].items() if p in ctx["only"]}}
     if not want or not want["files"]:
         say("   no files to sync" + ("" if group else " (no group)"))
         return
-    if group.reference == repo:
+    if group and group.reference == repo:
         say("   the reference itself")
         return
     info = api("GET", f"/repos/{repo}") or {}

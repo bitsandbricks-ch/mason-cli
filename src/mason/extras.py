@@ -66,7 +66,9 @@ def findings(repo: str, state: dict, want: dict) -> list[Finding]:
             raise
         except RuntimeError as err:
             out.append(Finding(f"{check.__name__.strip('_').replace('_', ' ')}: couldn't read it ({short_err(err)})"))
-    return out
+    from mason import rules
+
+    return out + rules.findings(repo, state, want)
 
 
 def short_err(err: Exception) -> str:
@@ -75,10 +77,12 @@ def short_err(err: Exception) -> str:
 
 def fix(repo: str, state: dict, want: dict, found: list[Finding]) -> list[str]:
     """Run the fixer of every area with a fixable finding; returns what it said it set."""
+    from mason import rules
+
     done = []
     for area in dict.fromkeys(f.area for f in found if f.area):
         try:
-            FIXERS[area](repo, state, want)
+            {**FIXERS, **rules.FIXERS}[area](repo, state, want)
             done.append(area)
         except core.RateLimited:
             raise

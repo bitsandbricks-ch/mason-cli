@@ -34,7 +34,7 @@ READ = [re.compile(p) for p in (
 WRITE = {
     "PATCH": [R + "$", R + r"/pulls/\d+$", R + r"/rulesets/\d+$", R + r"/labels/[^/]+$", R + r"/issues/\d+$",
               R + r"/actions/variables/[^/]+$", R + r"/environments/[^/]+/variables/[^/]+$",
-              R + r"/code-scanning/default-setup$"],
+              R + r"/code-scanning/default-setup$", R + r"/properties/values$"],
     "PUT": [R + r"/contents/.+$", R + r"/pulls/\d+/merge$", R + r"/pulls/\d+/update-branch$",
             R + r"/rulesets/\d+$", R + r"/automated-security-fixes$",
             R + r"/private-vulnerability-reporting$", R + r"/immutable-releases$", R + r"/environments/[^/]+$",
@@ -72,10 +72,11 @@ def transport():
 
 
 TEAM = re.compile(r"/orgs/[\w.-]+/teams/[\w.-]+$")  # an environment's reviewer team: its id
+LISTED = re.compile(R + r"/(hooks|keys)$")  # doctor's webhooks and deploy_keys: the lists, read only
 
 
 def allowed(method: str, path: str) -> bool:
-    if method in ("GET", "HEAD") and TEAM.match(path):
+    if method in ("GET", "HEAD") and (TEAM.match(path) or LISTED.match(path)):
         return True
     if NEVER.search(path):
         return False

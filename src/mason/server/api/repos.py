@@ -181,6 +181,14 @@ def repo_detail():
                  f"released     {last or '-'}" + (f"  {gh.web}/{repo}/releases/tag/{last}" if last else "")]
         target = ((node.get("defaultBranchRef") or {}).get("target") or {})
         lines.append(f"CI           {((target.get('statusCheckRollup') or {}).get('state') or '-').lower()}")
+        more = config.more_of(cfg, repo)
+        for key in ("owner", "team", "notes"):
+            if more.get(key):
+                lines.append(f"{key:<12} {str(more[key])[:300]}")
+        autos = [k for k in config.AUTO if config.auto(cfg, repo, k)] + \
+            [k for k in config.MORE if k.startswith("auto_") and more.get(k)]
+        if autos:
+            lines.append(f"on its own   {', '.join(autos)}")
         for line in plugins.hook("repo_detail", repo, node):
             lines.append(line)
         prs = (node.get("pullRequests") or {}).get("nodes") or []
@@ -562,6 +570,8 @@ def release_create():
                 abort(409, "connect GitLab first")
             text = capture_rate(GL.create_release, gl, *args)
         else:
+            if not args[4] and config.more_of(load_config(), repo).get("release_drafts"):
+                args = (*args[:4], True, *args[5:])  # the repo's release_drafts
             text = capture_rate(REL.create, *args)
     audit("release.create", f"{repo} {tag}", dry, detail=text)
     return jsonify({"text": text, "ok": not text.lstrip().startswith("error")})
