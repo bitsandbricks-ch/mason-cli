@@ -8,6 +8,7 @@ import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import { ago, ask, openDetail } from '../ui.js'
+import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
@@ -126,5 +127,6 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
         <TextPane v-else :text="detail" placeholder="pick an issue; n opens a new one" />
       </div>
     </div>
+    <EventLog band :repo="current?.repo || ''" kind="issue" :number="current?.number || ''" :title="current ? `${current.repo}#${current.number} ${current.title}` : ''" />
   </div>
 </template>

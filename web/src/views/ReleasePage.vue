@@ -78,8 +78,8 @@ useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: ba
                      @done="done" @cancel="form = ''" />
         <template v-if="output"><h2>output</h2><TextPane :text="output" /></template>
         <TextPane v-if="!form" :text="text" :placeholder="loading ? 'loading…' : 'pick a release'" />
-        <EventLog v-if="!form && sel" ref="log" :repo="repo" kind="release" :tag="sel" />
       </div>
     </div>
+    <EventLog ref="log" band :repo="sel ? repo : ''" kind="release" :tag="sel || ''" :title="sel ? `${repo} ${sel}` : ''" />
   </div>
 </template>

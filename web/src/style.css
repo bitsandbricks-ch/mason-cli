@@ -310,3 +310,18 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
 .session-log pre.text { margin: 4px 0 2px; padding: 6px 8px; background: var(--bg2); border-left: 2px solid var(--line);
   max-height: 30vh; overflow: auto; }
 .session-log .where { margin-left: 8px; }
+/* the event log as a full-width bar at the bottom of a view; it folds to its header */
+.events.band { flex: 0 0 auto; height: 34vh; min-height: 120px; overflow: auto; margin: 0; padding: 0 12px 6px;
+  border-top: 1px solid var(--line); background: var(--bg); }
+.events.band.folded { height: auto; min-height: 0; overflow: visible; }
+.events.band .events-head { position: sticky; top: 0; z-index: 1; background: var(--bg); padding: 6px 0; margin: 0;
+  border-bottom: 1px dotted var(--bg3); }
+.events.band.folded .events-head { border-bottom: 0; }
+.events .fold { border: 0; padding: 0 4px; color: var(--accent); }
+.events .about { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50ch; }
+@media (max-width: 900px) { .events.band { height: 40vh; } }
+@media (max-width: 700px) {
+  .view:has(> .split.ld) > .events.band { display: none; } /* a list: the events show with the picked row */
+  main.detail .view:has(> .split.ld) > .events.band { display: block; order: 1; height: 38vh; }
+  .events.band .about { max-width: 100%; flex-basis: 100%; order: 9; }
+}

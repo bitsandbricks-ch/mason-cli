@@ -124,8 +124,8 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
         <ReleaseForm v-if="form" :key="form" :mode="form" :repo="repo" :suggest="suggest" :publishes="publishes"
                      @done="done" @cancel="form = ''" />
         <TextPane :text="detail" placeholder="loading…" />
-        <EventLog ref="log" :repo="repo" kind="repo" />
       </div>
     </div>
+    <EventLog ref="log" band :repo="repo" kind="repo" :title="repo" />
   </div>
 </template>

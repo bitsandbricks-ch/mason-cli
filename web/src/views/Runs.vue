@@ -6,6 +6,7 @@ import { useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import { ago } from '../ui.js'
+import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 
@@ -42,5 +43,6 @@ useKeys({ r: () => load(true), f: toggle, o: () => open(current.value), p: () =>
       <button :disabled="!current?.id" @click="page()"><span class="k">p</span> page</button>
     </div>
     <div class="scroll"><DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no runs'" @activate="page" /></div>
+    <EventLog band :repo="current?.id ? current.repo : ''" kind="run" :number="current?.id || ''" :title="current?.id ? `${current.repo} ${current.name}` : ''" />
   </div>
 </template>

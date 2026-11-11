@@ -3,6 +3,7 @@
 // GitHub or GitLab, and your own changes from Mason's audit log, newest first. It asks again every 30s
 // while the page is open, and every few seconds for a while after a change (burst), so a merge, a ready or
 // a release shows up without a reload. A row with more text opens on a click.
+// band: the full-width bar at the bottom of a view (lists and pages); it folds away, and stays folded.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { get, qs } from '../api.js'
 import { ago } from '../ui.js'
@@ -12,6 +13,8 @@ const props = defineProps({
   kind: { type: String, required: true }, // repo, pr, issue, release, run
   number: { type: [Number, String], default: '' }, // pr, issue; the id of a run
   tag: { type: String, default: '' }, // release
+  band: { type: Boolean, default: false },
+  title: { type: String, default: '' }, // what it is about, in the band's header
 })
 const events = ref([])
 const error = ref('')
@@ -41,13 +44,24 @@ async function load() {
     at.value = new Date()
   } catch (e) { if (asked === path.value) error.value = e.message } finally { loading.value = false }
 }
-watch(path, () => { events.value = []; seen.value = new Set(); fresh.value = new Set(); open.value = new Set(); load() }, { immediate: true })
+// moving through a list asks once the selection rests (250ms), not for every row passed
+let pending = null
+watch(path, () => {
+  events.value = []; seen.value = new Set(); fresh.value = new Set(); open.value = new Set()
+  clearTimeout(pending)
+  if (folded.value) return
+  pending = setTimeout(load, props.band ? 250 : 0)
+})
+function stored() { try { return localStorage.getItem('mason-events') === 'folded' } catch { return false } }
+const folded = ref(props.band && stored())
+watch(folded, (f) => { try { localStorage.setItem('mason-events', f ? 'folded' : 'open') } catch { /* private mode */ } if (!f) load() })
+if (!folded.value) load()
 
 // every 30s while the tab is visible; burst() asks again after 2, 5, 10, 20 and 40s
 let timer = null
 let bursts = []
-onMounted(() => { timer = setInterval(() => { if (!document.hidden) load() }, 30_000) })
-onBeforeUnmount(() => { clearInterval(timer); bursts.forEach(clearTimeout) })
+onMounted(() => { timer = setInterval(() => { if (!document.hidden && !folded.value) load() }, 30_000) })
+onBeforeUnmount(() => { clearInterval(timer); clearTimeout(pending); bursts.forEach(clearTimeout) })
 function burst() {
   bursts.forEach(clearTimeout)
   bursts = [2, 5, 10, 20, 40].map((s) => setTimeout(load, s * 1000))
@@ -70,9 +84,12 @@ const when = (s) => { try { return new Date(s).toLocaleString() } catch { return
 </script>
 
 <template>
-  <section class="events" aria-label="event log">
+  <section class="events" :class="{ band, folded }" aria-label="event log">
     <div class="events-head">
+      <button v-if="band" class="fold" :aria-expanded="!folded" :title="folded ? 'show the events' : 'fold the events away'"
+              @click="folded = !folded">{{ folded ? '▸' : '▾' }}</button>
       <h2>events <span class="dim">({{ shown.length }})</span></h2>
+      <span v-if="title" class="accent about">{{ title }}</span>
       <span class="row">
         <button v-for="s in sources" :key="s" class="chip" :class="{ on: source === s }" @click="source = s">{{ label(s) }}</button>
       </span>
@@ -82,7 +99,9 @@ const when = (s) => { try { return new Date(s).toLocaleString() } catch { return
       </span>
       <button :disabled="loading" @click="load">reload</button>
     </div>
-    <div v-if="error" class="bad">error: {{ error }}</div>
+    <template v-if="!folded">
+    <div v-if="!ready" class="empty">pick a row to see what happened to it</div>
+    <div v-else-if="error" class="bad">error: {{ error }}</div>
     <div v-else-if="!shown.length" class="empty">{{ loading ? 'loading…' : 'nothing yet' }}</div>
     <ol v-else class="event-list">
       <li v-for="e in shown" :key="keyOf(e)" :class="{ new: fresh.has(keyOf(e)), more: !!e.more }" @click="toggle(e)">
@@ -98,5 +117,6 @@ const when = (s) => { try { return new Date(s).toLocaleString() } catch { return
         <a v-if="e.url" class="go" :href="e.url" target="_blank" rel="noopener noreferrer" :title="e.url" @click.stop>↗</a>
       </li>
     </ol>
+    </template>
   </section>
 </template>
