@@ -405,6 +405,49 @@ def test_a_repos_own_mason_toml_wins(env, tmp_path):
     assert "defaults + .mason.toml has 22" in out
 
 
+def test_auto_fix_from_a_repos_own_mason_toml(env, tmp_path):
+    folder = tmp_path / "defaults"
+    folder.mkdir()
+    (folder / "mason.toml").write_text(EXTRAS_TOML)
+    e = {**env, "MASON_DEFAULTS": str(folder), "FAKE_GH_OWN": "auto_fix = true"}
+    out = mason(e, "doctor", "--dry-run", "dotfiles")
+    assert "fixed " in out and "(auto_fix)" in out
+    assert "fix: mason doctor --fix" not in out
+    out = mason(e, "doctor", "--dry-run", "--no-auto", "dotfiles")
+    assert "(auto_fix)" not in out and "fix: mason doctor --fix mike/dotfiles" in out
+    out = mason({**e, "FAKE_GH_OWN": "auto_fix = false"}, "doctor", "--dry-run", "dotfiles")
+    assert "(auto_fix)" not in out
+    assert "auto_fix must be true or false" in mason({**e, "FAKE_GH_OWN": 'auto_fix = "yes"'}, "doctor", "dotfiles")
+
+
+def test_auto_push_and_auto_merge(env, tmp_path):
+    folder = tmp_path / "defaults"
+    (folder / "files").mkdir(parents=True)
+    (folder / "files" / "SECURITY.md").write_text("Mail security@acme.example.\n")
+    toml = 'orgs = ["acme"]\n[[group]]\nname = "default"\nfiles = "files"\n'
+    log = tmp_path / "calls.log"
+    e = {**env, "MASON_DEFAULTS": str(folder), "FAKE_GH_LOG": str(log)}
+
+    (folder / "mason.toml").write_text(toml + "auto_push = true\n")
+    out = mason(e, "sync", "web")
+    assert "pushed SECURITY.md to main (auto_push)" in out
+    calls = log.read_text()
+    assert "PUT /repos/acme/web/contents/SECURITY.md" in calls and "pr create" not in calls
+    assert "[dry-run] push 1 file(s) to main" in mason(e, "sync", "--dry-run", "web")
+
+    log.write_text("")
+    out = mason({**e, "FAKE_GH_PROTECTED": "1"}, "sync", "web")  # a protected branch: a PR after all
+    assert "can't push to main" in out and "PR: https://github.com/acme/web/pull/99" in out
+    assert "pr create --repo acme/web --base main" in log.read_text()
+
+    log.write_text("")
+    (folder / "mason.toml").write_text(toml + "auto_merge = true\n")
+    out = mason(e, "sync", "web")
+    assert "PR: https://github.com/acme/web/pull/99" in out and "auto-merge on" in out
+    calls = log.read_text()
+    assert "pr create --repo acme/web" in calls and "pr merge 99 --repo acme/web" in calls
+
+
 def test_workflows(env, tmp_path):
     out = mason(env, "workflows", "web")
     web = out.split("== acme/web")[1]
