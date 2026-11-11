@@ -15,6 +15,7 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from mason import config, core, plugins
 from mason import defaults as D
+from mason import events as E
 from mason import extras as X
 from mason import issues as I
 from mason import packages as P
@@ -284,6 +285,121 @@ def ready():
         R._nodes.clear()
     audit("ready", f"{repo}#{number}", dry, detail=text)
     return jsonify({"text": text})
+
+
+# ── detail pages: a run's page, and every page's event log ────────────────────
+
+
+@bp.get("/run")
+@need("read")
+def run_detail():
+    """One workflow run (GitHub) or pipeline (GitLab) as text: its jobs, their steps and times."""
+    repo = valid_repo(request.args.get("repo", ""))
+    ident = request.args.get("id", type=int)
+    if not ident:
+        abort(400, "id: the run or pipeline id")
+    with as_user() as (_gh, gl):
+        if is_gl(repo):
+            if gl is None:
+                abort(409, "connect GitLab first")
+            return jsonify({"text": capture_rate(lambda: core.say(GL.pipeline_detail(gl, repo, ident)))})
+        return jsonify({"text": capture_rate(lambda: core.say(E.run_detail(repo, ident)))})
+
+
+@bp.post("/run/rerun")
+@need("read")
+def run_rerun():
+    """Run the failed jobs of a GitHub run again, or retry a GitLab pipeline's failed jobs: {repo, id, dry_run?}."""
+    data = body()
+    dry = write_allowed(bool(data.get("dry_run")))
+    repo, ident = valid_repo(str(data.get("repo", ""))), int(data.get("id") or 0)
+    if not ident:
+        abort(400, "id: the run or pipeline id")
+    with as_user(dry) as (_gh, gl):
+        if is_gl(repo):
+            if gl is None:
+                abort(409, "connect GitLab first")
+
+            def go():
+                gl.write("POST", f"{gl.project(repo)}/pipelines/{ident}/retry")
+                if not core.dry_run():
+                    core.say(f"{repo}: pipeline {ident} retries its failed jobs")
+        else:
+            def go():
+                core.api("POST", f"/repos/{repo}/actions/runs/{ident}/rerun-failed-jobs")
+                if not core.dry_run():
+                    core.say(f"{repo}: run {ident} runs its failed jobs again")
+        text = capture_rate(go)
+    audit("rerun", f"{repo} {ident}", dry, detail=text)
+    return jsonify({"text": text})
+
+
+EVENT_KINDS = ("repo", "pr", "issue", "release", "run")
+
+
+@bp.get("/events")
+@need("read")
+def events():
+    """What happened to one thing, newest first: ?repo=&kind=repo|pr|issue|release|run plus number (pr, issue),
+    tag (release) or id (run). The provider's events, and the caller's own changes from the audit log."""
+    repo = valid_repo(request.args.get("repo", ""))
+    kind = request.args.get("kind", "repo")
+    if kind not in EVENT_KINDS:
+        abort(400, f"kind: {', '.join(EVENT_KINDS)}")
+    number = request.args.get("number", type=int) or request.args.get("id", type=int) or 0
+    tag = (request.args.get("tag") or "").strip()
+    if kind in ("pr", "issue", "run") and not number:
+        abort(400, "number (or id): which one")
+    if kind == "release" and not tag:
+        abort(400, "tag: which release")
+    with as_user() as (gh, gl):
+        try:
+            if is_gl(repo):
+                if gl is None:
+                    abort(409, "connect GitLab first")
+                got = {"repo": lambda: GL.repo_events(gl, repo), "pr": lambda: GL.mr_events(gl, repo, number),
+                       "issue": lambda: GL.issue_events(gl, repo, number),
+                       "release": lambda: GL.release_events(gl, repo, tag),
+                       "run": lambda: GL.pipeline_events(gl, repo, number)}[kind]()
+            else:
+                got = {"repo": lambda: E.repo_events(repo, gh.web if gh else core.WEB),
+                       "pr": lambda: E.pr_events(repo, number), "issue": lambda: E.issue_events(repo, number),
+                       "release": lambda: E.release_events(repo, tag),
+                       "run": lambda: E.run_events(repo, number)}[kind]()
+        except core.RateLimited as err:
+            abort(429, str(err))
+        except RuntimeError as err:
+            abort(404 if "404" in str(err) or "Not Found" in str(err) else 502, str(err))
+    mine = audit_events(repo, kind, number, tag)
+    return jsonify({"events": E.newest_first(got + mine)})
+
+
+def audit_events(repo: str, kind: str, number: int, tag: str) -> list[dict]:
+    """The caller's own audit rows about this thing (nobody sees another user's), as events."""
+    import re
+
+    from mason.server.models import Audit, db
+    if not g.get("user"):
+        return []
+    rows = (db.query(Audit).filter(Audit.user_id == g.user.id, Audit.target.contains(repo))
+            .order_by(Audit.at.desc()).limit(200).all())
+    out = []
+    for a in rows:
+        words = [w for w in re.split(r"[\s,]+", a.target) if w]
+        if kind == "repo":
+            hit = any(w == repo or w.startswith(repo + "#") or w.startswith(repo + ":") for w in words)
+        elif kind in ("pr", "issue"):
+            hit = f"{repo}#{number}" in words and (kind == "pr") == (not a.action.startswith("issue."))
+        elif kind == "release":
+            hit = repo in words and (tag in words or a.action in ("bump", "release"))
+        else:
+            hit = repo in words and str(number) in words
+        if not hit:
+            continue
+        done = "dry run: " if a.dry_run else "" if a.ok else "failed: "
+        out.append(E.event(a.at.isoformat() + "Z", f"{done}{a.action}", f"you via {a.via or 'web'}", a.detail,
+                           state="" if a.dry_run else "ok" if a.ok else "bad", source="mason"))
+    return out
 
 
 # ── runs and approvals ───────────────────────────────────────────────────────

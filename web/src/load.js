@@ -161,10 +161,12 @@ export async function change(question, path, body = {}, { detail = '' } = {}) {
   try {
     const got = await post(path, { ...body, dry_run: dry })
     if (!dry) forget() // a change: every remembered answer may be stale now
-    log(`${dry ? '[dry-run] ' : ''}${question.replace(/\?$/, '')}: done`, 'ok')
-    return { text: got.text ?? '', dry, ok: true }
+    const text = got.text ?? ''
+    const failed = /^\s*error/m.test(text)
+    log(`${dry ? '[dry-run] ' : ''}${question.replace(/\?$/, '')}: ${failed ? 'had errors' : 'done'}`, failed ? 'error' : 'ok', { detail: text })
+    return { text, dry, ok: !failed }
   } catch (e) {
-    log(e.message, 'error')
+    log(`${question.replace(/\?$/, '')}: ${e.message}`, 'error')
     return { text: `error: ${e.message}`, dry, ok: false }
   }
 }

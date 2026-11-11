@@ -28,6 +28,10 @@ watch(theme, async (t) => {
 
 const who = computed(() => (state.me?.identities || []).map((i) => `${i.provider}:${i.login}`).join(' '))
 const last = computed(() => state.log[0])
+// the session log: every line of this session (newest first), a change's whole output on a click
+const logOpen = ref(false)
+const logShown = ref(-1)
+watch(logOpen, () => { logShown.value = -1 })
 const rate = computed(() => {
   const c = state.rate?.github?.core
   return c ? `gh ${c.remaining}/${c.limit}` : ''
@@ -69,7 +73,9 @@ const title = computed(() => {
   if (route.name === 'plugin-tab') return `${route.params.plugin}`
   const t = TABS.find((x) => x.name === current.value)
   const label = t ? t.label.replace(/ /g, '-') : route.name
-  return route.query.repo && route.name !== current.value ? `${label}/${route.query.repo}` : label
+  const q = route.query
+  const which = q.number ? `#${q.number}` : q.id ? ` ${q.id}` : q.tag ? ` ${q.tag}` : ''
+  return q.repo && route.name !== current.value ? `${label}/${q.repo}${which}` : label
 })
 // ‹ in the title bar: closes a detail, or leaves a row's own page (a repo, its releases) for its list
 const canBack = computed(() => detail.value || (!!route.meta.tab && route.name !== route.meta.tab))
@@ -102,11 +108,12 @@ window.addEventListener('keydown', (e) => {
   if (prompt.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey || !signedIn.value) return
   const tab = TABS.find((t) => t.key === e.key)
   if (tab) { router.push(tab.path); e.preventDefault(); return }
+  if (e.key === '`' || (e.key === 'Escape' && logOpen.value)) { logOpen.value = e.key === '`' ? !logOpen.value : false; e.preventDefault(); e.stopImmediatePropagation(); return }
   if (e.key === 't') { theme.value = themes[(themes.indexOf(theme.value) + 1) % themes.length] }
   else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
     const i = TABS.findIndex((t) => t.name === route.name || t.name === route.meta.tab)
     if (i >= 0) { router.push(TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length].path); e.preventDefault() }
-  } else if (e.key === '?') { router.push('/console'); log('keys: 1-9 tabs · ←→ next tab · ↑↓/jk move · Enter act · / filter · r reload · t theme · : console') }
+  } else if (e.key === '?') { router.push('/console'); log('keys: 1-9 tabs · ←→ next tab · ↑↓/jk move · Enter act · / filter · r reload · t theme · : console · ` log') }
 })
 </script>
 
@@ -153,6 +160,13 @@ window.addEventListener('keydown', (e) => {
               <button @click="logout">sign out</button></span>
           </div>
         </section>
+        <section v-if="state.log.length" class="session-log-phone">
+          <h2>log <span class="dim">(this session)</span></h2>
+          <div v-for="(l, i) in state.log.slice(0, 30)" :key="i" class="item static" @click="logShown = logShown === i ? -1 : i">
+            <span :class="l.kind === 'error' ? 'bad' : l.kind === 'ok' ? 'ok' : ''">{{ l.at }} {{ l.text }}<span v-if="l.detail" class="dim"> {{ logShown === i ? '▾' : '▸' }}</span></span>
+            <pre v-if="logShown === i && l.detail" class="text">{{ l.detail }}</pre>
+          </div>
+        </section>
       </div>
     </main>
     <nav class="dock" aria-label="views">
@@ -194,10 +208,25 @@ window.addEventListener('keydown', (e) => {
     <main><router-view @rate="refreshRate" /></main>
     <footer class="foot">
       <span v-if="last" class="last" :class="last.kind === 'error' ? 'bad' : last.kind === 'ok' ? 'ok' : 'dim'"
-            :title="last.text">[{{ last.at }}] {{ last.text }}</span>
+            :title="'the session log (`)'" role="button" :aria-expanded="logOpen" @click="logOpen = !logOpen">
+        {{ logOpen ? '▾' : '▸' }} [{{ last.at }}] {{ last.text }}<span v-if="state.log.length > 1" class="dim"> (+{{ state.log.length - 1 }})</span></span>
       <span v-else class="last dim">ready</span>
-      <span class="keys"><b>1-9</b> tabs <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>?</b> help</span>
+      <span class="keys"><b>1-9</b> tabs <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b>?</b> help</span>
     </footer>
+    <section v-if="logOpen" class="session-log" aria-label="the session log">
+      <div class="row"><h2 style="margin: 0">log <span class="dim">({{ state.log.length }}, this session)</span></h2><span class="spacer" />
+        <router-link to="/audit" class="dim" @click="logOpen = false">every change you made: audit ↗</router-link>
+        <button @click="state.log.splice(0)">clear</button><button @click="logOpen = false"><span class="k">esc</span> close</button></div>
+      <ol>
+        <li v-for="(l, i) in state.log" :key="i" :class="{ 'has-detail': !!l.detail }" @click="l.detail && (logShown = logShown === i ? -1 : i)">
+          <span class="at dim">{{ l.at }}</span>
+          <span :class="l.kind === 'error' ? 'bad' : l.kind === 'ok' ? 'ok' : ''">{{ l.text }}</span>
+          <router-link v-if="l.where && l.where !== route.fullPath" class="where dim" :to="l.where" @click.stop>{{ l.where }}</router-link>
+          <span v-if="l.detail" class="dim"> {{ logShown === i ? '▾' : '▸ output' }}</span>
+          <pre v-if="logShown === i" class="text">{{ l.detail }}</pre>
+        </li>
+      </ol>
+    </section>
   </div>
   <PromptDialog />
 </template>

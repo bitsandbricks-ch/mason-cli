@@ -51,7 +51,19 @@ one-key shortcut (`1` to `9` for the first ones, `I` issues, `W` workflows, `D` 
 - **Enter opens a page.** On repos it opens the repo's own page: its whole detail on the right and what
   you can do with it on the left (check, fix, sync, merge, create a release, its releases), with the output
   below. On releases it opens the repo's releases: every recent release on the left, the picked one in full
-  (notes, assets, the runs of its tag) on the right. `Esc` goes back.
+  (notes, assets, the runs of its tag) on the right. Pull requests, issues and runs have their own pages
+  too (Enter, or **p** on the list): a PR's page merges, auto-merges, marks ready and shows the diff; an
+  issue's page comments, closes and reopens; a run's page lists every job and step with its time and runs
+  the failed jobs again (**R**). `Esc` goes back.
+- **Every page has an event log at the bottom:** what happened to the repo, PR, issue, release or run on
+  GitHub or GitLab (commits, reviews, comments, labels, ready, auto-merge, merges, checks, runs, tags,
+  releases, assets), with your own changes from the audit log marked *yours*, newest first. A row with more
+  text opens on a click. It asks again every 30s, and every few seconds after a change, so a merge, a ready
+  or a release shows up on its own; a PR's state flips at once in the list and on its page.
+- **A repo's page checks it against the defaults** when it opens (doctor, nothing changes): the drift shows
+  under the actions, and its open PRs link to their pages.
+- **The bottom line is the session log:** click it (or press `` ` ``) for every line of this session, and a
+  change's whole output on a click.
 - **Releases** creates releases: **n** opens a form with the tag (the next patch is suggested on a repo's
   release page), title, notes, target branch, draft, pre-release, and notes GitHub writes from the merged
   PRs. GitLab projects get the same form without draft and pre-release, which GitLab doesn't have.
@@ -382,7 +394,7 @@ An installed plugin runs inside Mason for every user, so plugins are installed w
 Everything the UI does is JSON under `/api/v1` and works with an API key (`Authorization: Bearer mason_…`):
 
 `/me`, `/config`, `/repos`, `/repo`, `/status`, `/prs`, `/pr`, `/merge`, `/ready`, `/issues`, `/issue`,
-`/runs`, `/approvals`, `/approve`, `/releases` (GET lists, POST creates), `/tags` (POST pushes a tag only), `/bump`, `/release/version`, `/release?repo=&tag=`, `/releases/jobs`, `/packages`, `/security`, `/doctor` (POST checks or fixes and answers with `repos`, the result per repo; GET `?repo=` a repo's kept result, checked when there is none; GET alone every kept result), `/sync`,
+`/runs`, `/run?repo=&id=`, `/run/rerun`, `/events?repo=&kind=repo|pr|issue|release|run`, `/approvals`, `/approve`, `/releases` (GET lists, POST creates), `/tags` (POST pushes a tag only), `/bump`, `/release/version`, `/release?repo=&tag=`, `/releases/jobs`, `/packages`, `/security`, `/doctor` (POST checks or fixes and answers with `repos`, the result per repo; GET `?repo=` a repo's kept result, checked when there is none; GET alone every kept result), `/sync`,
 `/workflows`, `/workflows/pin`, `/new`, `/metrics?days=`, `/console`, `/defaults…`, `/plugins…`, `/market…`,
 `/settings`, `/keys`, `/sessions`, `/secrets`, `/audit`, `/rate` and `/cache/clear`, each only ever about
 the caller, and for operators (in the browser) `/operator`, `/operator/plugins/NAME` and

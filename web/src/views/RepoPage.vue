@@ -1,12 +1,15 @@
 <script setup>
-// One repo as a page (Enter on Repos): its whole detail, what you can do with it, and what that printed.
-// After a change, and while a release run is going, the page reads the repo again by itself (see useFollow).
+// One repo as a page (Enter on Repos): its whole detail, what you can do with it, and what that printed;
+// its drift against the defaults (doctor, checked when the page opens), its open PRs as links to their
+// pages, and its event log at the bottom. After a change, and while a release run is going, the page reads
+// the repo again by itself (see useFollow).
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { qs } from '../api.js'
 import { act, cached, forget, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
 import DoctorPanel from '../components/DoctorPanel.vue'
+import EventLog from '../components/EventLog.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import SecretsPanel from '../components/SecretsPanel.vue'
 import TextPane from '../components/TextPane.vue'
@@ -30,7 +33,11 @@ async function load(fresh = false) {
   if (!detail.value) detail.value = '…'
   try { detail.value = (await cached(`/repo${qs({ repo: repo.value, fresh })}`, fresh)).text } catch (e) { detail.value = `error: ${e.message}` }
 }
-watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; version.value = null; suggest.value = ''; load(); loadReleases() }, { immediate: true })
+
+// the open PRs (and MRs) the detail lists, as links to their pages
+const pulls = computed(() => detail.value.split('\n').map((l) => l.match(/^\s+[#!](\d+) (.*?)\s{2}https?:\S+$/))
+  .filter(Boolean).map((m) => ({ number: Number(m[1]), title: m[2] })))
+const log = ref(null)
 
 async function run(q, path, body) {
   const t = await act(q, path, body)
@@ -40,6 +47,7 @@ async function run(q, path, body) {
   if (path === '/doctor') checked.value++
   load(true)
   follow.now([repo.value])
+  log.value?.burst()
 }
 const r = () => [repo.value]
 const actions = computed(() => [
@@ -70,12 +78,14 @@ async function newRelease(mode) {
   form.value = mode
   if (!suggest.value) await loadReleases()
 }
-function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); follow.now([repo.value]) } }
+function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); follow.now([repo.value]); log.value?.burst() } }
 const open = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
 const back = () => (window.history.state?.back ? router.back() : router.push('/'))
-const keys = { Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => load(true) }
+const keys = { Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => { load(true); log.value?.refresh(); checked.value++ } }
 watch(actions, (list) => list.forEach((a) => { keys[a.k] = a.fn }), { immediate: true })
 useKeys(keys)
+// last: the immediate watch uses everything above
+watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; version.value = null; suggest.value = ''; load(); loadReleases() }, { immediate: true })
 </script>
 
 <template>
@@ -84,7 +94,7 @@ useKeys(keys)
       <button class="hide-xs" @click="back"><span class="k">esc</span> back</button>
       <span class="accent hide-xs">repos › {{ repo }}</span>
       <span class="spacer" />
-      <button @click="load(true)"><span class="k">r</span> reload</button>
+      <button @click="load(true); log?.refresh(); checked++"><span class="k">r</span> reload</button>
     </div>
     <div class="split page">
       <div class="pad">
@@ -95,12 +105,20 @@ useKeys(keys)
         <DoctorPanel :repo="repo" :stamp="checked" />
         <SecretsPanel v-if="!gitlab" :repo="repo" @done="({ text }) => (output = text)" />
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
+        <template v-if="pulls.length">
+          <h2 style="margin-top: 16px">{{ gitlab ? 'merge requests' : 'pull requests' }}</h2>
+          <div class="actions">
+            <router-link v-for="p in pulls" :key="p.number" class="btn" :to="{ path: '/pr', query: { repo, number: p.number } }">
+              <span class="dim">{{ gitlab ? '!' : '#' }}{{ p.number }}</span> {{ p.title }}</router-link>
+          </div>
+        </template>
       </div>
       <div class="pad">
         <VersionBar v-if="version" :repo="repo" :version="version" @done="done" />
         <ReleaseForm v-if="form" :key="form" :mode="form" :repo="repo" :suggest="suggest" :publishes="publishes"
                      @done="done" @cancel="form = ''" />
         <TextPane :text="detail" placeholder="loading…" />
+        <EventLog ref="log" :repo="repo" kind="repo" />
       </div>
     </div>
   </div>

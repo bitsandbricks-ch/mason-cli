@@ -2,7 +2,9 @@
 // Pull and merge requests: all open ones, with checks, review, conflicts and auto-merge.
 // A change shows at once: the row changes right away, and its repo is read again (only that one) a moment later
 // and then while a PR of it waits for auto-merge, so a PR that merges by itself leaves the list without r.
+// Enter (or p) opens one as its own page, with its event log.
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { get, qs } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
@@ -86,8 +88,10 @@ async function ready() {
   follow.now([p.repo])
 }
 const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
+const router = useRouter()
+const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }
-useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, v: cycle })
+useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, p: () => page(), v: cycle })
 </script>
 
 <template>
@@ -101,10 +105,11 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <button :disabled="!current || filter === 'merged'" @click="doMerge(true)"><span class="k">M</span> merge now</button>
       <button :disabled="!current?.draft" @click="ready"><span class="k">y</span> ready</button>
       <button :class="{ primary: diff }" @click="diff = !diff"><span class="k">d</span> diff</button>
+      <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
       <button class="any" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open pull requests'" @activate="open" /></div>
+      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open pull requests'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
   </div>
