@@ -76,6 +76,8 @@ def run():
     write = is_write(argv)
     if write and not can_write():
         abort(403, "this API key is read-only: add --dry-run")
+    if cmd == "doctor" and not write and "--dry-run" not in argv and not can_write():
+        argv.append("--no-auto")  # a repo's auto_fix doesn't turn a read-only key into a write
     if cmd in ("approve", "rerun", "release") and write and "--yes" not in argv:
         argv.append("--yes")  # nobody can answer y/N here; the console asked before sending
     s = user_settings(__import__("flask").g.user)
@@ -89,6 +91,6 @@ def run():
             abort(429, str(err))
         finally:
             config.OVERRIDE.reset(token)
-    if write:
+    if write or (cmd == "doctor" and "(auto_fix)" in text):
         audit(f"console.{cmd}", line[:300], dry_run=False, detail=text)
     return jsonify({"text": text, "write": write})

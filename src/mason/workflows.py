@@ -202,7 +202,7 @@ def report(repo: str, ctx: dict) -> None:
         return
     found = findings(repo, want, files)
     if ctx.get("fix"):
-        _url, failed = fix_repo(repo, want, files)
+        _url, failed = fix_repo(repo, want, files, ctx.get("cfg"))
         found = [f for f in found if f["kind"] != "pinned" or f"{f['action']}@{f['ref']}" in failed]
     if not found:
         say(f"   ok ({len(files)} workflows)")
@@ -213,8 +213,9 @@ def report(repo: str, ctx: dict) -> None:
         say(f"   fix: mason workflows --fix {repo}  (PR that pins the actions)")
 
 
-def fix_repo(repo: str, want: dict, files: dict) -> tuple[str | None, set[str]]:
-    """Open a PR that pins the actions of every workflow: (its URL, the actions left unpinned)."""
+def fix_repo(repo: str, want: dict, files: dict, cfg=None) -> tuple[str | None, set[str]]:
+    """Open a PR that pins the actions of every workflow, or push them with the repo's auto_push:
+    (its URL, the actions left unpinned)."""
     changes, all_changed, all_failed = {}, [], []
     for path, (text, sha) in files.items():
         new, changed, failed = pin(text, want)
@@ -233,10 +234,17 @@ def fix_repo(repo: str, want: dict, files: dict) -> tuple[str | None, set[str]]:
     body = ("Pins every action to the commit its tag points at today, and keeps the tag as a comment so "
             "Dependabot or Renovate can keep updating it.\n\n" + "\n".join(f"- `{n}`" for n in names) +
             "\n\nOpened by Mason (`mason workflows --fix`).")
-    url = core.open_pr(repo, base, f"mason/pin-actions-{secrets.token_hex(3)}", changes,
-                       "Pin actions to commit SHAs", "Pin GitHub Actions to commit SHAs", body)
-    say(f"   PR: {url}  (pins {len(names)} {'action' if len(names) == 1 else 'actions'} "
-        f"in {len(changes)} {'workflow' if len(changes) == 1 else 'workflows'})")
+    what = (f"pins {len(names)} {'action' if len(names) == 1 else 'actions'} "
+            f"in {len(changes)} {'workflow' if len(changes) == 1 else 'workflows'}")
+    args = (repo, base, f"mason/pin-actions-{secrets.token_hex(3)}", changes,
+            "Pin actions to commit SHAs", "Pin GitHub Actions to commit SHAs", body)
+    if cfg is None:
+        url = core.open_pr(*args)
+        say(f"   PR: {url}  ({what})")
+    else:
+        from mason.repos import land
+
+        url, _ = land(cfg, *args, said=f"   PR: {{url}}  ({what})")
     return url, set(all_failed)
 
 

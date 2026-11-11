@@ -291,18 +291,23 @@ def file_on(repo: str, path: str, ref: str | None = None) -> str | None:
     return got[0] if got else None
 
 
+def put_file(repo: str, branch: str, path: str, text: str, sha: str | None, message: str) -> None:
+    """Commit one file on `branch`; `sha` is the blob it replaces (None: a new file)."""
+    import base64
+
+    body = {"message": message, "branch": branch, "content": base64.b64encode(text.encode()).decode()}
+    if sha:
+        body["sha"] = sha
+    api("PUT", f"/repos/{repo}/contents/{path}", body)
+
+
 def open_pr(repo: str, base: str, branch: str, files: dict[str, tuple[str, str | None]],
             message: str, title: str, body: str) -> str:
     """Commit `files` ({path: (new text, old blob sha or None)}) on a new branch and open a PR."""
-    import base64
-
     head = api("GET", f"/repos/{repo}/git/ref/heads/{base}")["object"]["sha"]
     api("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": head})
     for path, (text, sha) in files.items():
-        body_ = {"message": message, "branch": branch, "content": base64.b64encode(text.encode()).decode()}
-        if sha:
-            body_["sha"] = sha
-        api("PUT", f"/repos/{repo}/contents/{path}", body_)
+        put_file(repo, branch, path, text, sha, message)
     if dry_run():
         say(f"   [dry-run] open a PR {branch} -> {base}: {title}")
         return f"{WEB}/{repo}/pulls"
