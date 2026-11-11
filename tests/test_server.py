@@ -31,7 +31,9 @@ def op(env, monkeypatch, tmp_path):
         gitlab=S.Provider("gitlab", "", "", "https://gitlab.com", "https://gitlab.com/api/v4", "api"),
         allow_users={("github", "mike")}, plugin_index=str(tmp_path / "index.json"))
     from mason.server import limits
+    from mason.server.api import repos as repos_api
     limits.reset()
+    repos_api._doctor.clear()  # kept doctor checks are per user id, and every test's database starts at 1
     app = create_app(settings)
     vault = app.config["VAULT"]
     # every GitHub call goes to the fake gh, with the user's token in GH_TOKEN
@@ -136,6 +138,28 @@ def test_lists(op):
     assert sec["acme/api"]["alerts"][0]["severity"] == "high"
     groups = c.get("/api/v1/config").json["groups"]
     assert groups[0]["from"] == "acme/plugin-tpl"
+
+
+def test_doctor_per_repo(op):
+    _, c = op
+    assert c.get("/api/v1/doctor").json == {"repos": {}}  # nothing checked yet: nothing kept
+    got = c.get("/api/v1/doctor?repo=acme/web").json  # a repo page: checked on the spot
+    assert not got["ok"] and "delete_branch_on_merge is false, defaults has true" in got["problems"]
+    assert "mason doctor --fix acme/web" in got["fixes"] and got["checked"] > 0
+    assert c.get("/api/v1/doctor?repo=acme/web").json["checked"] == got["checked"]  # kept, not checked again
+    st = c.get("/api/v1/status").json["doctor"]
+    assert st["acme/web"]["issues"] == len(got["problems"]) and "acme/api" not in st
+    found = c.post("/api/v1/doctor", json={}, headers=H).json["repos"]  # Checks: every repo
+    ref = next(r for r in found if r["repo"] == "acme/plugin-tpl")
+    assert ref["ok"] and ref["reference"]
+    st = c.get("/api/v1/status").json["doctor"]
+    assert {"acme/api", "acme/web", "acme/plugin-b", "mike/dotfiles"} <= set(st)
+    assert st["acme/plugin-tpl"]["ok"] and not st["acme/plugin-b"]["ok"]
+    # a dry-run fix says what it would fix, not what the repo has: the kept check stays
+    before = c.get("/api/v1/doctor?repo=acme/plugin-b").json
+    c.post("/api/v1/doctor", json={"repos": ["b"], "fix": True, "dry_run": True}, headers=H)
+    assert c.get("/api/v1/doctor?repo=acme/plugin-b").json["problems"] == before["problems"]
+    assert c.get("/api/v1/doctor?repo=nope").status_code == 400
 
 
 def test_changes_are_dry_runs_and_audited(op):
