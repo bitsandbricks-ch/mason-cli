@@ -11,6 +11,9 @@ Some become what doctor already knows how to check and fix:
     skip_until = { code_scanning = 2027-01-01 }                        -> skip, until that day
 
 The generated files reach the repo with `mason sync` (or straight away with auto_push), like shared files.
+Every repo's default branch must be protected by something (a ruleset of the repo or its org, or classic
+branch protection); `protect` in a group, an org's .mason or the repo's own .mason.toml says how, and
+`mason doctor --fix` applies it. `skip = ["protect"]` turns both off.
 The rest are checks of their own: CODEOWNERS errors, discussion categories, the social preview,
 `archive_after` (--fix archives), custom `properties` (--fix sets them), and `webhooks` and
 `deploy_keys` (checked only: mason never changes who has access).
@@ -19,11 +22,12 @@ The rest are checks of their own: CODEOWNERS errors, discussion categories, the 
 from __future__ import annotations
 
 import datetime as dt
+import fnmatch
 import json
 
 from mason import core
 from mason.core import api, git_blob_sha, graphql
-from mason.extras import Finding, _get
+from mason.extras import Finding, _get, q
 
 PROTECT = "protect"
 MERGE_QUEUE = {"check_response_timeout_minutes": 60, "grouping_strategy": "ALLGREEN", "max_entries_to_build": 5,
@@ -56,12 +60,17 @@ def prepare(want: dict) -> dict:
         else:
             expired.append(f"skip of {check} ran out on {day.isoformat()}: it's checked again")
     want["expired_skips"] = expired
+    # a layer below may have made the protect ruleset already: drop it, so a repo's own `protect = false`,
+    # `skip = ["protect"]` or changed keys take effect
+    rulesets = {n: rs for n, rs in (want.get("rulesets") or {}).items()
+                if n not in (want.get("generated_rulesets") or ())}
     generated = set()
-    if on(more.get("protect")):
+    if on(more.get("protect")) and PROTECT not in (want.get("skip") or ()):
         rs = protect_ruleset(more["protect"])
-        want["rulesets"] = {**want.get("rulesets", {}), rs["name"]: rs}
+        rulesets[rs["name"]] = rs
         generated.add(rs["name"])
-    want["generated_rulesets"] = generated | set(want.get("generated_rulesets") or ())
+    want["rulesets"] = rulesets
+    want["generated_rulesets"] = generated
     for path, text in generated_files(more).items():
         want["files"] = {**want.get("files", {}), path: git_blob_sha(text)}
         want["texts"] = {**want.get("texts", {}), path: text}
@@ -159,6 +168,13 @@ def findings(repo: str, state: dict, want: dict) -> list[Finding]:
     more = want.get("more") or {}
     off = want.get("skip") or set()
     out = [Finding(t) for t in want.get("expired_skips") or []]
+    if PROTECT not in off and "rulesets" not in off:
+        try:
+            out += _default_protected(repo, state, want)
+        except core.RateLimited:
+            raise
+        except RuntimeError as err:
+            out.append(Finding(f"default branch protection: couldn't read it ({str(err).splitlines()[0][:120]})"))
     for key, check in (("codeowners", _codeowners), ("discussions", _discussions), ("social_preview", _social),
                        ("archive", _archive), ("properties", _properties), ("webhooks", _webhooks),
                        ("deploy_keys", _deploy_keys)):
@@ -171,6 +187,47 @@ def findings(repo: str, state: dict, want: dict) -> list[Finding]:
         except RuntimeError as err:
             out.append(Finding(f"{key.replace('_', ' ')}: couldn't read it ({str(err).splitlines()[0][:120]})"))
     return out
+
+
+def targets(rs: dict, branch: str) -> bool:
+    """True when a branch ruleset's conditions take in `branch` (the default branch)."""
+    if rs.get("target", "branch") != "branch" or rs.get("enforcement", "active") != "active":
+        return False
+    cond = (rs.get("conditions") or {}).get("ref_name") or {}
+    include = cond.get("include")
+    if include is None:  # a defaults ruleset may leave conditions out: GitHub then wants them, so it can't be sure
+        return True
+    ref = f"refs/heads/{branch}"
+    hit = any(i in ("~DEFAULT_BRANCH", "~ALL") or fnmatch.fnmatchcase(ref, i if i.startswith("refs/") else
+                                                                          f"refs/heads/{i}") for i in include)
+    return hit and not any(fnmatch.fnmatchcase(ref, x if x.startswith("refs/") else f"refs/heads/{x}")
+                           for x in cond.get("exclude") or [])
+
+
+def protection_of(repo: str, branch: str) -> list[str]:
+    """What protects `branch` now: ruleset names (the repo's and its org's) and "branch protection" for
+    GitHub's classic protection. Empty when nothing does."""
+    found = []
+    for rule in _get(f"/repos/{repo}/rules/branches/{q(branch)}") or []:
+        org = rule.get("ruleset_source_type") == "Organization"
+        name = f"ruleset {rule.get('ruleset_id')}" + (f" of {rule.get('ruleset_source')}" if org else "")
+        if name not in found:
+            found.append(name)
+    if (_get(f"/repos/{repo}/branches/{q(branch)}") or {}).get("protected") and not found:
+        found.append("branch protection")
+    return found
+
+
+def _default_protected(repo: str, state: dict, want: dict) -> list[Finding]:
+    """The default branch must be protected by something: a ruleset (the repo's or its org's) or classic
+    branch protection. A wanted ruleset that covers it is checked (and fixed) with the rulesets instead."""
+    branch = state.get("default_branch") or "main"
+    if any(targets(rs, branch) for rs in (want.get("rulesets") or {}).values()):
+        return []
+    if protection_of(repo, branch):
+        return []
+    return [Finding(f"the default branch {branch} isn't protected (no ruleset or branch protection): set protect "
+                    f"= {{ reviews = 1 }} in its group, the org's .mason or the repo's .mason.toml")]
 
 
 def _codeowners(repo: str, state: dict, more: dict, label: str) -> list[Finding]:

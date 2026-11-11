@@ -48,7 +48,7 @@ Two files:
       1. your groups without `match` (the rest), only when no group of the org's `.mason` matches
       2. the org's `.mason` groups that match (GitLab: a parent group's, then the nearest group's)
       3. your groups that name the repo with `match`
-      4. the repo's own `.mason.toml` (settings_of: environments, pages, secrets, settings ...)
+      4. the repo's own `.mason.toml` or `.mason/mason.toml` (settings_of: environments, pages, settings ...)
 
   So the org's `.mason` replaces your catch-all for its repos, your own explicit groups go on
   top, and the repo itself has the last word. Org groups are named `org:name` (`acme:default`).
@@ -397,19 +397,31 @@ def stack(layers: list[Group]) -> Group | None:
 
 
 REPO_LAYER = ".mason.toml"
+REPO_FOLDER_FILE = ".mason/mason.toml"  # the same file inside a .mason/ folder (next to .mason/rulesets)
 _repo_loaded = core.Scoped("repo_layer")
+
+
+def repo_file(read, repo: str) -> tuple[str, str | None]:
+    """(path, text) of a repo's own settings: .mason.toml, else .mason/mason.toml. `read(path)` gives a
+    file's text or None."""
+    for path in (REPO_LAYER, REPO_FOLDER_FILE):
+        text = read(path)
+        if text:
+            return path, text
+    return REPO_LAYER, None
 
 
 def repo_layer(repo: str) -> Group | None:
     """The settings a repo's own .mason.toml gives itself, as a group named ".mason.toml" (None without).
     Its [release] table is read by versions.py; group-only keys (match, from, files, rulesets ...) are
-    left out: the repo's own rulesets are its .github/rulesets files."""
+    left out: the repo's own rulesets are its .github/rulesets and .mason/rulesets files.
+    The file may also be .mason/mason.toml, for repos that keep mason's files in a .mason/ folder."""
     if repo in _repo_loaded:
         return _repo_loaded[repo]
-    text = file_on(repo, REPO_LAYER)
+    path, text = repo_file(lambda p: file_on(repo, p), repo)
     found = None
     if text:
-        raw = parse_defaults(text, f"{repo}/{REPO_LAYER}")
+        raw = parse_defaults(text, f"{repo}/{path}")
         own = {k: v for k, v in raw.items() if k in REPO_KEYS}
         if own:
             found = make_group({**own, "name": REPO_LAYER}, 0)

@@ -2,7 +2,7 @@
 
 What a repo should have comes from its group in mason.toml (see config.py):
 a live reference repo (`from`), explicit settings, a rulesets folder, files. On top
-of that each repo's own `.github/rulesets/*.json` must match what's live.
+of that each repo's own `.github/rulesets/*.json` and `.mason/rulesets/*.json` must match what's live.
 """
 
 from __future__ import annotations
@@ -68,22 +68,28 @@ def alerts_on(repo: str) -> str | None:
         return "disabled" if "404" in str(err) else None
 
 
+RULESET_DIRS = (".github/rulesets", ".mason/rulesets")  # a repo's own rulesets; .mason/ wins on a name
+
+
 def ruleset_files(repo: str, ref: str | None = None) -> dict[str, tuple[str, dict]]:
-    """The repo's own .github/rulesets/*.json, by ruleset name: {name: (file, ruleset)}."""
+    """The repo's own rulesets, .github/rulesets/*.json and .mason/rulesets/*.json, by ruleset name:
+    {name: (path, ruleset)}."""
     q = f"?ref={ref}" if ref else ""
-    try:
-        listing = api("GET", f"/repos/{repo}/contents/.github/rulesets{q}") or []
-    except RuntimeError:
-        return {}
     out = {}
-    for f in sorted(x["name"] for x in listing if isinstance(x, dict) and x.get("name", "").endswith(".json")):
-        text = file_on(repo, f".github/rulesets/{f}", ref)
+    for folder in RULESET_DIRS:
         try:
-            rs = json.loads(text) if text else None
-        except ValueError:
-            rs = {"name": f, "_broken": True}
-        if rs:
-            out[rs.get("name") or f] = (f, rs)
+            listing = api("GET", f"/repos/{repo}/contents/{folder}{q}") or []
+        except RuntimeError:
+            continue
+        for f in sorted(x["name"] for x in listing if isinstance(x, dict) and x.get("name", "").endswith(".json")):
+            path = f"{folder}/{f}"
+            text = file_on(repo, path, ref)
+            try:
+                rs = json.loads(text) if text else None
+            except ValueError:
+                rs = {"name": path, "_broken": True}
+            if rs:
+                out[rs.get("name") or path] = (path, rs)
     return out
 
 
@@ -255,18 +261,18 @@ def state_drift(have: dict, want: dict, own: dict | None = None) -> list[str]:
                          for d in ruleset_drift(have["rulesets"][name], rs, label, subset=subset)]
     if want["rulesets"]:
         for name in sorted(set(have["rulesets"]) - set(want["rulesets"]) - set(own or {})):
-            problems.append(f"ruleset {name} is neither in {label} nor in .github/rulesets")
+            problems.append(f"ruleset {name} is neither in {label} nor in the repo's ruleset files")
     return problems
 
 
 def files_drift(live: dict[str, dict], own: dict[str, tuple[str, dict]]) -> list[str]:
-    """The repo's live rulesets against its own .github/rulesets files."""
+    """The repo's live rulesets against its own ruleset files (.github/rulesets, .mason/rulesets)."""
     problems = []
     for name, (f, rs) in own.items():
         if rs.get("_broken"):
-            problems.append(f".github/rulesets/{f} isn't valid JSON")
+            problems.append(f"{f} isn't valid JSON")
         elif name not in live:
-            problems.append(f"ruleset {name} (.github/rulesets/{f}) isn't imported")
+            problems.append(f"ruleset {name} ({f}) isn't imported")
         else:
             problems += [f"ruleset {name}: {d}" for d in ruleset_drift(live[name], rs, against=f, subset=True)]
     return problems
@@ -458,7 +464,7 @@ def reference_check(group: Group, want: dict, fix: bool) -> None:
         own = {n: rs for n, (_, rs) in (want.get("ref_files") or {}).items() if not rs.get("_broken")}
         if own:
             import_rulesets(ref, own)
-            say(f"   rulesets ({', '.join(own)}) imported from .github/rulesets")
+            say(f"   rulesets ({', '.join(own)}) imported from the repo's ruleset files")
             if not core.dry_run():
                 want["rulesets"] = live_rulesets(ref)
         if group.require:
@@ -540,7 +546,7 @@ def doctor(repo: str, ctx: dict) -> None:
                 extras.fix(repo, state, want, found)
         else:
             import_rulesets(repo, {n: rs for n, (_, rs) in own.items() if not rs.get("_broken")})
-            say(f"   rulesets ({', '.join(own)}) imported from .github/rulesets")
+            say(f"   rulesets ({', '.join(own)}) imported from the repo's ruleset files")
         problems = [p for p in problems if p not in fixable]
         say(f"   fixed {len(fixable)}" + (" (auto_fix)" if auto else ""))
 
@@ -548,7 +554,7 @@ def doctor(repo: str, ctx: dict) -> None:
     who = rules.about((want or {}).get("more") or {})
     who = f"; {who}" if who else ""
     where = f" (group {group.name}{mine}{who})" if group else \
-        f" (its .mason.toml{who})" if own_file else " (no group: only its own .github/rulesets)"
+        f" (its .mason.toml{who})" if own_file else " (no group: only its own ruleset files)"
     if not problems:
         say(f"   ok{where}")
         return

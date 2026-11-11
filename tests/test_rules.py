@@ -128,3 +128,64 @@ def test_alerts_send_only_whats_new(monkeypatch, tmp_path, capsys):
     assert b'"content"' in sent[0].data  # Discord's shape
     auto.alert("acme/web", "http://example.com/hook", ["d"])
     assert "must start with https://" in capsys.readouterr().out and len(sent) == 2
+
+
+def test_targets_the_default_branch():
+    rs = rules.protect_ruleset({})
+    assert rules.targets(rs, "main")
+    assert rules.targets(rules.protect_ruleset({"branches": ["main"]}), "main")
+    assert not rules.targets(rules.protect_ruleset({"branches": ["release/*"]}), "main")
+    assert rules.targets(rules.protect_ruleset({"branches": ["release/*"]}), "release/1")
+    assert not rules.targets({**rs, "enforcement": "disabled"}, "main")
+    assert not rules.targets({"target": "tag", "conditions": {"ref_name": {"include": ["~ALL"]}}}, "main")
+    assert rules.targets({"name": "main", "rules": []}, "main")  # a defaults ruleset without conditions
+    assert not rules.targets({"conditions": {"ref_name": {"include": ["~ALL"], "exclude": ["refs/heads/main"]}}},
+                             "main")
+
+
+def test_a_repo_can_turn_the_groups_protect_off():
+    from mason import defaults
+
+    group = rules.prepare(want(protect={"reviews": 1}))
+    assert "protect" in group["rulesets"]
+    group["label"], group["group"] = "defaults", "default"
+    for own in (Group(".mason.toml", more={"protect": {"enabled": False}}), Group(".mason.toml", skip=["protect"])):
+        assert "protect" not in defaults.overlay(group, own)["rulesets"]
+    mine = defaults.overlay(group, Group(".mason.toml", more={"protect": {"checks": ["test"]}}))["rulesets"]["protect"]
+    kinds = {r["type"] for r in mine["rules"]}
+    assert {"pull_request", "required_status_checks"} <= kinds  # the group's reviews and the repo's checks
+
+
+def test_default_branch_protection_check(monkeypatch):
+    answers = {}
+    monkeypatch.setattr(rules, "_get", lambda path: answers.get(path))
+    state = {"default_branch": "main"}
+    w = {**want(), "label": "defaults"}
+    found = rules._default_protected("acme/web", state, w)
+    assert found and "the default branch main isn't protected" in found[0].text and not found[0].area
+    answers["/repos/acme/web/branches/main"] = {"protected": True}  # classic branch protection counts
+    assert rules._default_protected("acme/web", state, w) == []
+    assert rules.protection_of("acme/web", "main") == ["branch protection"]
+    answers["/repos/acme/web/rules/branches/main"] = [
+        {"type": "deletion", "ruleset_source_type": "Organization", "ruleset_source": "acme", "ruleset_id": 7}]
+    assert rules.protection_of("acme/web", "main") == ["ruleset 7 of acme"]  # an org ruleset counts too
+    answers.clear()
+    w["rulesets"] = {"protect": rules.protect_ruleset({})}  # wanted: the ruleset check reports and fixes it
+    assert rules._default_protected("acme/web", state, w) == []
+
+
+def test_gitlab_protect_protects_the_default_branch(capsys):
+    from mason.server import gitlab as GL
+
+    c = Config(source=None, orgs=[], repos=[], exclude=[], org_defaults=False,
+               groups=[Group("all", more={"protect": {"reviews": 1}})])
+    gl = StubGitLab("")
+    GL.doctor(gl, c, "gitlab:acme/site", fix=True)
+    assert "1 protected branches" in capsys.readouterr().out
+    assert ("POST", "/projects/acme%2Fsite/protected_branches",
+            {"name": "main", "push_access_level": 0, "merge_access_level": 30}) in gl.calls
+    bare = Config(source=None, orgs=[], repos=[], exclude=[], org_defaults=False, groups=[Group("all")])
+    GL.doctor(StubGitLab(""), bare, "gitlab:acme/site")
+    assert "the default branch main isn't protected" in capsys.readouterr().out
+    GL.doctor(StubGitLab('skip = ["protect"]'), bare, "gitlab:acme/site")
+    assert "isn't protected" not in capsys.readouterr().out

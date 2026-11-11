@@ -100,16 +100,20 @@ _specs = core.Scoped("version_spec")  # repo -> spec() (None when there is no ve
 
 
 def repo_release_table(repo: str, names: set[str]) -> dict:
-    """The [release] table of the repo's .mason.toml ({} without one). Only release settings are read here:
-    groups and checks stay with the defaults and the org's .mason repo."""
-    from mason.config import tomllib
-    if REPO_FILE not in names:
+    """The [release] table of the repo's .mason.toml or .mason/mason.toml ({} without one). Only release
+    settings are read here: groups and checks stay with the defaults and the org's .mason repo."""
+    from mason.config import REPO_FOLDER_FILE, tomllib
+    if REPO_FILE in names:
+        path = REPO_FILE
+    elif ".mason" in names:  # .mason/mason.toml
+        path = REPO_FOLDER_FILE
+    else:
         return {}
-    text = core.file_on(repo, REPO_FILE) or ""
+    text = core.file_on(repo, path) or ""
     try:
         table = tomllib.loads(text).get("release") or {}
     except tomllib.TOMLDecodeError as err:
-        raise RuntimeError(f"{repo}/{REPO_FILE}: {err}") from err
+        raise RuntimeError(f"{repo}/{path}: {err}") from err
     return table if isinstance(table, dict) else {}
 
 

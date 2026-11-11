@@ -712,3 +712,34 @@ def test_more_repo_keys(env, tmp_path):
     assert "deleted 1 merged branches: old-feature" in web
     assert "#21 Bump requests" in web and "#22" not in web  # a major update waits for a person
     assert "== acme/api" in out
+
+
+def test_default_branch_protection(env, tmp_path):
+    folder = tmp_path / "defaults"
+    folder.mkdir()
+    (folder / "mason.toml").write_text('orgs = ["acme", "mike"]\n[[group]]\nname = "default"\n')
+    e = {**env, "MASON_DEFAULTS": str(folder)}
+    out = mason(e, "doctor", "web", "api").split("== acme/api")
+    assert "the default branch main isn't protected" in out[0]  # acme/web has no ruleset
+    assert "isn't protected" not in out[1]  # acme/api's ruleset main covers it
+    out = mason({**e, "FAKE_GH_CLASSIC": "acme/web"}, "doctor", "web")
+    assert "isn't protected" not in out  # classic branch protection counts
+    (folder / "mason.toml").write_text('orgs = ["acme", "mike"]\n[[group]]\nname = "default"\n'
+                                       'protect = { reviews = 1, checks = ["test"] }\n')
+    out = mason(e, "doctor", "web")
+    assert "ruleset protect is missing" in out and "isn't protected" not in out
+    out = mason(e, "doctor", "--fix", "--dry-run", "web")
+    assert "[dry-run] POST /repos/acme/web/rulesets" in out
+
+
+def test_a_mason_folder_in_the_repo(env, tmp_path):
+    folder = tmp_path / "defaults"
+    folder.mkdir()
+    (folder / "mason.toml").write_text('orgs = ["acme", "mike"]\n[[group]]\nname = "default"\n')
+    e = {**env, "MASON_DEFAULTS": str(folder), "FAKE_GH_FOLDER": "protect = { reviews = 2 }"}
+    out = mason(e, "doctor", "dotfiles")
+    assert "(group default + .mason.toml)" in out  # .mason/mason.toml is read like .mason.toml
+    assert "ruleset protect is missing" in out
+    assert "ruleset release (.mason/rulesets/tags.json) isn't imported" in out  # .mason/rulesets too
+    rows = [line.split() for line in mason(e, "release").splitlines()]
+    assert ["dotfiles", "dots/__init__.py", "2.1.0", "-", "dots-2.1.0"] in rows  # [release] of .mason/mason.toml

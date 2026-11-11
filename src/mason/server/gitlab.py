@@ -576,10 +576,10 @@ def want_of(gl: GitLab, cfg, group) -> dict:
 
 def own_file(gl: GitLab, repo: str) -> dict:
     """What a project's own .mason.toml says ({} without one): the GitHub keys it may set, and `gitlab`."""
-    text = gl.file(repo, config.REPO_LAYER)
+    path, text = config.repo_file(lambda p: gl.file(repo, p), repo)
     if not text:
         return {}
-    raw = config.parse_defaults(text, f"{full(repo)}/{config.REPO_LAYER}")
+    raw = config.parse_defaults(text, f"{full(repo)}/{path}")
     return {k: v for k, v in raw.items() if k in config.REPO_KEYS or k == "gitlab"}
 
 
@@ -605,6 +605,29 @@ def with_own(want: dict, own: dict) -> dict:
     return want
 
 
+PROTECT_LEVELS = {"push_access_level": 0, "merge_access_level": 30}  # nobody pushes, developers merge
+
+
+def protect_spec(group, own: dict):
+    """The `protect` table of the project's group and its own .mason.toml (the project wins), or None."""
+    from mason import rules
+
+    spec = dict((group.more if group else {}).get("protect") or {}) if group else {}
+    mine = own.get("protect")
+    if mine is not None:
+        spec = {**spec, **(mine if isinstance(mine, dict) else {"enabled": bool(mine)})}
+    skipped = "protect" in set((group.skip if group else []) or []) | set(own.get("skip") or [])
+    return spec if spec and rules.on(spec) and not skipped else None
+
+
+def with_protect(want: dict, spec, branch: str) -> dict:
+    """`protect` on GitLab: the default branch is protected (nobody pushes, developers merge) unless
+    [gitlab] protected_branches names it already."""
+    if spec is None or branch in want["protected"]:
+        return want
+    return {**want, "protected": {**want["protected"], branch: dict(PROTECT_LEVELS)}}
+
+
 def no_group_want() -> dict:
     return {"settings": {}, "protected": {}, "label": config.REPO_LAYER, "files": {}, "texts": {}}
 
@@ -612,7 +635,8 @@ def no_group_want() -> dict:
 def doctor(gl: GitLab, cfg, repo: str, fix: bool = False, auto: bool = False) -> None:
     group = cfg.group_of(repo)
     own = own_file(gl, repo)
-    if not group and not own.get("gitlab"):
+    spec = protect_spec(group, own)
+    if not group and not own.get("gitlab") and spec is None:
         say("   ok (no group)")
         return
     want = with_own(want_of(gl, cfg, group) if group else no_group_want(), own)
@@ -628,8 +652,14 @@ def doctor(gl: GitLab, cfg, repo: str, fix: bool = False, auto: bool = False) ->
         if live.get(k) != v:
             problems.append(f"{k} is {compact(live.get(k))}, {want['label']} has {compact(v)}")
             fixable[k] = v
+    branch = live.get("default_branch") or "main"
+    want = with_protect(want, spec, branch)
     prot = {b["name"]: b for b in gl.api("GET", f"{gl.project(repo)}/protected_branches") or []}
     bad_branches = []
+    skipped = "protect" in set((group.skip if group else []) or []) | set(own.get("skip") or [])
+    if branch not in want["protected"] and not skipped and not any(fnmatch.fnmatchcase(branch, p) for p in prot):
+        problems.append(f"the default branch {branch} isn't protected: set protect = {{ reviews = 1 }} in its "
+                        f"group, the group's .mason or the project's .mason.toml")
     for name, levels in want["protected"].items():
         have = prot.get(name)
         if not have:
