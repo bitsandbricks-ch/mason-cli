@@ -6,7 +6,7 @@ export const state = reactive({
   me: null,          // /api/v1/me
   loaded: false,
   dryRun: false,     // every change is a dry run while this is on
-  log: [],           // [{at, text, kind}] the bottom log
+  log: [],           // [{at, text, kind, detail, where}] the bottom log (click it for all of them)
   busy: 0,
   rate: null,
 })
@@ -15,8 +15,10 @@ export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status }
 }
 
-export function log(text, kind = 'info') {
-  state.log.unshift({ at: new Date().toLocaleTimeString(), text: String(text), kind })
+// detail: the whole output of a change (shown when the entry is opened); where: the page it was done on
+export function log(text, kind = 'info', { detail = '', where = '' } = {}) {
+  state.log.unshift({ at: new Date().toLocaleTimeString(), text: String(text), kind, detail: String(detail || ''),
+    where: where || (typeof location !== 'undefined' ? location.pathname + location.search : '') })
   if (state.log.length > 200) state.log.length = 200
 }
 

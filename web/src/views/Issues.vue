@@ -1,7 +1,8 @@
 <script setup>
 // Issues across GitHub repos and GitLab projects: filter by state, label, mine and age; open, close,
-// reopen and comment; n opens a new issue in any repo.
+// reopen and comment; n opens a new issue in any repo. Enter (or page) opens one as its own page.
 import { computed, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { get, log, qs } from '../api.js'
 import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
@@ -82,8 +83,10 @@ async function submit() {
   if (!text.startsWith('error')) { Object.assign(form, { open: false, title: '', body: '', labels: '', assignees: '' }); load(true) }
 }
 const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
+const router = useRouter()
+const page = (i) => { const r = i || current.value; if (r) router.push({ path: '/issue', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(STATES); f.state = k[(k.indexOf(f.state) + 1) % k.length] }
-useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => setState(false), m: comment, o: open, v: cycle, i: () => { f.mine = !f.mine } })
+useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => setState(false), m: comment, o: open, p: () => page(), v: cycle, i: () => { f.mine = !f.mine } })
 </script>
 
 <template>
@@ -100,9 +103,10 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
       <button :disabled="current?.state !== 'open'" @click="setState(true)"><span class="k">c</span> close</button>
       <button :disabled="!current || current.state === 'open'" @click="setState(false)"><span class="k">u</span> reopen</button>
       <button :disabled="!current" @click="open"><span class="k">o</span> open</button>
+      <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no issues'" @activate="open" /></div>
+      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no issues'" @activate="page" /></div>
       <div class="pad">
         <div v-if="form.open" class="box">
           <div class="form">

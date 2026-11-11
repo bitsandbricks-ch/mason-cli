@@ -1,12 +1,14 @@
 <script setup>
 // One repo's releases as a page (Enter on Releases or on a repo's page): every recent release on the
-// left, the picked one in full on the right; n creates a release, Esc goes back.
+// left, the picked one in full on the right with its event log (its runs too, live); n creates a release,
+// Esc goes back.
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { get, qs } from '../api.js'
 import { cached } from '../load.js'
 import { useKeys } from '../keys.js'
 import DataTable from '../components/DataTable.vue'
+import EventLog from '../components/EventLog.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
@@ -21,13 +23,14 @@ const sel = ref(null)
 const output = ref('')
 const form = ref('') // '', 'release' or 'tag'
 const loading = ref(false)
+const log = ref(null)
 
 async function load(tag = '', fresh = false) {
   if (!repo.value) return
   loading.value = true
   try {
     const got = await cached(`/release${qs({ repo: repo.value, tag, fresh })}`, fresh)
-    if (!tag) page.value = got
+    if (!tag || !page.value) page.value = got // a link to a tag still needs the list
     text.value = got.text
     sel.value = got.selected || null
   } catch (e) { text.value = `error: ${e.message}` } finally { loading.value = false }
@@ -48,10 +51,10 @@ function done({ text: t, tag, ok }) {
   output.value = t
   if (!ok) return
   form.value = ''
-  load('', true).then(() => { if (rows.value.some((r) => r.tag === tag)) sel.value = tag })
+  load('', true).then(() => { if (rows.value.some((r) => r.tag === tag)) sel.value = tag; log.value?.burst() })
 }
 useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, n: () => { form.value = 'release' }, T: () => { form.value = 'tag' },
-  o: open, r: () => load(sel.value || '', true) })
+  o: open, r: () => { load(sel.value || '', true); log.value?.refresh() } })
 </script>
 
 <template>
@@ -75,6 +78,7 @@ useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: ba
                      @done="done" @cancel="form = ''" />
         <template v-if="output"><h2>output</h2><TextPane :text="output" /></template>
         <TextPane v-if="!form" :text="text" :placeholder="loading ? 'loading…' : 'pick a release'" />
+        <EventLog v-if="!form && sel" ref="log" :repo="repo" kind="release" :tag="sel" />
       </div>
     </div>
   </div>

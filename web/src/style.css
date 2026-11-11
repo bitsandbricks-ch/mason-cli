@@ -269,3 +269,44 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
 .logo { flex: none; display: block; }
 .top .logo { margin-right: -6px; }
 .login-logo { margin: 0 0 22px; line-height: 0; }
+
+/* the event log at the bottom of a detail page */
+.events { margin-top: 16px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.events-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.events-head h2 { margin: 0; }
+.event-list { list-style: none; margin: 0; padding: 0; }
+.event-list li { display: grid; grid-template-columns: 9ch 2ch minmax(0, 1fr) auto; gap: 0 8px; align-items: baseline;
+  padding: 3px 0; border-bottom: 1px dotted var(--bg3); }
+.event-list li.more { cursor: pointer; }
+.event-list li.more:hover { background: var(--bg2); }
+.event-list li.new { animation: event-new 3s ease-out; }
+@keyframes event-new { from { background: var(--sel); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .event-list li.new { animation: none; background: var(--sel); } }
+.event-list .when { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event-list .mark { text-align: center; color: var(--dim); }
+.event-list .mark.ok { color: var(--ok); }
+.event-list .mark.bad { color: var(--bad); }
+.event-list .mark.warn { color: var(--warn); }
+.event-list .body { min-width: 0; overflow-wrap: anywhere; }
+.event-list .detail { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-list pre.more { margin: 4px 0 2px; padding: 6px 8px; background: var(--bg2); border-left: 2px solid var(--line); }
+.event-list .go { padding: 0 4px; }
+@media (max-width: 700px) {
+  .event-list li { grid-template-columns: 2ch minmax(0, 1fr) auto; padding: 7px 0; }
+  .event-list .when { grid-column: 2; grid-row: 2; font-size: 12px; }
+  .event-list .mark { grid-row: 1 / span 2; }
+  .event-list .detail { white-space: normal; }
+  .event-list .go { grid-row: 1 / span 2; grid-column: 3; padding: 4px 8px; }
+}
+
+/* the session log: the bottom line opens it */
+.foot .last { cursor: pointer; }
+.session-log { position: fixed; left: 0; right: 0; bottom: 31px; max-height: 45vh; overflow: auto; z-index: 20;
+  background: var(--bg); border-top: 1px solid var(--accent); padding: 8px 12px; box-shadow: 0 -6px 18px rgba(0, 0, 0, .3); }
+.session-log ol { list-style: none; margin: 0; padding: 0; }
+.session-log li { padding: 3px 0; border-bottom: 1px dotted var(--bg3); }
+.session-log li.has-detail { cursor: pointer; }
+.session-log li .at { margin-right: 8px; }
+.session-log pre.text { margin: 4px 0 2px; padding: 6px 8px; background: var(--bg2); border-left: 2px solid var(--line);
+  max-height: 30vh; overflow: auto; }
+.session-log .where { margin-left: 8px; }
