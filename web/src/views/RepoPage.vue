@@ -1,9 +1,10 @@
 <script setup>
 // One repo as a page (Enter on Repos): its whole detail, what you can do with it, and what that printed.
+// After a change, and while a release run is going, the page reads the repo again by itself (see useFollow).
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { qs } from '../api.js'
-import { act, cached, forget } from '../load.js'
+import { act, cached, forget, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import SecretsPanel from '../components/SecretsPanel.vue'
@@ -18,6 +19,9 @@ const detail = ref('')
 const output = ref('')
 const form = ref('') // '', 'release' or 'tag'
 const suggest = ref('')
+const publishes = ref('')
+const version = ref(null)
+const busy = ref(false) // a release run is going
 
 async function load(fresh = false) {
   if (!repo.value) return
@@ -32,6 +36,7 @@ async function run(q, path, body) {
   output.value = t
   forget('/status'); forget('/repo'); forget('/release')
   load(true)
+  follow.now([repo.value])
 }
 const r = () => [repo.value]
 const actions = computed(() => [
@@ -45,19 +50,24 @@ const actions = computed(() => [
   { k: 'l', label: 'its releases', fn: () => router.push({ path: '/release', query: { repo: repo.value } }) },
   { k: 'o', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: open },
 ])
-const publishes = ref('')
-const version = ref(null)
-async function loadReleases(fresh = false) {
+async function loadReleases(fresh = false, quiet = false) {
   try {
-    const p = await cached(`/release${qs({ repo: repo.value, fresh })}`, fresh)
-    suggest.value = p.suggest; publishes.value = p.publishes || ''; version.value = p.version || null
+    const p = await cached(`/release${qs({ repo: repo.value, fresh })}`, fresh, { quiet })
+    suggest.value = p.suggest; publishes.value = p.publishes || ''; version.value = p.version || null; busy.value = !!p.busy
   } catch { suggest.value = suggest.value || 'v0.1.0' }
 }
+async function refresh() {
+  const name = repo.value
+  const got = await cached(`/repo${qs({ repo: name, fresh: true })}`, true, { quiet: true })
+  if (name === repo.value) detail.value = got.text
+  await loadReleases(true, true)
+}
+const follow = useFollow({ pending: () => (busy.value ? [repo.value] : []), refresh })
 async function newRelease(mode) {
   form.value = mode
   if (!suggest.value) await loadReleases()
 }
-function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); load(true); loadReleases(true) } }
+function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); follow.now([repo.value]) } }
 const open = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
 const back = () => (window.history.state?.back ? router.back() : router.push('/'))
 const keys = { Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => load(true) }

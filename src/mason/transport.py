@@ -484,6 +484,25 @@ class HttpTransport:
     def _repo_level(bare: str, scope: str) -> bool:
         return bare == scope or bare.endswith(("/topics", "/generate", "/transfer"))
 
+    def repo_scope(self, repo: str) -> tuple[str, tuple[str, ...]]:
+        """(the API path all of `repo`'s REST answers start with, what a GraphQL call about it contains: the
+        repository(...) in the query, as the request body spells it, or the owner and name variables)."""
+        owner, _, name = repo.partition("/")
+        inline = json.dumps(f"repository(owner: {json.dumps(owner)}, name: {json.dumps(name)})")[1:-1]
+        return f"/repos/{repo}", (inline, json.dumps({"owner": owner, "name": name})[1:-1])
+
+    def forget_repos(self, repos: list[str]) -> None:
+        """Read these repos again (the web app's fresh=1 with repos named, as its follow-ups after a change ask):
+        their REST answers go stale (revalidated, so cheap), the GraphQL answers that ask about them go, and so do
+        their status nodes. The rest of the cache stays."""
+        graphql = self.graphql_url
+        for repo in repos:
+            scope, parts = self.repo_scope(repo)
+            self.stats["invalidated"] += self.store.stale(self._url(scope))
+            self.stats["invalidated"] += self.store.drop_where(
+                lambda k, parts=parts: k[0] == graphql and len(k) > 2 and any(p in str(k[2]) for p in parts))
+            self.caches.forget_repo(repo)
+
     def forget_graphql(self) -> None:
         """A mutation: every GraphQL answer and every status node may be out of date."""
         graphql = self.graphql_url

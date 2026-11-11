@@ -63,6 +63,12 @@ one-key shortcut (`1` to `9` for the first ones, `I` issues, `W` workflows, `D` 
   `v<version>` once it is merged.
 - **Caching:** a tab you go back to shows its last answer at once and asks again after a minute; `r` and
   every change ask again right away.
+- **Follow-ups:** a change shows without `r`. Marking a PR ready or turning on auto-merge changes its row at
+  once, and only that repo is read again a moment later. After that the view keeps reading the repos with
+  something still on its way (a PR waiting for auto-merge, a release run that hasn't finished, a tag whose
+  release hasn't shown yet): after 2s, 3s, 5s and so on up to every 30s, only while the page is visible, and for
+  at most 20 minutes after the view opened or the last change. Pull requests, Releases, a release page and a
+  repo's page do this.
 - **Issues** lists issues across GitHub repos and GitLab projects, filtered by state, label, mine and age.
   It closes, reopens and comments on them, and **n** opens a new issue in any repo.
 - **Workflows** shows what `mason workflows` finds; **p** opens a PR that pins the selected repo's actions
@@ -238,6 +244,8 @@ cache: nothing one user fetched is ever looked up for another.
   Mason answers from the cache, even stale, and refuses new calls until the reset without asking.
 - **Reload**: `r` in the web UI (`?fresh=1` on any read) marks your answers stale, so they are asked for
   again with their ETags; the browser also reuses a tab's last answer for a minute when you switch back.
+  `?fresh=1` with repos named (`/prs?repo=acme/web&fresh=1`, the follow-ups) asks again for only those repos:
+  their REST answers are revalidated and the GraphQL answers about them dropped; the rest stays cached.
 - **Bounded**: the least recently used answers go first when a user's share or the total is full.
   `/api/v1/rate` shows each user's hits, 304s, entries and bytes; `POST /api/v1/cache/clear` empties it.
 

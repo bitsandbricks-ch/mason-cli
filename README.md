@@ -102,7 +102,7 @@ The lists use htop's and Midnight Commander's function keys. Each one also has a
 | F10 | `q` | Quit. |
 
 The line over the log says what the list shows: `3 of 12 rows · F4 filter: failed · F3 search: 'api' · F6 sort: when ↑`.
-- **Loading:** nothing reloads by itself. The repo and PR list loads at start, with one GraphQL query per 20 repos. Runs, Releases, Packages and Security load the first time you open their tab. **r** reloads the tab you are on.
+- **Loading:** the repo and PR list loads at start, with one GraphQL query per 20 repos. Runs, Releases, Packages and Security load the first time you open their tab. **r** reloads the tab you are on. After a change (ready, auto-merge, merge, a release, a tag, a bump) the view reads just that repo again, and keeps doing so while a PR waits for auto-merge or a release run is going, so the result shows without **r**.
 - **Rate limit:** the header shows how many API calls are left. Answers are cached for 60 seconds; **r** reads past the cache. If GitHub's rate limit is reached, the TUI says when it resets instead of failing.
 
 ## Version files

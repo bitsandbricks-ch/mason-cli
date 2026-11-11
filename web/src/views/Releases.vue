@@ -2,10 +2,12 @@
 // Each repo's latest release, its assets, missing assets and the last release run, and its version file against
 // that release: "0.4.0 unreleased" when the version changed but nothing is released yet (u lists only those).
 // Enter opens the repo's releases as a page; n creates a release; b bumps the selected repo in a PR, R releases it.
+// After a release, a tag or a bump only that repo is read again, and so is every repo whose release run is still
+// going, until it is done: the new release and the run's result show without r.
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { get, log } from '../api.js'
-import { useLoad } from '../load.js'
+import { get, log, qs } from '../api.js'
+import { splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
@@ -18,7 +20,7 @@ import { openDetail } from '../ui.js'
 const router = useRouter()
 const problems = ref(false)
 const unreleased = ref(false)
-const { data, loading, load } = useLoad((q) => {
+const { data, loading, load, keep } = useLoad((q) => {
   const extra = [problems.value && 'problems=1', unreleased.value && 'unreleased=1'].filter(Boolean).join('&')
   return `/releases${q}${extra ? (q ? '&' : '?') + extra : ''}`
 })
@@ -46,7 +48,21 @@ async function newRelease(mode = 'release') {
     try { repoNames.value = (await get('/repos')).repos.map((r) => r.repo) } catch (e) { log(e.message, 'error') }
   }
 }
-function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; load(true) } }
+async function refresh(repos) {
+  const got = await get(`/releases${qs({ repo: repos, problems: problems.value, unreleased: unreleased.value, fresh: true })}`, { quiet: true })
+  if (!data.value) return
+  const named = new Set(repos)
+  const before = (data.value.releases || []).filter((r) => named.has(r.repo) && r.version?.todo).length
+  keep({ ...data.value, releases: splice(data.value.releases, got.releases, repos),
+    unreleased: Math.max(0, (data.value.unreleased || 0) - before + (got.unreleased || 0)) })
+}
+const follow = useFollow({ pending: () => (data.value?.releases || []).filter((r) => r.busy).map((r) => r.repo), refresh })
+function done({ text, ok, repo }) {
+  output.value = text
+  if (!ok) return
+  form.value = ''
+  follow.now([repo || sel.value])
+}
 useKeys({ r: () => load(true), p: toggle, u: toggleUnreleased, n: () => newRelease('release'), T: () => newRelease('tag'), Escape: () => { form.value = '' },
   o: () => current.value?.url && window.open(current.value.url, '_blank', 'noopener') })
 </script>

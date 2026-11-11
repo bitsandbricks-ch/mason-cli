@@ -1,15 +1,17 @@
 <script setup>
 // Pull and merge requests: all open ones, with checks, review, conflicts and auto-merge.
+// A change shows at once: the row changes right away, and its repo is read again (only that one) a moment later
+// and then while a PR of it waits for auto-merge, so a PR that merges by itself leaves the list without r.
 import { computed, ref, watch } from 'vue'
 import { get, qs } from '../api.js'
-import { act, useLoad } from '../load.js'
+import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 
-const { data, loading, load } = useLoad((q) => `/prs${q}`)
+const { data, loading, load, keep } = useLoad((q) => `/prs${q}`)
 loadGroups()
 const filter = ref('all')
 const sel = ref(null)
@@ -37,6 +39,20 @@ const columns = [
 ]
 const current = computed(() => rows.value.find((p) => keyOf(p) === sel.value))
 
+// Read these repos again (fresh, only them) and put their PRs in place of the ones shown.
+async function refresh(repos) {
+  const got = await get(`/prs${qs({ repo: repos, fresh: true })}`, { quiet: true })
+  if (!data.value) return
+  keep({ ...data.value, prs: splice(data.value.prs, got.prs, repos), merged: splice(data.value.merged, got.merged, repos) })
+}
+const follow = useFollow({ pending: () => (data.value?.prs || []).filter((p) => p.auto).map((p) => p.repo), refresh })
+
+// What the change will have done, shown before GitHub says so (the follow-up a moment later has the last word).
+function expect(p, fields) {
+  if (!data.value) return
+  keep({ ...data.value, prs: data.value.prs.map((x) => (x.repo === p.repo && x.number === p.number ? { ...x, ...fields } : x)) })
+}
+
 async function show() {
   const p = current.value
   if (!p) { detail.value = ''; return }
@@ -48,8 +64,12 @@ watch([sel, diff], show)
 async function doMerge(now) {
   const p = current.value
   if (!p) return
-  const text = await act(`${now ? 'Merge' : 'Auto-merge'} ${keyOf(p)} ${p.title}?`, '/merge', { targets: [keyOf(p)], now, ready: p.draft })
-  if (text !== null) { detail.value = text; load(true) }
+  const got = await change(`${now ? 'Merge' : 'Auto-merge'} ${keyOf(p)} ${p.title}?`, '/merge', { targets: [keyOf(p)], now, ready: p.draft })
+  if (!got) return
+  detail.value = got.text
+  if (got.dry) return
+  if (got.ok) expect(p, now ? { merge: 'merging…' } : { auto: true, draft: false })
+  follow.now([p.repo])
 }
 async function mergeAll() {
   const text = await act('Auto-merge every ready PR (drafts and conflicts stay open)?', '/merge', { all: true })
@@ -58,8 +78,12 @@ async function mergeAll() {
 async function ready() {
   const p = current.value
   if (!p || !p.draft) return
-  const text = await act(`Mark ${keyOf(p)} ready for review?`, '/ready', { repo: p.repo, number: p.number })
-  if (text !== null) { detail.value = text; load(true) }
+  const got = await change(`Mark ${keyOf(p)} ready for review?`, '/ready', { repo: p.repo, number: p.number })
+  if (!got) return
+  detail.value = got.text
+  if (got.dry) return
+  if (got.ok) expect(p, { draft: false })
+  follow.now([p.repo])
 }
 const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }

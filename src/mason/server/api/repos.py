@@ -392,7 +392,7 @@ def releases():
             out.append({"repo": i["repo"], "provider": i.get("provider", "github"), "release": row[0], "when": row[1],
                         "assets": row[2], "run": row[3], "problems": bad, "text": text,
                         "url": (i["release"] or {}).get("html_url", ""), "version": ver,
-                        "pending": V.pending_word(ver) if ver else ""})
+                        "pending": V.pending_word(ver) if ver else "", "busy": R.running(i["runs"])})
         return jsonify({"releases": out, "unreleased": sum(bool((i.get("version") or {}).get("todo")) for i in infos)})
 
 

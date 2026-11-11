@@ -138,6 +138,28 @@ def test_lists(op):
     assert groups[0]["from"] == "acme/plugin-tpl"
 
 
+def test_follow_ups_read_only_the_named_repos(op):
+    """The web app's follow-up after a change: fresh=1 with the repos named answers for just those, and says
+    whether a release run is still going (busy), so it knows to keep asking."""
+    _, c = op
+    c.get("/api/v1/prs")
+    prs = c.get("/api/v1/prs?repo=acme/web&fresh=1").json
+    assert {p["repo"] for p in prs["prs"]} == {"acme/web"} and {p["number"] for p in prs["prs"]} == {7, 8, 9}
+    rel = c.get("/api/v1/releases?repo=acme/api&fresh=1").json["releases"]
+    assert [r["repo"] for r in rel] == ["acme/api"] and rel[0]["busy"] is False
+    assert c.get("/api/v1/release?repo=acme/api&fresh=1").json["busy"] is False
+
+
+def test_a_release_run_that_has_not_finished_is_busy():
+    from mason import repos as R
+
+    assert R.running([{"status": "in_progress", "conclusion": None}])
+    assert R.running([{"status": "queued"}, {"status": "completed", "conclusion": "success"}])
+    assert R.running([{"conclusion": "running"}])  # GitLab pipelines: their status in conclusion
+    assert not R.running([{"status": "completed", "conclusion": "failure"}])
+    assert not R.running([])
+
+
 def test_changes_are_dry_runs_and_audited(op):
     _, c = op
     r = c.post("/api/v1/merge", json={"targets": ["web#8", "web#9"], "dry_run": True}, headers=H)

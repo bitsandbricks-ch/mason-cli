@@ -20,11 +20,12 @@ export function log(text, kind = 'info') {
   if (state.log.length > 200) state.log.length = 200
 }
 
-export async function api(method, path, body) {
+// quiet: a background read (a follow-up, see useFollow) that doesn't light up "working…".
+export async function api(method, path, body, { quiet = false } = {}) {
   const headers = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (method !== 'GET' && state.me?.csrf) headers['X-CSRF-Token'] = state.me.csrf
-  state.busy++
+  if (!quiet) state.busy++
   try {
     const res = await fetch(`/api/v1${path}`, {
       method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
@@ -36,11 +37,11 @@ export async function api(method, path, body) {
     }
     return data
   } finally {
-    state.busy--
+    if (!quiet) state.busy--
   }
 }
 
-export const get = (path) => api('GET', path)
+export const get = (path, opts) => api('GET', path, undefined, opts)
 export const post = (path, body = {}) => api('POST', path, body)
 export const put = (path, body = {}) => api('PUT', path, body)
 export const del = (path) => api('DELETE', path)

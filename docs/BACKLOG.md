@@ -17,7 +17,8 @@ move it to "Done" when it ships.
 - **Signed official plugin index.** Make the project key, sign `plugins/index.json` in CI, ship the public
   key in `src/mason/keys/`.
 - **Live updates.** GitHub/GitLab webhooks (or a GitHub App) into the operator, pushed to the browser with
-  server-sent events, so lists refresh themselves and the cache can be invalidated precisely.
+  server-sent events, so lists refresh themselves and the cache can be invalidated precisely. Until then the
+  web app follows up on its own changes by reading the touched repos again (web/src/load.js, useFollow).
 - **Scheduled checks.** Run `doctor` nightly per user or group, keep the results, and show drift over time;
   notify on new drift (email, Slack, Discord, a webhook).
 - **Access review.** Who has admin or write on each repo, outside collaborators, deploy keys and webhooks
