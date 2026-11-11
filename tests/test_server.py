@@ -943,3 +943,49 @@ def test_secrets_names_and_set(op, monkeypatch, tmp_path):
     assert "t0ken" not in json.dumps(audit) and "secret.set" in json.dumps(audit)
     assert c.post("/api/v1/repo/secrets", json={"repos": ["mike/dotfiles"], "name": "X", "value": ""},
                   headers=H).status_code == 400
+
+
+def test_detail_pages_event_logs(op):
+    _, c = op
+    c.post("/api/v1/ready", json={"repo": "acme/web", "number": 7, "dry_run": True}, headers=H)
+    c.post("/api/v1/ready", json={"repo": "acme/web", "number": 70, "dry_run": True}, headers=H)  # not #7's
+    ev = c.get("/api/v1/events?repo=acme/web&kind=pr&number=7").json["events"]
+    what = [e["what"] for e in ev]
+    assert what[0] == "dry run: ready" and ev[0]["source"] == "mason" and ev[0]["who"] == "you via web"
+    assert sum(e["source"] == "mason" for e in ev) == 1
+    assert "subscribed" not in " ".join(what)  # noise is left out
+    assert {"auto-merge on (squash)", "commented", "review: changes requested", "+label feature", "commit abc1234",
+            "opened", "check test: failure"} <= set(what)
+    by = {e["what"]: e for e in ev}
+    assert by["review: changes requested"]["state"] == "bad" and by["check test: failure"]["detail"] == "took 1m 30s"
+    assert by["commented"]["detail"] == "Added one." and "second commit" in by["commented"]["more"]
+    assert [e["at"] for e in ev if e["source"] == "github"] == sorted(
+        [e["at"] for e in ev if e["source"] == "github"], reverse=True)
+
+    issue = [e["what"] for e in c.get("/api/v1/events?repo=acme/web&kind=issue&number=3").json["events"]]
+    assert "opened" in issue and "check test: failure" not in issue
+
+    repo = c.get("/api/v1/events?repo=acme/web&kind=repo").json["events"]
+    what = [e["what"] for e in repo]
+    assert {"pushed 2 commits to main", "merged PR #4", "created tag v1.0.0", "Sponsorship",
+            "run CI: success"} <= set(what)
+    assert next(e for e in repo if e["what"] == "pushed 2 commits to main")["detail"] == "Bump deps"
+    assert any(e["source"] == "mason" for e in repo)  # the ready above is about acme/web too
+
+    rel = c.get("/api/v1/events?repo=acme/plugin-a&kind=release&tag=v1.0.0").json["events"]
+    assert {"published the release v1.0.0", "run Release: queued"} <= {e["what"] for e in rel}
+
+    run = c.get("/api/v1/events?repo=acme/web&kind=run&id=9").json["events"]
+    assert {"started by push", "job sign: failure", "step cosign: failure",
+            "finished: failure"} <= {e["what"] for e in run}
+    text = c.get("/api/v1/run?repo=acme/web&id=9").json["text"]
+    assert "CI #41" in text and "took" not in text.split("\n")[0] and "- failure    cosign" in text
+    assert "started" in text and "3m 5s" in text
+
+    assert c.get("/api/v1/events?repo=acme/web&kind=pr").status_code == 400
+    assert c.get("/api/v1/events?repo=acme/web&kind=nope").status_code == 400
+    assert c.get("/api/v1/events?repo=acme/web&kind=release").status_code == 400
+    text = c.post("/api/v1/run/rerun", json={"repo": "acme/web", "id": 9, "dry_run": True}, headers=H).json["text"]
+    assert "[dry-run] POST /repos/acme/web/actions/runs/9/rerun-failed-jobs" in text
+    run = c.get("/api/v1/events?repo=acme/web&kind=run&id=9").json["events"]
+    assert run[0]["what"] == "dry run: rerun" and run[0]["source"] == "mason"

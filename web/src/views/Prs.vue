@@ -1,12 +1,15 @@
 <script setup>
-// Pull and merge requests: all open ones, with checks, review, conflicts and auto-merge.
+// Pull and merge requests: all open ones, with checks, review, conflicts and auto-merge. Enter (or page)
+// opens one as its own page, with its event log.
 // A change shows at once: the row changes right away, and its repo is read again (only that one) a moment later
 // and then while a PR of it waits for auto-merge, so a PR that merges by itself leaves the list without r.
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { get, qs } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
+import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
@@ -48,9 +51,11 @@ async function refresh(repos) {
 const follow = useFollow({ pending: () => (data.value?.prs || []).filter((p) => p.auto).map((p) => p.repo), refresh })
 
 // What the change will have done, shown before GitHub says so (the follow-up a moment later has the last word).
-function expect(p, fields) {
+// { gone: true }: merged away.
+function expect(p, { gone, ...fields }) {
   if (!data.value) return
-  keep({ ...data.value, prs: data.value.prs.map((x) => (x.repo === p.repo && x.number === p.number ? { ...x, ...fields } : x)) })
+  const same = (x) => x.repo === p.repo && x.number === p.number
+  keep({ ...data.value, prs: gone ? data.value.prs.filter((x) => !same(x)) : data.value.prs.map((x) => (same(x) ? { ...x, ...fields } : x)) })
 }
 
 async function show() {
@@ -68,7 +73,7 @@ async function doMerge(now) {
   if (!got) return
   detail.value = got.text
   if (got.dry) return
-  if (got.ok) expect(p, now ? { merge: 'merging…' } : { auto: true, draft: false })
+  if (got.ok) expect(p, now ? { gone: true } : { auto: true, draft: false })
   follow.now([p.repo])
 }
 async function mergeAll() {
@@ -86,8 +91,10 @@ async function ready() {
   follow.now([p.repo])
 }
 const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
+const router = useRouter()
+const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }
-useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, v: cycle })
+useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, p: () => page(), v: cycle })
 </script>
 
 <template>
@@ -101,11 +108,13 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <button :disabled="!current || filter === 'merged'" @click="doMerge(true)"><span class="k">M</span> merge now</button>
       <button :disabled="!current?.draft" @click="ready"><span class="k">y</span> ready</button>
       <button :class="{ primary: diff }" @click="diff = !diff"><span class="k">d</span> diff</button>
+      <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
       <button class="any" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open pull requests'" @activate="open" /></div>
+      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open pull requests'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
+    <EventLog band :repo="current?.repo || ''" kind="pr" :number="current?.number || ''" :title="current ? `${current.repo}${current.provider === 'gitlab' ? '!' : '#'}${current.number} ${current.title}` : ''" />
   </div>
 </template>

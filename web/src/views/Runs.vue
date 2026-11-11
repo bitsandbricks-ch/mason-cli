@@ -1,10 +1,12 @@
 <script setup>
-// Workflow runs and pipelines: the newest per repo, or only the failed ones.
+// Workflow runs and pipelines: the newest per repo, or only the failed ones. Enter opens a run's page.
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import { ago } from '../ui.js'
+import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 
@@ -24,8 +26,10 @@ const columns = [
 ]
 const open = (r) => r?.url && window.open(r.url, '_blank', 'noopener')
 const current = computed(() => rows.value.find((r) => r.key === sel.value))
+const router = useRouter()
+const page = (r) => { const x = r || current.value; if (x?.id) router.push({ path: '/run', query: { repo: x.repo, id: x.id } }) }
 const toggle = () => { failed.value = !failed.value; load() }
-useKeys({ r: () => load(true), f: toggle, o: () => open(current.value) })
+useKeys({ r: () => load(true), f: toggle, o: () => open(current.value), p: () => page() })
 </script>
 
 <template>
@@ -36,7 +40,9 @@ useKeys({ r: () => load(true), f: toggle, o: () => open(current.value) })
       <label class="row">per repo <select v-model.number="limit" @change="load()"><option v-for="n in [1, 3, 5, 10, 20]" :key="n">{{ n }}</option></select></label>
       <span class="spacer" />
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
+      <button :disabled="!current?.id" @click="page()"><span class="k">p</span> page</button>
     </div>
-    <div class="scroll"><DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no runs'" @activate="open" /></div>
+    <div class="scroll"><DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no runs'" @activate="page" /></div>
+    <EventLog band :repo="current?.id ? current.repo : ''" kind="run" :number="current?.id || ''" :title="current?.id ? `${current.repo} ${current.name}` : ''" />
   </div>
 </template>

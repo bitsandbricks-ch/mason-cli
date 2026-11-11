@@ -103,3 +103,14 @@ def test_gitlab_group_filter_uses_topics(monkeypatch):
     with Flask(__name__).test_request_context("/?provider=gitlab"):
         assert api.all_repos(c, None, object(), group="tagged")[1] == ["gitlab:g/a"]
         assert api.all_repos(c, None, object(), group="gitlab:g/")[1] == ["gitlab:g/a", "gitlab:g/b"]
+
+
+def test_auto_keys_stack_and_the_repo_wins(monkeypatch):
+    c = cfg(Group("all", auto_push=True, auto_merge=True))
+    own = {"acme/site": "auto_push = false\nauto_fix = true\n"}
+    monkeypatch.setattr(config, "file_on", lambda repo, path, ref=None: own.get(repo))
+    monkeypatch.setattr(config, "_repo_loaded", {})
+    monkeypatch.setattr("mason.repos.listing", lambda cfg: {})
+    assert [config.auto(c, "acme/site", k) for k in config.AUTO] == [True, False, True]
+    assert [config.auto(c, "acme/api", k) for k in config.AUTO] == [False, True, True]
+    assert not config.auto(cfg(), "acme/api", "auto_push")
