@@ -1,11 +1,15 @@
 <script setup>
-// One repo as a page (Enter on Repos): its whole detail, what you can do with it, and what that printed.
+// One repo as a page (Enter on Repos): its whole detail, what you can do with it, and what that printed;
+// its drift against the defaults (doctor: the kept check, or checked when the page opens), its open PRs as links to their
+// pages, and its event log at the bottom. After a change, and while a release run is going, the page reads
+// the repo again by itself (see useFollow).
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { qs } from '../api.js'
-import { act, cached, forget } from '../load.js'
+import { act, cached, forget, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
 import DoctorPanel from '../components/DoctorPanel.vue'
+import EventLog from '../components/EventLog.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import SecretsPanel from '../components/SecretsPanel.vue'
 import TextPane from '../components/TextPane.vue'
@@ -19,22 +23,32 @@ const detail = ref('')
 const output = ref('')
 const form = ref('') // '', 'release' or 'tag'
 const suggest = ref('')
-const checked = ref(0) // bumped after c or f: the doctor panel shows the new result
+const publishes = ref('')
+const version = ref(null)
+const busy = ref(false) // a release run is going
 
 async function load(fresh = false) {
   if (!repo.value) return
   if (!detail.value) detail.value = '…'
   try { detail.value = (await cached(`/repo${qs({ repo: repo.value, fresh })}`, fresh)).text } catch (e) { detail.value = `error: ${e.message}` }
 }
-watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; version.value = null; suggest.value = ''; load(); loadReleases() }, { immediate: true })
+
+// doctor for this repo (DoctorPanel): the check kept for the repo list, else checked when the page opens
+const checked = ref(0) // bumped after c or f: the panel shows the new result (r checks again)
+// the open PRs (and MRs) the detail lists, as links to their pages
+const pulls = computed(() => detail.value.split('\n').map((l) => l.match(/^\s+[#!](\d+) (.*?)\s{2}https?:\S+$/))
+  .filter(Boolean).map((m) => ({ number: Number(m[1]), title: m[2] })))
+const log = ref(null)
 
 async function run(q, path, body) {
   const t = await act(q, path, body)
   if (t === null) return
   output.value = t
   forget('/status'); forget('/repo'); forget('/release')
-  if (path === '/doctor') checked.value++
   load(true)
+  follow.now([repo.value])
+  log.value?.burst()
+  if (path === '/doctor') checked.value++
 }
 const r = () => [repo.value]
 const actions = computed(() => [
@@ -48,24 +62,33 @@ const actions = computed(() => [
   { k: 'l', label: 'its releases', fn: () => router.push({ path: '/release', query: { repo: repo.value } }) },
   { k: 'o', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: open },
 ])
-const publishes = ref('')
-const version = ref(null)
-async function loadReleases(fresh = false) {
+async function loadReleases(fresh = false, quiet = false) {
   try {
-    const p = await cached(`/release${qs({ repo: repo.value, fresh })}`, fresh)
-    suggest.value = p.suggest; publishes.value = p.publishes || ''; version.value = p.version || null
+    const p = await cached(`/release${qs({ repo: repo.value, fresh })}`, fresh, { quiet })
+    suggest.value = p.suggest; publishes.value = p.publishes || ''; version.value = p.version || null; busy.value = !!p.busy
   } catch { suggest.value = suggest.value || 'v0.1.0' }
 }
+async function refresh() {
+  const name = repo.value
+  const got = await cached(`/repo${qs({ repo: name, fresh: true })}`, true, { quiet: true })
+  if (name === repo.value) detail.value = got.text
+  await loadReleases(true, true)
+}
+const follow = useFollow({ pending: () => (busy.value ? [repo.value] : []), refresh })
 async function newRelease(mode) {
   form.value = mode
   if (!suggest.value) await loadReleases()
 }
-function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); load(true); loadReleases(true) } }
+function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); follow.now([repo.value]); log.value?.burst() } }
 const open = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
 const back = () => (window.history.state?.back ? router.back() : router.push('/'))
-const keys = { Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => load(true) }
+const doctorPanel = ref(null)
+const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true) }
+const keys = { Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => reload() }
 watch(actions, (list) => list.forEach((a) => { keys[a.k] = a.fn }), { immediate: true })
 useKeys(keys)
+// last: the immediate watch uses everything above
+watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; version.value = null; suggest.value = ''; load(); loadReleases() }, { immediate: true })
 </script>
 
 <template>
@@ -74,7 +97,7 @@ useKeys(keys)
       <button class="hide-xs" @click="back"><span class="k">esc</span> back</button>
       <span class="accent hide-xs">repos › {{ repo }}</span>
       <span class="spacer" />
-      <button @click="load(true)"><span class="k">r</span> reload</button>
+      <button @click="reload"><span class="k">r</span> reload</button>
     </div>
     <div class="split page">
       <div class="pad">
@@ -82,9 +105,16 @@ useKeys(keys)
         <div class="actions">
           <button v-for="a in actions" :key="a.k" :class="{ primary: a.k === 'n' }" @click="a.fn"><span class="k">{{ a.k }}</span> {{ a.label }}</button>
         </div>
-        <DoctorPanel :repo="repo" :stamp="checked" />
+        <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" />
         <SecretsPanel v-if="!gitlab" :repo="repo" @done="({ text }) => (output = text)" />
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
+        <template v-if="pulls.length">
+          <h2 style="margin-top: 16px">{{ gitlab ? 'merge requests' : 'pull requests' }}</h2>
+          <div class="actions">
+            <router-link v-for="p in pulls" :key="p.number" class="btn" :to="{ path: '/pr', query: { repo, number: p.number } }">
+              <span class="dim">{{ gitlab ? '!' : '#' }}{{ p.number }}</span> {{ p.title }}</router-link>
+          </div>
+        </template>
       </div>
       <div class="pad">
         <VersionBar v-if="version" :repo="repo" :version="version" @done="done" />
@@ -93,5 +123,6 @@ useKeys(keys)
         <TextPane :text="detail" placeholder="loading…" />
       </div>
     </div>
+    <EventLog ref="log" band :repo="repo" kind="repo" :title="repo" />
   </div>
 </template>

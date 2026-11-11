@@ -24,7 +24,7 @@ async function submit() {
     const then = props.publishes ? `\n${props.publishes} creates the release from it.` : ''
     const text = await act(`Push the tag ${f.tag} on ${f.target || 'the default branch'} of ${f.repo}?`, '/tags',
       { repo: f.repo, tag: f.tag.trim(), target: f.target }, { detail: `only the tag is pushed${then}` })
-    if (text !== null) emit('done', { text, tag: f.tag.trim(), ok: !text.startsWith('error') && !text.includes('[dry-run]') })
+    if (text !== null) emit('done', { text, repo: f.repo, tag: f.tag.trim(), ok: !text.startsWith('error') && !text.includes('[dry-run]') })
     return
   }
   const kind = f.draft ? 'draft' : f.prerelease ? 'pre-release' : 'release'
@@ -33,7 +33,7 @@ async function submit() {
     draft: !gitlab() && f.draft, prerelease: !gitlab() && f.prerelease, generate_notes: !gitlab() && !f.notes.trim() && f.generate,
   }, { detail: `${f.title || f.tag}${f.notes ? '\n\n' + f.notes : ''}` })
   if (text === null) return
-  emit('done', { text, tag: f.tag.trim(), ok: !text.startsWith('error') && !text.includes('[dry-run]') })
+  emit('done', { text, repo: f.repo, tag: f.tag.trim(), ok: !text.startsWith('error') && !text.includes('[dry-run]') })
 }
 </script>
 

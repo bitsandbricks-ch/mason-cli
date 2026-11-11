@@ -8,7 +8,7 @@ import json
 import re
 import webbrowser
 
-from mason import core, plugins
+from mason import config, core, plugins
 from mason.config import Config, group_label, orgs_of
 from mason.core import WEB, ago, api, api_pages, for_each, graphql, newest, say, short, table
 
@@ -404,6 +404,35 @@ def auto_merge(repo: str, number: int, method: str = "squash") -> tuple[bool, st
     return False, f"auto-merge: {failed.strip()[:150]}; merge now: {now.strip()[:150]}"
 
 
+def land(cfg: Config, repo: str, base: str, branch: str, files: dict[str, tuple[str, str | None]], message: str,
+         title: str, body: str, merge: bool = False, said: str = "   PR: {url}") -> tuple[str, bool]:
+    """Put mason's file changes on `repo`: (a link, pushed straight to `base`).
+
+    With the repo's `auto_push` they go straight onto `base`; when that is refused (a protected
+    branch, a missing scope), what is left becomes a PR. Otherwise a PR on `branch`, auto-merged
+    when `merge` is set or the repo's `auto_merge` is on."""
+    if config.auto(cfg, repo, "auto_push"):
+        left = dict(files)
+        try:
+            for path, (text, sha) in files.items():
+                core.put_file(repo, base, path, text, sha, message)
+                left.pop(path)
+            say(f"   pushed {', '.join(files)} to {base} (auto_push)")
+            return f"{WEB}/{repo}/commits/{base}", True
+        except RuntimeError as err:
+            say(f"   can't push to {base} ({str(err).strip()[:150]}), so it's a PR")
+            files = left
+    url = core.open_pr(repo, base, branch, files, message, title, body)
+    if said:
+        say(said.format(url=url))
+    if (merge or config.auto(cfg, repo, "auto_merge")) and not core.dry_run():
+        allow_auto_merge(repo)
+        merged, why = auto_merge(repo, int(url.rsplit("/", 1)[-1]), "squash")
+        say(f"   auto-merge not set: {why.strip()[:200]}" if why else "   merged right away" if merged
+            else "   auto-merge on")
+    return url, False
+
+
 def merge(repo: str, ctx: dict) -> None:
     numbers = ctx.get("pick", {}).get(repo)
     if numbers:
@@ -655,6 +684,15 @@ def is_release_run(run: dict) -> bool:
 
 def run_state(run: dict) -> str:
     return run.get("conclusion") or run.get("status") or "?"
+
+
+RUNNING = ("queued", "in_progress", "waiting", "requested", "pending", "running", "created", "preparing",
+           "waiting_for_resource")
+
+
+def running(runs: list[dict]) -> bool:
+    """A release run that hasn't finished: the web app keeps reading the repo until it has."""
+    return any((r.get("conclusion") or r.get("status")) in RUNNING for r in runs[:5])
 
 
 def release_info(cfg: Config, repo: str) -> dict:

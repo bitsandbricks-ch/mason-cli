@@ -15,7 +15,7 @@ import urllib.parse
 
 from mason import config, core, extras, plugins, versions, workflows
 from mason.config import Config, Group
-from mason.core import WEB, api, compact, file_on, for_each, get_file, git_blob_sha, open_pr, say, short
+from mason.core import WEB, api, compact, file_on, for_each, get_file, git_blob_sha, say, short
 
 REPO_SETTINGS = ("allow_auto_merge", "allow_merge_commit", "allow_rebase_merge", "allow_squash_merge",
                  "allow_update_branch", "delete_branch_on_merge", "has_discussions", "has_issues",
@@ -133,7 +133,8 @@ def baseline(cfg: Config, group: Group) -> dict:
                 required_files=list(group.required_files), branch=group.branch, visibility=group.visibility,
                 description=group.description, skip=set(group.skip), environments=dict(group.environments),
                 variables=dict(group.variables), secrets=list(group.secrets), pages=group.pages,
-                homepage=group.homepage, code_scanning=group.code_scanning, autolinks=dict(group.autolinks))
+                homepage=group.homepage, code_scanning=group.code_scanning, autolinks=dict(group.autolinks),
+                auto_fix=group.auto_fix)
     return skip(want)
 
 
@@ -143,7 +144,7 @@ def overlay(want: dict, own: Group) -> dict:
                else v) for k, v in want.items()}
     for key in ("settings", "security", "labels", "actions", "variables", "autolinks", "topics", "required_files",
                 "secrets", "environments", "pages", "immutable_releases", "vulnerability_reporting", "branch",
-                "visibility", "description", "homepage", "code_scanning"):
+                "visibility", "description", "homepage", "code_scanning", "auto_fix"):
         out[key] = config.merged(key, out.get(key), getattr(own, key))
     if own.workflows is not None:
         out["workflows"] = workflows.settings(own.workflows)
@@ -408,7 +409,8 @@ def group_key(group: Group) -> tuple:
     return tuple(x.name for x in group.layers) or (group.name,)
 
 
-def doctor_ctx(cfg: Config, repos: list[str], fix: bool = False) -> dict:
+def doctor_ctx(cfg: Config, repos: list[str], fix: bool = False, auto: bool = False) -> dict:
+    """`auto`: repos with `auto_fix` get fixed without `fix` (the CLI; the web's plain check doesn't)."""
     from mason.repos import group_of
 
     groups = {r: group_of(cfg, r) for r in repos}
@@ -422,7 +424,7 @@ def doctor_ctx(cfg: Config, repos: list[str], fix: bool = False) -> dict:
     for g in refs.values():
         ref_wants[g.name] = baseline(cfg, g)
     return {"cfg": cfg, "groups": groups, "wants": wants, "ref_wants": ref_wants, "refs": list(refs.values()),
-            "fix": fix}
+            "fix": fix, "auto": auto}
 
 
 def want_of(repo: str, ctx: dict) -> tuple[dict | None, Group | None]:
@@ -471,8 +473,8 @@ def reference_check(group: Group, want: dict, fix: bool) -> None:
         f"{len(want['files'])} files, release immutability {rel}")
 
 
-def doctor_all(cfg: Config, repos: list[str], fix: bool = False) -> None:
-    ctx = doctor_ctx(cfg, repos, fix)
+def doctor_all(cfg: Config, repos: list[str], fix: bool = False, auto: bool = False) -> None:
+    ctx = doctor_ctx(cfg, repos, fix, auto)
     for g in ctx["refs"]:
         say(f"== {g.reference} (the reference)")
         reference_check(g, ctx["ref_wants"][g.name], fix)
@@ -520,7 +522,8 @@ def doctor(repo: str, ctx: dict) -> None:
     if not (want and "plugins" in want["skip"]):
         problems += plugins.hook("doctor", repo, group, ctx)
 
-    if fixable and ctx.get("fix"):
+    auto = bool(not ctx.get("fix") and ctx.get("auto") and want and want.get("auto_fix"))
+    if fixable and (ctx.get("fix") or auto):
         if want:
             more = {f.text for f in found if f.area}
             if [p for p in fixable if p not in repo_fix and p not in more]:
@@ -534,7 +537,7 @@ def doctor(repo: str, ctx: dict) -> None:
             import_rulesets(repo, {n: rs for n, (_, rs) in own.items() if not rs.get("_broken")})
             say(f"   rulesets ({', '.join(own)}) imported from .github/rulesets")
         problems = [p for p in problems if p not in fixable]
-        say(f"   fixed {len(fixable)}")
+        say(f"   fixed {len(fixable)}" + (" (auto_fix)" if auto else ""))
 
     mine = " + .mason.toml" if own_file else ""
     where = f" (group {group.name}{mine})" if group else \
@@ -664,18 +667,20 @@ def sync(repo: str, ctx: dict) -> None:
         say(f"   PR already open: {WEB}/{repo}/pulls?q=head:{branch}")
         return
     if core.dry_run():
-        say(f"   [dry-run] PR on {branch} with {len(changed)} file(s)")
+        say(f"   [dry-run] push {len(changed)} file(s) to {branch_base}" if config.auto(ctx["cfg"], repo, "auto_push")
+            else f"   [dry-run] PR on {branch} with {len(changed)} file(s)")
         return
     lines = "\n".join(f"- `{p}`" for p in changed)
     group = ctx["groups"].get(repo)
     where = group.origin if group and group.origin else ctx["cfg"].source
     source = f"{want['reference']}@{stamp[:7]}" if want.get("reference") else f"the defaults ({where})"
-    url = open_pr(repo, branch_base, branch, changed,
-                  f"chore: sync shared files with {want['label']}",
-                  f"Sync shared files with {want['label']}",
-                  f"Copies these files from {source}:\n\n{lines}\n\n"
-                  "Check the diff for changes this repo made on purpose before merging.\n\nOpened by `mason sync`.")
-    say(f"   PR: {url}")
+    from mason.repos import land
+
+    land(ctx["cfg"], repo, branch_base, branch, changed,
+         f"chore: sync shared files with {want['label']}",
+         f"Sync shared files with {want['label']}",
+         f"Copies these files from {source}:\n\n{lines}\n\n"
+         "Check the diff for changes this repo made on purpose before merging.\n\nOpened by `mason sync`.")
 
 
 # ── new repos ────────────────────────────────────────────────────────────────

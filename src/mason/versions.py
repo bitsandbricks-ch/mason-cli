@@ -24,10 +24,10 @@ from __future__ import annotations
 import re
 import time
 
-from mason import core
+from mason import config, core
 from mason import repos as R
 from mason.config import Config
-from mason.core import WEB, api, get_file, newest, open_pr, say, version_tuple
+from mason.core import WEB, api, get_file, newest, say, version_tuple
 
 PATTERNS = {  # file kind -> the version, with what comes before and after it
     "yaml": re.compile(r"""^(version:\s*["']?)([^"'\s#]+)(["']?)""", re.M),
@@ -327,19 +327,15 @@ def bump(cfg: Config, repo: str, level: str, auto: bool = False) -> None:
     for line in notes:
         say(f"      {line}")
     if core.dry_run():
-        say(f"   [dry-run] branch {branch}, PR 'Release {new}'")
+        say(f"   [dry-run] push to {base}" if config.auto(cfg, repo, "auto_push")
+            else f"   [dry-run] branch {branch}, PR 'Release {new}'")
         return
     logs = ", ".join(f"`{c}`" for c in files if c != path)
     body = (f"Sets `{path}` to {new}" + (f" and adds the {new} section to {logs}" if logs else "")
             + f". Edit the changelog here before merging.\n\nAfter the merge, `mason release {core.short(repo)}` "
             f"(R in the TUI) pushes the tag {tag_of(cfg, repo, new)}; the repo's release workflow takes it from there.")
-    url = open_pr(repo, base, branch, files, f"Release {new}", f"Release {new}", body)
-    say(f"   opened {url}")
-    if auto:
-        R.allow_auto_merge(repo)
-        merged, why = R.auto_merge(repo, int(url.rsplit("/", 1)[-1]), "squash")
-        say(f"   auto-merge not set: {why.strip()[:200]}" if why else "   merged right away" if merged
-            else "   auto-merge on")
+    R.land(cfg, repo, base, branch, files, f"Release {new}", f"Release {new}", body, merge=auto,
+           said="   opened {url}")
 
 
 def release(cfg: Config, repo: str, yes: bool = True) -> None:

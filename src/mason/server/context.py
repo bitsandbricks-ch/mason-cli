@@ -14,6 +14,7 @@ from flask import abort, g, request
 from mason import config, core
 from mason.cache import Spaces
 from mason.server import oauth
+from mason.transport import HttpTransport
 
 REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 GITLAB_REPO = re.compile(r"^gitlab:[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+$")
@@ -92,7 +93,15 @@ def as_user(dry: bool | None = None):
     except RuntimeError as err:
         abort(409, str(err))
     gtoken = config.GITLAB.set(gl)
-    if request.args.get("fresh") == "1":  # r in the web app: ask again, revalidating with ETags (cheap)
+    named = [str(r).strip() for r in request.args.getlist("repo") if str(r).strip()]
+    if request.args.get("fresh") == "1" and named:  # a follow-up on a few repos: only theirs are asked again
+        for repo in named[:50]:
+            t = gl if repo.startswith("gitlab:") else gh
+            if isinstance(t, HttpTransport):
+                t.forget_repos([repo])
+            elif t is not None:  # the gh CLI: only mason's own status nodes are cached
+                t.caches.forget_repo(repo)
+    elif request.args.get("fresh") == "1":  # r in the web app: ask again, revalidating with ETags (cheap)
         for t in (gh, gl):
             store = getattr(t, "store", None)
             if store is not None:

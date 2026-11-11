@@ -7,6 +7,7 @@ import { act, cached, useLoad } from '../load.js'
 import { useRouter } from 'vue-router'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
+import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import DoctorPanel from '../components/DoctorPanel.vue'
@@ -95,5 +96,6 @@ useKeys({ l: () => sel.value && router.push({ path: '/release', query: { repo: s
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
       </div>
     </div>
+    <EventLog band :repo="sel || ''" kind="repo" :title="sel || ''" />
   </div>
 </template>
