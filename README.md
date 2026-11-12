@@ -422,6 +422,14 @@ those now win over a group's ruleset of the same name. Anyone who can push to th
 file, so it can also turn org rules off for that repo (`skip`, or a looser setting): review it like code.
 GitLab projects read it too, for their `[gitlab]` table and the auto switches (see More repo keys).
 
+In the web app a repo's page has a **branch rules** panel: what protects its default branch now, where its
+rules come from layer by layer (your defaults, the org's `.mason`, the repo), and what's in effect. From there
+you can edit the repo's `protect` with a form (or turn it off for that repo), edit or add `.mason/mason.toml`
+and `.mason/rulesets/*.json`, and keep the repo's live rulesets in `.mason/rulesets`. Every change is
+validated and written to the repo: a pull request, or straight onto the default branch when the repo has
+`auto_push` (refused pushes become a PR), or as you pick. An org's `.mason` repo has the same panel for its
+`mason.toml` and `rulesets/` folder, always through a pull request unless you pick "commit directly".
+
 mason reads the `.mason` repo with your own login (gh, your token, or your Mason account), so a private
 `.mason` only counts for people who can read it, and each user's answer is cached in their own cache
 (5 minutes; a file written through mason drops it). `mason config` shows which `.mason` repos it found.

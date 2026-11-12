@@ -1030,3 +1030,95 @@ def test_repo_detail_has_info_for_the_status_header(op):
     assert set(prs) == {7, 8, 9}
     assert prs[8]["draft"] and prs[8]["merge"] == "draft" and prs[9]["merge"] == "conflicts"
     assert c.get("/api/v1/repo?repo=acme/api").json["info"]["released"] == "v1.10.0"
+
+
+def test_mason_files_view(op, monkeypatch):
+    """A repo's rules layer by layer: the defaults, the org's .mason, its own file; its files and live rulesets."""
+    _, c = op
+    monkeypatch.setenv("FAKE_GH_OWN", "[protect]\nchecks = [\"test\"]\n")
+    v = c.get("/api/v1/mason?repo=mike/dotfiles").json
+    assert v["kind"] == "repo" and v["settings_file"] == ".mason.toml" and v["own"]["protect"] == {"checks": ["test"]}
+    assert v["protect"] == {"checks": ["test"]} and v["protect_from"] == "the repo"
+    assert v["live_rulesets"] == ["main"] and v["protected_by"] == ["ruleset main"]
+    assert [f["path"] for f in v["files"]] == [".mason.toml"] and v["files"][0]["editable"]
+    assert v["layers"][0]["source"] == "acme/defaults" and v["layers"][-1]["source"] == "the repo"
+    api = c.get("/api/v1/mason?repo=acme/api").json
+    assert [f["path"] for f in api["files"]] == [".github/rulesets/release.json"]
+    assert not api["files"][0]["editable"] and api["protect"] is None
+    assert "main" in api["layers"][0]["rulesets"]  # the defaults' rulesets folder
+
+
+def test_mason_files_write(op, monkeypatch, tmp_path):
+    _, c = op
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    r = c.post("/api/v1/mason/protect", json={"repo": "acme/web", "protect": {"reviews": "2", "checks": "test, lint",
+                                                                              "signed_commits": True,
+                                                                              "linear_history": False}}, headers=H)
+    assert r.status_code == 200 and r.json["mode"] == "pr" and r.json["url"].endswith("/pull/99")
+    calls = log.read_text()
+    assert "-X PUT /repos/acme/web/contents/.mason/mason.toml" in calls and "pr create" in calls
+    assert c.post("/api/v1/mason/protect", json={"repo": "acme/web", "protect": {"reviews": 99}},
+                  headers=H).status_code == 400
+    # paths a repo may hold, validated before writing
+    assert c.put("/api/v1/mason/file", json={"repo": "acme/web", "path": "src/app.py", "text": "x"},
+                 headers=H).status_code == 400
+    bad = c.put("/api/v1/mason/file", json={"repo": "acme/web", "path": ".mason/rulesets/x.json", "text": "{"},
+                headers=H)
+    assert bad.status_code == 422 and "not valid JSON" in bad.json["problems"][0]
+    bad = c.post("/api/v1/mason/validate", json={"repo": "acme/web", "path": ".mason.toml",
+                                                 "text": 'match = { org = "x" }\nskip = ["nope"]\n'}, headers=H).json
+    assert "doesn't take match" in bad["problems"][0] and "skip doesn't know nope" in bad["problems"][1]
+    ok = c.put("/api/v1/mason/file", json={"repo": "acme/web", "path": ".mason.toml", "text": "auto_fix = true\n",
+                                           "mode": "commit"}, headers=H).json
+    assert ok["mode"] == "commit" and "pushed to the default branch" in ok["text"]
+    saved = c.post("/api/v1/mason/save-live", json={"repo": "acme/api"}, headers=H).json
+    assert saved["mode"] == "pr" and "-X PUT /repos/acme/api/contents/.mason/rulesets/main.json" in log.read_text()
+    audit = json.dumps(c.get("/api/v1/audit").json)
+    assert "mason.protect" in audit and "mason.save_live" in audit
+
+
+def test_mason_files_auto_push_and_org_repo(op, monkeypatch, tmp_path):
+    _, c = op
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    monkeypatch.setenv("FAKE_GH_OWN", "auto_push = true")
+    r = c.post("/api/v1/mason/protect", json={"repo": "mike/dotfiles", "protect": False}, headers=H).json
+    assert r["mode"] == "commit" and "pr create" not in log.read_text()  # auto_push: straight on main
+    monkeypatch.setenv("FAKE_GH_PROTECTED", "1")  # main refuses pushes: a PR after all
+    r = c.post("/api/v1/mason/protect", json={"repo": "mike/dotfiles", "protect": {"reviews": 1}}, headers=H).json
+    assert r["mode"] == "pr"
+    monkeypatch.setenv("FAKE_GH_MASON", "1")
+    org = c.get("/api/v1/mason?repo=mike/.mason").json
+    assert org["kind"] == "org" and [f["path"] for f in org["files"]] == ["mason.toml"]
+    assert c.put("/api/v1/mason/file", json={"repo": "mike/.mason", "path": ".mason.toml", "text": ""},
+                 headers=H).status_code == 400
+    warn = c.post("/api/v1/mason/validate", json={"repo": "mike/.mason", "path": "mason.toml",
+                                                  "text": 'orgs = ["x"]\n[[group]]\nname = "a"\n'}, headers=H).json
+    assert "only [[group]] tables count" in warn["problems"][0]
+
+
+def test_mason_files_dry_run(op, monkeypatch, tmp_path):
+    _, c = op
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    r = c.post("/api/v1/mason/protect", json={"repo": "acme/web", "protect": {"reviews": 1}, "dry_run": True},
+               headers=H).json
+    assert r["dry"] and "[dry-run] write .mason/mason.toml in a pull request" in r["text"]
+    assert "reviews = 1" in r["text"]
+    assert "-X PUT" not in log.read_text() and "pr create" not in log.read_text()
+
+
+def test_protect_written_into_a_repos_file():
+    from mason import config
+    from mason.server.api.masonfiles import with_protect
+
+    text = ('# mine\nauto_fix = true\nprotect = { reviews = 1 }\n\n[release]\nversion = "x"\n\n'
+            '[protect]\nchecks = ["a"]\n')
+    out = with_protect(text, {"reviews": 2, "checks": ["test"], "signed_commits": True})
+    assert out == ('# mine\nauto_fix = true\n\n[release]\nversion = "x"\n\n[protect]\nreviews = 2\n'
+                   'checks = ["test"]\nsigned_commits = true\n')
+    off = with_protect(out, False)
+    assert config.parse_defaults(off) == {"auto_fix": True, "protect": False, "release": {"version": "x"}}
+    assert "protect" not in config.parse_defaults(with_protect(off, None))
+    assert with_protect("", {"reviews": 1}) == "[protect]\nreviews = 1\n"
