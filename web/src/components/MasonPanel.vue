@@ -11,6 +11,7 @@ import { forget } from '../load.js'
 import { get, log, post, put, qs, state } from '../api.js'
 import { ask } from '../ui.js'
 import ErrorNote from './ErrorNote.vue'
+import RulesetForm from './RulesetForm.vue'
 
 const props = defineProps({ repo: { type: String, required: true } })
 const emit = defineEmits(['done'])
@@ -87,9 +88,23 @@ async function saveProtect(value) {
 const formValue = () => Object.fromEntries(Object.entries(form.value).filter(([, v]) => v !== '' && v !== false))
 
 // ── files ──
+const view = ref('form') // a ruleset file: 'form' or 'json'
 async function openFile(f) {
   file.value = { ...f, original: f.text, isNew: false }
+  view.value = 'form'
 }
+// mason's own rules only: the repo's .github/rulesets files stop counting (skip = ["github_rulesets"])
+async function ignoreGithub(on) {
+  await send(on ? `Let ${props.repo} ignore its .github/rulesets files (mason's rules count)?`
+    : `Check ${props.repo}'s .github/rulesets files again?`, post, '/mason/skip', { repo: props.repo, check: 'github_rulesets', on })
+}
+async function moveGithub(paths, remove) {
+  const names = paths.map((p) => p.split('/').pop()).join(', ')
+  const got = await send(remove ? `Remove ${names} from ${props.repo}'s .github/rulesets?`
+    : `Move ${names} from .github/rulesets to .mason/rulesets in ${props.repo}?`, post, '/mason/move', { repo: props.repo, paths, remove })
+  if (got && !got.dry && file.value && paths.includes(file.value.path)) file.value = null
+}
+const githubFiles = computed(() => (data.value?.files || []).filter((f) => f.path.startsWith('.github/')))
 async function newFile(kind) {
   if (kind === 'settings') {
     file.value = { path: '.mason/mason.toml', text: '# this repo\'s own mason settings: they win over every group\n[protect]\nreviews = 1\n', original: '', problems: [], editable: true, isNew: true }
@@ -195,10 +210,22 @@ defineExpose({ load })
         <div class="dim">{{ org ? 'files' : 'its files' }}{{ data.files.length ? '' : ': none yet' }}</div>
         <div v-for="f in data.files" :key="f.path" class="row">
           <a href="#" @click.prevent="openFile(f)">{{ f.path }}</a>
-          <span v-if="!f.editable" class="dim">(read here; .mason/rulesets is where mason writes)</span>
+          <span v-if="f.ignored" class="dim">(ignored: mason's rules count)</span>
+          <template v-if="f.path.startsWith('.github/')">
+            <button title="the same file in .mason/rulesets, and the .github one removed" @click="moveGithub([f.path], false)">move to .mason</button>
+            <button class="danger" @click="moveGithub([f.path], true)">remove</button>
+          </template>
           <span v-if="f.problems?.length" class="warn">{{ f.problems.length }} problem{{ f.problems.length === 1 ? '' : 's' }}</span>
         </div>
       </div>
+
+      <div v-if="githubFiles.length > 1" class="row" style="margin-top: 6px">
+        <button @click="moveGithub(githubFiles.map((f) => f.path), false)">move all of .github/rulesets to .mason</button>
+      </div>
+      <label v-if="!org && github && (githubFiles.length || data.github_rulesets_ignored)" class="check" style="margin-top: 6px">
+        <input type="checkbox" :checked="data.github_rulesets_ignored" @change="ignoreGithub($event.target.checked)">
+        ignore .github/rulesets: mason's rules (defaults, org .mason, .mason/rulesets) are the ones that count
+      </label>
 
       <div v-if="file" class="box">
         <div class="row">
@@ -212,7 +239,12 @@ defineExpose({ load })
           </template>
           <button @click="file = null">close</button>
         </div>
-        <textarea v-model="file.text" class="editor" spellcheck="false" :readonly="!file.editable" :aria-label="file.path"
+        <div v-if="file.path.endsWith('.json')" class="row tabs">
+          <button :class="{ primary: view === 'form' }" @click="view = 'form'">form</button>
+          <button :class="{ primary: view === 'json' }" @click="view = 'json'">JSON</button>
+        </div>
+        <RulesetForm v-if="file.path.endsWith('.json') && view === 'form'" v-model="file.text" />
+        <textarea v-else v-model="file.text" class="editor" spellcheck="false" :readonly="!file.editable" :aria-label="file.path"
                   @keydown="tab" @blur="file.editable && check()" />
         <div v-for="(p, i) in file.problems" :key="i" class="bad">- {{ p }}</div>
       </div>
@@ -231,4 +263,5 @@ defineExpose({ load })
 .files { margin-top: 8px; }
 .box { margin-top: 8px; }
 .box textarea.editor { min-height: 30vh; }
+.tabs { margin-top: 6px; }
 </style>

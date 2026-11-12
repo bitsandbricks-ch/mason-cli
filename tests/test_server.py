@@ -1044,7 +1044,7 @@ def test_mason_files_view(op, monkeypatch):
     assert v["layers"][0]["source"] == "acme/defaults" and v["layers"][-1]["source"] == "the repo"
     api = c.get("/api/v1/mason?repo=acme/api").json
     assert [f["path"] for f in api["files"]] == [".github/rulesets/release.json"]
-    assert not api["files"][0]["editable"] and api["protect"] is None
+    assert api["files"][0]["editable"] and api["protect"] is None  # .github/rulesets can be edited too
     assert "main" in api["layers"][0]["rulesets"]  # the defaults' rulesets folder
 
 
@@ -1192,3 +1192,73 @@ def test_repo_settings_dry_run(op, monkeypatch, tmp_path):
     assert "[dry-run] acme/web: set allow_squash_merge" in r["text"]
     assert "[dry-run] write .mason/mason.toml" in r["text"]
     assert "-X PATCH" not in log.read_text() and "-X PUT" not in log.read_text()
+
+
+def test_merge_bypassing_the_rules(op, monkeypatch, tmp_path):
+    """Bypass shows rule by rule whether you may; the merge passes --admin and is audited as a bypass."""
+    _, c = op
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    b = c.get("/api/v1/pr/bypass?repo=acme/api&number=7").json
+    assert b["base"] == "main" and not b["can"] and b["rules"] == [
+        {"name": "main", "source": "acme/api", "can": False, "why": "you may not bypass it"}]
+    monkeypatch.setenv("FAKE_GH_BYPASS", "always")
+    assert c.get("/api/v1/pr/bypass?repo=acme/api&number=7").json["can"]
+    assert not c.get("/api/v1/pr/bypass?repo=acme/web&number=7").json["can"]  # no rules: nothing to bypass
+    monkeypatch.setenv("FAKE_GH_CLASSIC", "acme/web")  # classic protection, admins not included: an admin may
+    b = c.get("/api/v1/pr/bypass?repo=acme/web&number=7").json
+    assert b["can"] and b["rules"][0]["why"] == "you're an admin"
+    r = c.post("/api/v1/merge", json={"targets": ["acme/web#7"], "bypass": True}, headers=H).json
+    assert "merged, bypassing the branch rules" in r["text"]
+    assert "pr merge 7 --repo acme/web --squash --delete-branch --admin" in log.read_text()
+    assert "merge-bypass" in json.dumps(c.get("/api/v1/audit").json)
+    assert c.post("/api/v1/merge", json={"bypass": True, "all": True}, headers=H).status_code == 400
+
+
+def test_ignore_github_rulesets_and_edit_them(op, monkeypatch, tmp_path):
+    _, c = op
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    v = c.get("/api/v1/mason?repo=acme/api").json
+    assert v["files"][0]["editable"] and not v["github_rulesets_ignored"] and not v["files"][0]["ignored"]
+    r = c.post("/api/v1/mason/skip", json={"repo": "acme/api", "check": "github_rulesets", "dry_run": True},
+               headers=H).json
+    assert 'skip = ["github_rulesets"]' in r["text"] and ".mason/mason.toml" in r["text"]
+    assert c.post("/api/v1/mason/skip", json={"repo": "acme/api", "check": "nope"}, headers=H).status_code == 400
+    ok = c.put("/api/v1/mason/file", json={"repo": "acme/api", "path": ".github/rulesets/release.json",
+                                           "text": '{"name": "release", "target": "tag", "rules": []}\n'},
+               headers=H).json
+    assert ok["mode"] == "pr" and "-X PUT /repos/acme/api/contents/.github/rulesets/release.json" in log.read_text()
+    monkeypatch.setenv("FAKE_GH_OWN", 'skip = ["github_rulesets"]')
+    v = c.get("/api/v1/mason?repo=mike/dotfiles").json
+    assert v["github_rulesets_ignored"]
+
+
+def test_with_skip_keeps_the_rest():
+    from mason import config
+    from mason.server.api.masonfiles import with_skip
+
+    text = '# mine\nauto_fix = true\n\n[protect]\nreviews = 1\n'
+    on = with_skip(text, "github_rulesets", True)
+    assert config.parse_defaults(on) == {"auto_fix": True, "skip": ["github_rulesets"], "protect": {"reviews": 1}}
+    assert on.startswith("# mine\n")
+    both = with_skip(with_skip(on, "protect", True), "github_rulesets", False)
+    assert config.parse_defaults(both)["skip"] == ["protect"]
+    assert with_skip('skip = ["protect"]\n', "protect", False) == ""
+
+
+def test_move_or_remove_github_rulesets(op, monkeypatch, tmp_path):
+    _, c = op
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    paths = [".github/rulesets/release.json"]
+    r = c.post("/api/v1/mason/move", json={"repo": "acme/api", "paths": paths}, headers=H).json
+    calls = log.read_text()
+    assert r["mode"] == "pr" and "-X PUT /repos/acme/api/contents/.mason/rulesets/release.json" in calls
+    assert "-X DELETE /repos/acme/api/contents/.github/rulesets/release.json" in calls
+    log.write_text("")
+    r = c.post("/api/v1/mason/move", json={"repo": "acme/api", "paths": paths, "remove": True}, headers=H).json
+    calls = log.read_text()
+    assert "-X DELETE /repos/acme/api/contents/.github/rulesets/release.json" in calls and "-X PUT" not in calls
+    assert c.post("/api/v1/mason/move", json={"repo": "acme/api", "paths": [".mason.toml"]},
+                  headers=H).status_code == 400

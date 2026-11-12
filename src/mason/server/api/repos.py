@@ -276,15 +276,39 @@ def merge():
         gh_r, gl_r, pick = all_repos(cfg, gh, gl, targets, data.get("group"))
         if not targets and not data.get("all"):
             abort(400, "name the PRs (targets), or send all: true to auto-merge every ready PR")
-        ctx = {"pick": pick, "now": bool(data.get("now")), "ready": bool(data.get("ready")), "method": method}
+        bypass = bool(data.get("bypass"))
+        if bypass and (not targets or any(is_gl(t) for t in targets)):
+            abort(400, "bypass names GitHub PRs (owner/name#12)")
+        ctx = {"pick": pick, "now": bool(data.get("now")) or bypass, "ready": bool(data.get("ready")),
+               "method": method, "bypass": bypass}
         text = capture_rate(core.for_each, gh_r, R.merge, ctx) if gh_r else ""
         for repo in gl_r:
             text += f"== {repo}\n" + capture_rate(GL.merge, gl, repo, ctx)
         R._nodes.clear()
         if gl:
             gl.caches.pop("gl_nodes", None)
-    audit("merge-now" if ctx["now"] else "merge", ", ".join(targets) or "all ready", dry, detail=text)
+    kind = "merge-bypass" if ctx["bypass"] else "merge-now" if ctx["now"] else "merge"
+    audit(kind, ", ".join(targets) or "all ready", dry, detail=text)
     return jsonify({"text": text})
+
+
+@bp.get("/pr/bypass")
+@need("read")
+def pr_bypass():
+    """Whether you may merge the PR past its branch rules, rule by rule (GitHub only)."""
+    repo = valid_repo(request.args.get("repo", ""))
+    number = request.args.get("number", type=int)
+    if not number:
+        abort(400, "number: the PR number")
+    if is_gl(repo):
+        return jsonify({"can": False, "rules": [], "note": "GitLab has no bypass: unprotect the branch instead"})
+    with as_user():
+        try:
+            return jsonify(R.bypass_status(repo, number))
+        except core.RateLimited as err:
+            abort(429, str(err))
+        except RuntimeError as err:
+            abort(502, str(err).splitlines()[0][:200])
 
 
 @bp.post("/ready")

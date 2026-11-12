@@ -158,6 +158,8 @@ if os.environ.get("FAKE_GH_FOLDER"):  # mike/dotfiles keeps mason's files in a .
     _dots = REPOS["mike/dotfiles"][2]
     _dots[".mason/mason.toml"] = os.environ["FAKE_GH_FOLDER"] + "\n" + _dots.pop(".mason.toml")
     _dots[".mason/rulesets/tags.json"] = json.dumps(RELEASE_RS)
+if os.environ.get("FAKE_GH_DOTS_RS"):  # mike/dotfiles has a ruleset file in .github/rulesets too
+    REPOS["mike/dotfiles"][2][".github/rulesets/tags.json"] = json.dumps(RELEASE_RS)
 RS_IDS = {}
 for repo, (_, rsets, _, _) in REPOS.items():
     for i, name in enumerate(rsets):
@@ -186,7 +188,7 @@ def info(repo):
             "default_branch": "main", "is_template": name == "plugin-tpl", "pushed_at": "2024-01-01T00:00:00Z" if name == "web" else "2026-11-01T00:00:00Z",
             "topics": TOPICS.get(name, []), "private": owner == "mike",
             "security_and_analysis": {"secret_scanning": {"status": "enabled" if repo != "acme/web" else "disabled"}},
-            **settings}
+            **settings, **({"permissions": {"admin": True}} if os.environ.get("FAKE_GH_CLASSIC") == repo else {})}
 
 
 def node(repo):
@@ -384,11 +386,14 @@ if argv[0] == "api":
     if rest.startswith("/rules/branches/"):  # the rules that apply to a branch: every live branch ruleset's
         out([{"type": r["type"], "ruleset_source_type": "Repository", "ruleset_source": repo, "ruleset_id": i + 1}
              for i, rs in enumerate(rsets.values()) if rs.get("target") == "branch" for r in rs["rules"]])
+    if rest == "/branches/main/protection" and os.environ.get("FAKE_GH_CLASSIC") == repo:
+        out({"enforce_admins": {"enabled": False}})
     if rest == "/branches/main" and os.environ.get("FAKE_GH_CLASSIC") == repo:  # classic branch protection
         out({"name": "main", "protected": True})
     m = re.match(r"/rulesets/(\d+)$", rest)
     if m:
-        out({**rsets[RS_IDS[(repo, int(m.group(1)))]], "id": int(m.group(1))})
+        out({**rsets[RS_IDS[(repo, int(m.group(1)))]], "id": int(m.group(1)),
+             "current_user_can_bypass": os.environ.get("FAKE_GH_BYPASS", "never")})
     if rest.startswith("/contents/"):
         contents(repo, rest[len("/contents/"):])
     if rest.startswith("/git/trees/"):

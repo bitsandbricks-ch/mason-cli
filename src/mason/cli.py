@@ -88,6 +88,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
         sp.add_argument("repos", nargs="*", help=names)
         if cmd == "merge":
             sp.add_argument("--now", action="store_true", help="merge right away, not via auto-merge")
+            sp.add_argument("--admin", action="store_true",
+                            help="merge right away past the branch rules, where GitHub lets you bypass them")
             sp.add_argument("--ready", action="store_true", help="mark named draft PRs ready first")
             sp.add_argument("--method", choices=("squash", "merge", "rebase"), default="squash")
         if cmd == "approve":
@@ -486,7 +488,8 @@ def run(cfg, args, names: list[str], pick: dict) -> None:
     if args.cmd == "auto":
         return auto.run(cfg, names)
     if args.cmd == "merge":
-        ctx = {"pick": pick, "now": args.now, "ready": args.ready, "method": args.method}
+        ctx = {"pick": pick, "now": args.now or args.admin, "ready": args.ready, "method": args.method,
+               "bypass": args.admin}
         return core.for_each(names, repos.merge, ctx)
     return None
 

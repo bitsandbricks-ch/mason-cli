@@ -129,7 +129,7 @@ CHECKS = ("settings", "security", "vulnerability_reporting", "immutable_releases
           "files", "required_files", "topics", "labels", "actions", "branch", "visibility", "description", "workflows",
           "plugins", "version", "environments", "variables", "secrets", "pages", "homepage", "code_scanning",
           "autolinks", "protect", "dependabot", "renovate", "codeowners", "templates", "release_notes", "discussions",
-          "social_preview", "archive", "properties", "webhooks", "deploy_keys")
+          "social_preview", "archive", "properties", "webhooks", "deploy_keys", "github_rulesets")
 
 
 def config_dir() -> Path:

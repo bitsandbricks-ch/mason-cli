@@ -43,7 +43,14 @@ async function load() {
     state.value = parse(t)
   } catch (e) { detail.value = `error: ${e.message}` }
 }
-watch([repo, number], () => { detail.value = ''; output.value = ''; load() }, { immediate: true })
+// whether you may merge past the base branch's rules (GitHub's bypass), rule by rule
+const bypass = ref(null)
+async function loadBypass() {
+  bypass.value = null
+  if (gitlab.value || !repo.value || !number.value) return
+  try { bypass.value = await get(`/pr/bypass${qs({ repo: repo.value, number: number.value })}`, { quiet: true }) } catch { bypass.value = null }
+}
+watch([repo, number], () => { detail.value = ''; output.value = ''; load(); loadBypass() }, { immediate: true })
 watch(diff, load)
 
 // after a change: show it now, then ask again (GitHub takes a moment to show auto-merge and merges)
@@ -62,6 +69,13 @@ async function merge_(now) {
   if (!open.value) return
   const t = await act(`${now ? 'Merge' : 'Auto-merge'} ${ref_.value}?`, '/merge', { targets: [target.value], now, ready: state.value.draft })
   if (t !== null) changed(t, now ? { merged: true, draft: false } : { auto: true, draft: false })
+}
+async function mergeBypass() {
+  const b = bypass.value
+  if (!open.value || !b?.can) return
+  const t = await act(`Merge ${ref_.value} now, bypassing the branch rules?`, '/merge', { targets: [target.value], bypass: true, ready: state.value.draft },
+    { detail: `Skips what ${b.base} asks for (reviews, checks): ${b.rules.map((r) => `${r.name} (${r.why})`).join(', ')}. The audit log keeps it.` })
+  if (t !== null) changed(t, { merged: true, draft: false })
 }
 async function ready() {
   if (!state.value.draft) return
@@ -111,6 +125,7 @@ const badges = computed(() => {
   if (review.value) out.push({ label: 'review', value: review.value.replace(/^review /, '') })
   if (open.value && merge.value) out.push({ label: 'merge', value: merge.value.replace(/:.*/, ''), cls: /^(ready|mergeable)/.test(merge.value) ? 'ok' : undefined })
   if (st.auto && open.value) out.push({ label: 'auto-merge', value: 'on', cls: 'ok' })
+  if (open.value && bypass.value?.rules?.length) out.push({ label: 'bypass', value: bypass.value.can ? 'you may' : 'not allowed', cls: bypass.value.can ? 'warn' : '' })
   const size = field('size')
   if (size) out.push({ label: 'size', value: size, cls: '' })
   return out
@@ -130,6 +145,7 @@ const back = () => (window.history.state?.back ? router.back() : router.push('/p
 const actions = computed(() => [
   { k: 'm', group: 'merge', primary: true, label: state.value.auto ? 'auto-merge is on' : 'auto-merge when checks pass', fn: () => merge_(false), off: !open.value || state.value.auto },
   { k: 'M', group: 'merge', label: 'merge now', fn: () => merge_(true), off: !open.value },
+  { k: 'B', group: 'merge', label: 'merge now, bypassing the rules', fn: mergeBypass, off: !open.value || !bypass.value?.can },
   { k: 'y', group: 'merge', label: 'mark ready for review', fn: ready, off: !state.value.draft || !open.value },
   { k: 'd', group: 'look', label: diff.value ? 'hide the diff' : 'show the diff', fn: () => { diff.value = !diff.value } },
   { k: 'o', group: 'look', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: visit },

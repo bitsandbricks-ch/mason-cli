@@ -34,7 +34,7 @@ from mason.server.context import as_user, load_config, valid_repo
 
 bp = Blueprint("masonfiles", __name__, url_prefix="/api/v1/mason")
 SETTINGS_FILES = (config.REPO_LAYER, config.REPO_FOLDER_FILE)
-RULESET_FILE = re.compile(r"^\.mason/rulesets/[A-Za-z0-9_.@ -]+\.json$")
+RULESET_FILE = re.compile(r"^\.(mason|github)/rulesets/[A-Za-z0-9_.@ -]+\.json$")
 ORG_FILE = re.compile(r"^(mason\.toml|rulesets/.+\.json|files/.+)$")
 # what the protect form may set, and of which kind
 PROTECT_KEYS = {"reviews": int, "checks": list, "signed_commits": bool, "linear_history": bool, "code_owners": bool,
@@ -140,7 +140,8 @@ def check_target(repo: str, path: str) -> str:
         if not ORG_FILE.match(path):
             abort(400, "an org's .mason repo holds mason.toml, rulesets/**.json and files/**")
     elif path not in SETTINGS_FILES and not RULESET_FILE.match(path):
-        abort(400, "a repo's mason files are .mason.toml, .mason/mason.toml and .mason/rulesets/*.json")
+        abort(400, "a repo's mason files are .mason.toml, .mason/mason.toml, .mason/rulesets/*.json and "
+                   ".github/rulesets/*.json")
     if is_gl(repo) and path.endswith(".json") and not is_org_repo(repo):
         abort(400, "GitLab has no rulesets: use [gitlab] protected_branches, or protect")
     return path
@@ -166,8 +167,8 @@ def mine(repo: str, paths: list[str]) -> list[str]:
     """The repo's own mason files among `paths` (an org's .mason: its mason.toml and rulesets)."""
     if is_org_repo(repo):
         return [p for p in paths if p == config.DEFAULTS_FILE or (p.startswith("rulesets/") and p.endswith(".json"))]
-    own = [p for p in paths if p in SETTINGS_FILES or RULESET_FILE.match(p)]
-    return own + [p for p in paths if p.startswith(".github/rulesets/") and p.endswith(".json")]
+    own = [p for p in paths if p in SETTINGS_FILES or (RULESET_FILE.match(p) and p.startswith(".mason/"))]
+    return own + [p for p in paths if RULESET_FILE.match(p) and p.startswith(".github/")]
 
 
 def origin_label(cfg, group) -> str:
@@ -240,8 +241,7 @@ def view():
         files = []
         for p in mine(repo, paths):
             text = read(gl, repo, p) or ""
-            files.append({"path": p, "text": text, "problems": validate(repo, p, text) if p != ".github/rulesets"
-                          and not p.startswith(".github/") else [], "editable": not p.startswith(".github/")})
+            files.append({"path": p, "text": text, "problems": validate(repo, p, text), "editable": True})
         out = {"repo": repo, "provider": "gitlab" if is_gl(repo) else "github", "files": files,
                "kind": "org" if is_org_repo(repo) else "repo"}
         if is_org_repo(repo):
@@ -268,11 +268,15 @@ def view():
             except RuntimeError as err:
                 out["live_error"] = str(err).splitlines()[0][:200]
         auto_push = config.auto(cfg, repo, "auto_push") if not is_gl(repo) else GL.auto_of(gl, cfg, repo, "auto_push")
-        out.update({"layers": rows, "settings_file": own_path, "own": {"protect": own.get("protect"),
-                                                                        "skip": config._list(own.get("skip"))},
+        ignored = "github_rulesets" in config._list(own.get("skip")) or any(
+            "github_rulesets" in (r.get("skip") or []) for r in rows)
+        for f in files:
+            f["ignored"] = ignored and f["path"].startswith(".github/")
+        out.update({"github_rulesets_ignored": ignored, "layers": rows, "settings_file": own_path,
+                    "own": {"protect": own.get("protect"), "skip": config._list(own.get("skip"))},
                     "protect": spec, "protect_from": last, "protect_skipped": skipped,
                     "default_branch": branch, "live_rulesets": live, "protected_by": protected_by,
-                    "auto_push": auto_push, "org_repos": [w for w in config.org_candidates(repo)]})
+                    "auto_push": auto_push, "org_repos": list(config.org_candidates(repo))})
     return jsonify(out)
 
 
@@ -530,6 +534,90 @@ def set_protect():
         else "set branch protection"
     return commit(repo, {path: new or None}, str(data.get("mode") or "auto"), f"{what[0].upper()}{what[1:]} (Mason)",
                   "mason.protect", write_allowed(bool(data.get("dry_run"))))
+
+
+SKIPPABLE = {"github_rulesets": "mason ignores .github/rulesets: only its own rules count",
+             "own_rulesets": "mason ignores the repo's ruleset files (.github/rulesets and .mason/rulesets)",
+             "protect": "no protect and no default branch check here"}
+
+
+def with_skip(text: str, check: str, on: bool) -> str:
+    """`text` (a repo's .mason.toml) with `check` added to (or taken out of) its top-level skip list."""
+    try:
+        have = config._list(config.parse_defaults(text).get("skip")) if text.strip() else []
+    except RuntimeError:
+        abort(422, "the repo's settings file doesn't parse: fix it in the editor first")
+    want = [c for c in have if c != check] + ([check] if on else [])
+    lines = text.splitlines()
+    first = next((n for n, x in enumerate(lines) if HEADER.match(x)), len(lines))
+    at = next((n for n, x in enumerate(lines[:first]) if re.match(r"^\s*skip\s*=", x)), None)
+    if at is not None and "]" not in lines[at]:
+        abort(422, "skip spans several lines: change it in the editor")
+    line = f"skip = {toml_value(want)}" if want else None
+    if at is not None:
+        lines[at:at + 1] = [line] if line else []
+    elif line:
+        lines.insert(first, line)
+    return "\n".join(lines).strip("\n") + "\n" if any(x.strip() for x in lines) else ""
+
+
+@bp.post("/skip")
+@need("write")
+def set_skip():
+    """Turn one check off (or back on) in the repo's own settings file, e.g. github_rulesets: mason's own rules
+    (defaults, the org's .mason, .mason/rulesets) count, the repo's .github/rulesets files don't."""
+    data = body()
+    repo = valid_repo(str(data.get("repo", "")))
+    check = str(data.get("check") or "")
+    if check not in SKIPPABLE:
+        abort(400, f"check is one of {', '.join(SKIPPABLE)}")
+    if is_org_repo(repo):
+        abort(400, "an org's .mason sets skip on its groups: edit its mason.toml")
+    on = bool(data.get("on", True))
+    with as_user() as (_gh, gl):
+        if is_gl(repo) and gl is None:
+            abort(409, "connect GitLab first")
+        path, text = config.repo_file(lambda p: read(gl, repo, p), repo)
+    if text is None:
+        path = config.REPO_FOLDER_FILE
+    new = with_skip(text or "", check, on)
+    problems = validate_settings(new)
+    if problems:
+        return jsonify({"problems": problems}), 422
+    if (text or "") == new:
+        return jsonify({"text": f"{path} already says that", "url": "", "mode": ""})
+    what = f"{'Skip' if on else 'Check'} {check} ({SKIPPABLE[check] if on else 'again'}) (Mason)"
+    return commit(repo, {path: new or None}, str(data.get("mode") or "auto"), what, "mason.skip",
+                  write_allowed(bool(data.get("dry_run"))))
+
+
+@bp.post("/move")
+@need("write")
+def move_github():
+    """Take over .github/rulesets files: each goes to .mason/rulesets (same name), the .github copy is removed, in
+    one change. `remove: true` only removes them (mason's other rules take over)."""
+    data = body()
+    repo = valid_repo(str(data.get("repo", "")))
+    if is_gl(repo) or is_org_repo(repo):
+        abort(400, "only a GitHub repo has .github/rulesets")
+    paths = [check_target(repo, str(p)) for p in (data.get("paths") or [])][:50]
+    if not paths or any(not p.startswith(".github/rulesets/") for p in paths):
+        abort(400, "paths: files in .github/rulesets")
+    remove = bool(data.get("remove"))
+    changes: dict[str, str | None] = {}
+    with as_user() as (_gh, gl):
+        for p in paths:
+            text = read(gl, repo, p)
+            if text is None:
+                abort(404, f"{p} isn't in {repo}")
+            if not remove:
+                changes[".mason/rulesets/" + p.rsplit("/", 1)[-1]] = text
+            changes[p] = None
+    what = "Remove" if remove else "Move"
+    where = "" if remove else " to .mason/rulesets"
+    return commit(repo, changes, str(data.get("mode") or "auto"),
+                  f"{what} {', '.join(x.rsplit('/', 1)[-1] for x in paths)} from .github/rulesets{where} (Mason)",
+                  "mason.move", write_allowed(bool(data.get("dry_run"))))
 
 
 @bp.post("/save-live")
