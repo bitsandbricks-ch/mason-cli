@@ -489,6 +489,10 @@ ruff check .
 cd web && npm ci && npm run build   # Mason's UI (npm run dev for a live-reloading one)
 ```
 
+## Support
+
+If Mason is useful to you, you can [buy me a coffee](https://buymeacoffee.com/bitsandbricks).
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
