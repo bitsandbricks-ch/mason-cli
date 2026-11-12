@@ -111,7 +111,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   connected accounts, API keys, sessions and plugin secrets.
 - **Keys:** arrows or `j`/`k` move, Enter acts, `/` filters, `r` reloads, `t` switches the theme
   (bricks, dark, or mortar, light) and saves your choice to your account, so every browser you sign in
-  with uses it; `?` lists the keys.
+  with uses it; `?` lists the keys. A list takes the keys as soon as it opens. On a detail page (a repo,
+  a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
+  only from a tab's own list.
 
 ## Run it
 
