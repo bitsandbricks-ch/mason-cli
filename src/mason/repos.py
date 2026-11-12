@@ -351,11 +351,17 @@ def merge_one(repo: str, p: dict, ctx: dict, named: bool) -> None:
     if p.get("mergeable") == "CONFLICTING":
         say(f"   {label}: has conflicts, left open{link}")
         return
-    how = "merge now" if ctx.get("now") else "auto-merge"
+    how = "merge now, bypassing the branch rules," if ctx.get("bypass") else "merge now" if ctx.get("now") \
+        else "auto-merge"
     if core.dry_run():
         say(f"   [dry-run] {how} {label}{link}")
         return
     method = ctx.get("method") or "squash"
+    if ctx.get("bypass"):
+        failed = core.transport().pr_merge(repo, p["number"], method, auto=False, admin=True)
+        say(f"   {label}: not merged: {failed}{link}" if failed else
+            f"   {label}: merged, bypassing the branch rules{link}")
+        return
     if ctx.get("now"):
         failed = core.transport().pr_merge(repo, p["number"], method, auto=False)
         say(f"   {label}: not merged: {failed}{link}" if failed else f"   {label}: merged{link}")
@@ -367,6 +373,43 @@ def merge_one(repo: str, p: dict, ctx: dict, named: bool) -> None:
         say(f"   {label}: merged right away (GitHub couldn't auto-merge it){link}")
     else:
         say(f"   {label}: auto-merge on (merges when checks are green){link}\n      checks: {p['url']}/checks")
+
+
+BYPASSES = {"always": "you may always bypass it", "pull_requests_only": "you may bypass it on a PR",
+            "exempt": "you're exempt from it", "never": "you may not bypass it"}
+
+
+def bypass_status(repo: str, number: int) -> dict:
+    """Whether you may merge the PR past its base branch's rules (GitHub's admin bypass), and why.
+
+    {"base", "blocked", "rules": [{"name", "source", "can", "why"}], "can": bool}. The rules are every ruleset
+    that applies to the base branch (the repo's and its org's) and classic branch protection. `can` is true
+    when there are rules and you may bypass each one."""
+    from mason import rules as RR
+
+    pr = core.api("GET", f"/repos/{repo}/pulls/{int(number)}") or {}
+    base = (pr.get("base") or {}).get("ref") or "main"
+    out: dict = {"base": base, "state": pr.get("mergeable_state") or "", "rules": []}
+    seen = set()
+    for rule in RR._get(f"/repos/{repo}/rules/branches/{RR.q(base)}") or []:
+        rid = rule.get("ruleset_id")
+        if rid in seen:
+            continue
+        seen.add(rid)
+        rs = RR._get(f"/repos/{repo}/rulesets/{rid}?includes_parents=true") or {}
+        can = rs.get("current_user_can_bypass") or "never"
+        src = rule.get("ruleset_source") if rule.get("ruleset_source_type") == "Organization" else ""
+        out["rules"].append({"name": rs.get("name") or f"ruleset {rid}", "source": src or repo,
+                             "can": can in ("always", "pull_requests_only", "exempt"), "why": BYPASSES.get(can, can)})
+    prot = RR._get(f"/repos/{repo}/branches/{RR.q(base)}/protection")
+    if prot:
+        admin = bool(((core.api("GET", f"/repos/{repo}") or {}).get("permissions") or {}).get("admin"))
+        enforced = bool((prot.get("enforce_admins") or {}).get("enabled"))
+        out["rules"].append({"name": "branch protection", "source": repo, "can": admin and not enforced,
+                             "why": "it applies to admins too" if enforced else "you're an admin" if admin
+                             else "only admins may bypass it"})
+    out["can"] = bool(out["rules"]) and all(r["can"] for r in out["rules"])
+    return out
 
 
 NOT_ALLOWED = re.compile(r"auto.?merge is not allowed|not allowed for this repository", re.I)

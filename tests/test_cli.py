@@ -743,3 +743,13 @@ def test_a_mason_folder_in_the_repo(env, tmp_path):
     assert "ruleset release (.mason/rulesets/tags.json) isn't imported" in out  # .mason/rulesets too
     rows = [line.split() for line in mason(e, "release").splitlines()]
     assert ["dotfiles", "dots/__init__.py", "2.1.0", "-", "dots-2.1.0"] in rows  # [release] of .mason/mason.toml
+
+
+def test_ignoring_github_rulesets(env, tmp_path):
+    folder = tmp_path / "defaults"
+    folder.mkdir()
+    (folder / "mason.toml").write_text('orgs = ["acme", "mike"]\n[[group]]\nname = "default"\n')
+    e = {**env, "MASON_DEFAULTS": str(folder), "FAKE_GH_DOTS_RS": "1"}
+    assert "ruleset release (.github/rulesets/tags.json) isn't imported" in mason(e, "doctor", "dotfiles")
+    out = mason({**e, "FAKE_GH_OWN": 'skip = ["github_rulesets"]'}, "doctor", "dotfiles")
+    assert ".github/rulesets/tags.json" not in out and "ok (group default + .mason.toml)" in out  # mason's rules only

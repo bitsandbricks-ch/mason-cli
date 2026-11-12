@@ -500,6 +500,8 @@ def doctor(repo: str, ctx: dict) -> None:
     checked: list[str] = []
     repo_fix: list[str] = []
     found: list[extras.Finding] = []
+    if want and "github_rulesets" in want["skip"]:  # mason's rules only: .github/rulesets doesn't count
+        own = {n: (f, rs) for n, (f, rs) in own.items() if not f.startswith(".github/")}
     if want and own and "own_rulesets" not in want["skip"] and set(own) & set(want["rulesets"]):
         # the repo's own .github/rulesets win over the group's rulesets of the same name
         want = {**want, "rulesets": {n: rs for n, rs in want["rulesets"].items() if n not in own}}

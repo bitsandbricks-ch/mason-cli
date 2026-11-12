@@ -202,10 +202,13 @@ class GhTransport:
     def pr_ready(self, repo: str, number: int) -> None:
         self.gh("pr", "ready", str(number), "--repo", repo)
 
-    def pr_merge(self, repo: str, number: int, method: str = "squash", auto: bool = True) -> str:
-        """'' when it worked, else why not."""
+    def pr_merge(self, repo: str, number: int, method: str = "squash", auto: bool = True,
+                 admin: bool = False) -> str:
+        """'' when it worked, else why not. `admin`: merge now past the branch rules (where you may bypass them)."""
         cmd = ["gh", "pr", "merge", str(number), "--repo", repo, f"--{method}", "--delete-branch"]
-        if auto:
+        if admin:
+            cmd.append("--admin")
+        elif auto:
             cmd.append("--auto")
         proc = subprocess.run(cmd, capture_output=True, text=True, check=False, env=self._env())
         return "" if proc.returncode == 0 else (proc.stderr.strip()[:200] or "failed")
@@ -638,10 +641,12 @@ class HttpTransport:
         self.graphql("mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) "
                      "{ pullRequest { number } } }", {"id": pid})
 
-    def pr_merge(self, repo: str, number: int, method: str = "squash", auto: bool = True) -> str:
+    def pr_merge(self, repo: str, number: int, method: str = "squash", auto: bool = True,
+                 admin: bool = False) -> str:
+        """The REST merge bypasses the branch rules by itself for those who may bypass them (`admin`)."""
         try:
             p = self._pr(repo, number)
-            if auto:
+            if auto and not admin:
                 self.graphql("mutation($id: ID!, $m: PullRequestMergeMethod!) { enablePullRequestAutoMerge("
                              "input: {pullRequestId: $id, mergeMethod: $m}) { pullRequest { number } } }",
                              {"id": p["id"], "m": MERGE_METHODS.get(method, "SQUASH")})

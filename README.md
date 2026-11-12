@@ -37,7 +37,7 @@ Repos are named as `owner/name`, as a bare `name` when only one repo has it, or 
 | `mason status` | One line per repo: group, latest release, PRs ready/draft, CI. One GraphQL query per 20 repos. |
 | `mason prs` | Open PRs with checks, reviews, merge status (mergeable, blocked, behind, conflicts) and auto-merge. |
 | `mason pr web#12 [--diff] [--body]` | One PR in detail: merge state, failing checks with links, files, description (`--body`: all of it). Takes a PR URL too. |
-| `mason merge [names] [--now] [--ready] [--method squash\|merge\|rebase]` | Auto-merge open PRs (or merge now; squash by default). When GitHub won't auto-merge a PR (auto-merge off for the repo, or no required checks on the base branch), it is merged right away. Drafts and conflicts stay open; `--ready` marks named drafts ready first. |
+| `mason merge [names] [--now] [--admin] [--ready] [--method squash\|merge\|rebase]` | Auto-merge open PRs (or merge now; squash by default). `--admin` merges now past the branch rules, where GitHub lets you bypass them (a ruleset's bypass list, or an admin without "include administrators"); the web app's PR page shows rule by rule whether you may. When GitHub won't auto-merge a PR (auto-merge off for the repo, or no required checks on the base branch), it is merged right away. Drafts and conflicts stay open; `--ready` marks named drafts ready first. |
 | `mason runs [--failed] [--limit 3]` | Latest workflow runs per repo. |
 | `mason rerun name [--run ID] [--yes]` | Re-runs the failed jobs of the repo's newest failed run (or of run ID), after listing its jobs and the step that failed. Jobs that passed and approvals already given stay. |
 | `mason releases [--problems] [--unreleased]` | Each repo's latest release, its assets, and its release runs. Flags assets the group's `release_assets` wants but the release lacks, and a failed last release run with the job and step that failed. The version column shows the version file against the latest release: `0.4.0 unreleased` when the version changed (a bump was merged) but nothing is released yet, and an open bump PR (`bump #12 → 1.0.1`). `--unreleased` lists only those; the web Releases tab has the same column and filter (u), the TUI's is under F4. |
@@ -251,7 +251,7 @@ In the web app each repo shows its doctor result without a run: the Repos list h
 
 Every write needs admin rights on that repo (secrets: write access), and mason uses your own login, so `--fix` changes what you administer and reports the rest.
 
-`skip` turns checks off for a group: `settings`, `security`, `vulnerability_reporting`, `immutable_releases`, `rulesets`, `own_rulesets` (the repo's `.github/rulesets` and `.mason/rulesets`), `files`, `required_files`, `topics`, `labels`, `actions`, `branch`, `visibility`, `description`, `workflows`, `environments`, `variables`, `secrets`, `pages`, `homepage`, `code_scanning`, `autolinks`, `plugins` (the plugins' doctor checks) and `version` (the version file).
+`skip` turns checks off for a group: `settings`, `security`, `vulnerability_reporting`, `immutable_releases`, `rulesets`, `own_rulesets` (the repo's `.github/rulesets` and `.mason/rulesets`), `files`, `required_files`, `topics`, `labels`, `actions`, `branch`, `visibility`, `description`, `workflows`, `environments`, `variables`, `secrets`, `pages`, `homepage`, `code_scanning`, `autolinks`, `github_rulesets` (only the repo's `.github/rulesets`: mason's own rules count), `plugins` (the plugins' doctor checks) and `version` (the version file).
 
 `workflows` makes doctor check the group's workflow files like `mason workflows` does. It takes `true` or a table: `pinned`, `permissions`, `pull_request_target` and `injection` turn single checks off with `false`, and `allow_unpinned = ["actions/*", "your-org/*"]` lets actions of owners you trust stay on a tag. `mason workflows --fix` keeps the tag as a comment (`uses: actions/checkout@<sha> # v4`), so Dependabot and Renovate keep updating the pins.
 
@@ -429,7 +429,10 @@ GitLab projects read it too, for their `[gitlab]` table and the auto switches (s
 In the web app a repo's page has a **branch rules** panel: what protects its default branch now, where its
 rules come from layer by layer (your defaults, the org's `.mason`, the repo), and what's in effect. From there
 you can edit the repo's `protect` with a form (or turn it off for that repo), edit or add `.mason/mason.toml`
-and `.mason/rulesets/*.json`, and keep the repo's live rulesets in `.mason/rulesets`. Every change is
+and `.mason/rulesets/*.json`, and keep the repo's live rulesets in `.mason/rulesets`. Any ruleset file
+(`.github/rulesets` too) opens as a form (target, branches, enforcement, admin bypass, PR reviews, checks,
+signed commits ...) or as JSON. A `.github/rulesets` file can be removed or moved to `.mason/rulesets`, and
+"ignore .github/rulesets" (`skip = ["github_rulesets"]`) makes mason's own rules the only ones that count. Every change is
 validated and written to the repo: a pull request, or straight onto the default branch when the repo has
 `auto_push` (refused pushes become a PR), or as you pick. An org's `.mason` repo has the same panel for its
 `mason.toml` and `rulesets/` folder, always through a pull request unless you pick "commit directly".
