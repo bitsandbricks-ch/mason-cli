@@ -7,7 +7,7 @@ import { loadGroups, scope } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 
-const { data, loading, load } = useLoad((q) => `/security${q}`)
+const { data, error, loading, load } = useLoad((q) => `/security${q}`)
 loadGroups()
 const sel = ref(null)
 const rows = computed(() => (data.value?.security || []).flatMap((s) => s.alerts.map((a, i) => ({ ...a, repo: s.repo, provider: s.provider, key: `${s.repo}|${i}` }))))
@@ -28,7 +28,7 @@ useKeys({ r: () => load(true) })
       <span v-for="(n, s) in counts" :key="s" class="chip">{{ s }} {{ n }}</span>
     </div>
     <div class="scroll">
-      <DataTable v-model="sel" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no open alerts'" @activate="open" />
+      <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ no open security alerts'" @activate="open" />
       <div v-if="unread.length" class="pad dim">
         <div v-for="s in unread" :key="s.repo">couldn't read {{ s.repo }}: {{ s.unread.join('; ') }}</div>
       </div>

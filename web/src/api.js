@@ -6,7 +6,7 @@ export const state = reactive({
   me: null,          // /api/v1/me
   loaded: false,
   dryRun: false,     // every change is a dry run while this is on
-  log: [],           // [{at, text, kind}] the bottom log
+  log: [],           // [{at, text, kind, detail, where}] the bottom log (click it for all of them)
   busy: 0,
   rate: null,
 })
@@ -15,16 +15,19 @@ export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status }
 }
 
-export function log(text, kind = 'info') {
-  state.log.unshift({ at: new Date().toLocaleTimeString(), text: String(text), kind })
+// detail: the whole output of a change (shown when the entry is opened); where: the page it was done on
+export function log(text, kind = 'info', { detail = '', where = '' } = {}) {
+  state.log.unshift({ at: new Date().toLocaleTimeString(), text: String(text), kind, detail: String(detail || ''),
+    where: where || (typeof location !== 'undefined' ? location.pathname + location.search : '') })
   if (state.log.length > 200) state.log.length = 200
 }
 
-export async function api(method, path, body) {
+// quiet: a background read (a follow-up, see useFollow) that doesn't light up "working…".
+export async function api(method, path, body, { quiet = false } = {}) {
   const headers = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (method !== 'GET' && state.me?.csrf) headers['X-CSRF-Token'] = state.me.csrf
-  state.busy++
+  if (!quiet) state.busy++
   try {
     const res = await fetch(`/api/v1${path}`, {
       method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
@@ -36,11 +39,11 @@ export async function api(method, path, body) {
     }
     return data
   } finally {
-    state.busy--
+    if (!quiet) state.busy--
   }
 }
 
-export const get = (path) => api('GET', path)
+export const get = (path, opts) => api('GET', path, undefined, opts)
 export const post = (path, body = {}) => api('POST', path, body)
 export const put = (path, body = {}) => api('PUT', path, body)
 export const del = (path) => api('DELETE', path)

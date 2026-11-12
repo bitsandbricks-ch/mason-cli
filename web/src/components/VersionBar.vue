@@ -31,15 +31,16 @@ async function bump() {
   const to = next.value[lv] || lv
   const text = await act(`Open a PR in ${props.repo} that sets ${v.value.file} to ${to} and adds the changelog section?`, '/bump',
     { repo: props.repo, level: lv }, { detail: `${cur} → ${to} (${lv}). After its merge, R pushes the tag and the repo's workflow releases it.` })
-  if (text !== null) emit('done', { text, ok: !text.startsWith('error') && !text.includes('[dry-run]') })
+  if (text !== null) emit('done', { text, repo: props.repo, ok: !text.startsWith('error') && !text.includes('[dry-run]') })
 }
 async function release() {
   if (!v.value?.todo) return
   const text = await act(`Push the tag ${v.value.tag} on ${v.value.base} of ${props.repo}?`, '/release/version', { repo: props.repo },
     { detail: `${v.value.file} says ${v.value.version}, latest release ${v.value.released || 'none'}. The repo's release workflow takes it from there.` })
-  if (text !== null) emit('done', { text, ok: !text.startsWith('error') && !text.includes('[dry-run]') })
+  if (text !== null) emit('done', { text, repo: props.repo, ok: !text.startsWith('error') && !text.includes('[dry-run]') })
 }
 useKeys({ b: bump, R: release })
+defineExpose({ bump, release })
 </script>
 
 <template>

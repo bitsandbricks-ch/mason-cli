@@ -1,4 +1,5 @@
 <script setup>
+import ErrorNote from '../components/ErrorNote.vue'
 // Approve a device login: `mason login https://mason` shows a code; this page turns it into an API key.
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -37,7 +38,7 @@ onMounted(lookup)
         <p class="dim">Type the code your terminal shows after <span class="accent">mason login</span>. Only approve a code you started yourself.</p>
         <div class="row"><input v-model="code" placeholder="ABCD-EFGH" aria-label="code" style="text-transform: uppercase" @keydown.enter="lookup"><button @click="lookup">look up</button></div>
       </div>
-      <div v-if="error" class="bad">{{ error }}</div>
+      <ErrorNote v-if="error" :error="error" />
       <div v-if="done" class="box ok">{{ done }}</div>
       <div v-else-if="info" class="box">
         <div><span class="accent">{{ info.client }}</span> asks for an API key ({{ info.user_code }}).</div>

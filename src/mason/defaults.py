@@ -568,6 +568,72 @@ def doctor(repo: str, ctx: dict) -> None:
         say(f"   fix: {hint}")
 
 
+# ── doctor, per repo ─────────────────────────────────────────────────────────
+#
+# What doctor printed, read back as one result per repo: the web app keeps the last one of each repo
+# (for its list and repo pages) and `mason doctor --summary` prints a line each.
+
+
+def parse_report(text: str) -> dict[str, dict]:
+    """doctor's output → {repo: {ok, where, problems, fixes, error, reference}}, in the order printed."""
+    out: dict[str, dict] = {}
+    cur: dict | None = None
+    for line in text.splitlines():
+        if line.startswith("== "):
+            name = line[3:].strip()
+            ref = name.endswith(" (the reference)")
+            name = name.removesuffix(" (the reference)")
+            cur = out[name] = {"repo": name, "ok": False, "where": "", "problems": [], "fixes": [],
+                               "error": "", "reference": ref}
+            continue
+        if cur is None:
+            continue
+        s = line.strip()
+        if s.startswith("- "):
+            cur["problems"].append(s[2:])
+        elif s.startswith("fix: ") or s.startswith("set secrets: "):
+            cur["fixes"].append(s.split(": ", 1)[1])
+        elif s.startswith("error: "):
+            cur["error"] = s[7:]
+        elif s == "ok" or s.startswith("ok ("):
+            cur["ok"] = True
+            cur["where"] = s[3:].strip().strip("()")
+        elif s.startswith("(") and s.endswith(")") and not cur["where"]:
+            cur["where"] = s.strip("()")
+    for r in out.values():
+        r["ok"] = r["ok"] and not r["problems"] and not r["error"]
+    return out
+
+
+def report(cfg: Config, repos: list[str]) -> dict[str, dict]:
+    """Check `repos` (no fixes) and return what doctor found, per repo."""
+    return parse_report(core.capture(doctor_all, cfg, repos))
+
+
+def summary_line(r: dict, width: int = 0) -> str:
+    name = r["repo"].ljust(width)
+    if r["error"]:
+        return f"{name}  error: {r['error']}"
+    if r["ok"]:
+        return f"{name}  ok" + (f"  ({r['where']})" if r["where"] else "")
+    n = len(r["problems"])
+    fix = next((f for f in r["fixes"] if f.startswith("mason doctor --fix")), "")
+    return f"{name}  {n} issue{'s' * (n != 1)}" + (f"  fix: {fix}" if fix else "")
+
+
+def doctor_summary(cfg: Config, repos: list[str]) -> None:
+    """`mason doctor --summary`: one line per repo, the repos with issues first."""
+    results = list(report(cfg, repos).values())
+    if not results:
+        return
+    width = max(len(r["repo"]) for r in results)
+    results.sort(key=lambda r: (r["ok"], -len(r["problems"]), r["repo"]))
+    for r in results:
+        say(summary_line(r, width))
+    bad = sum(1 for r in results if not r["ok"])
+    say(f"\n{bad} of {len(results)} repos off their defaults" if bad else f"\nall {len(results)} repos ok")
+
+
 # ── sync files ───────────────────────────────────────────────────────────────
 
 

@@ -195,6 +195,29 @@ def test_doctor(env):
     assert "ruleset main: has required_linear_history, defaults doesn't" in dot
 
 
+def test_doctor_summary(env):
+    out = mason(env, "doctor", "--summary")
+    lines = {ln.split()[0]: ln for ln in out.splitlines() if ln.startswith(("acme/", "mike/"))}
+    assert lines["acme/plugin-tpl"].split()[1] == "ok"
+    assert "issues" in lines["acme/plugin-b"] and "fix: mason doctor --fix acme/plugin-b" in lines["acme/plugin-b"]
+    assert "issue" in lines["acme/web"]
+    assert out.index("acme/plugin-b") < out.index("acme/plugin-tpl")  # the repos with issues first
+    assert "repos off their defaults" in out
+    assert "PATCH" not in out
+
+
+def test_doctor_report_parses_the_output():
+    from mason.defaults import parse_report
+    got = parse_report("== a/x (the reference)\n   ok\n== a/y\n  (group web + .mason.toml)\n   - has_wiki is true\n"
+                       "   fix: mason doctor --fix a/y\n== a/z\n   ok (group web)\n== a/e\n   error: 404\n")
+    assert got["a/x"]["ok"] and got["a/x"]["reference"]
+    assert got["a/y"] == {"repo": "a/y", "ok": False, "where": "group web + .mason.toml",
+                          "problems": ["has_wiki is true"], "fixes": ["mason doctor --fix a/y"], "error": "",
+                          "reference": False}
+    assert got["a/z"]["ok"] and got["a/z"]["where"] == "group web"
+    assert not got["a/e"]["ok"] and got["a/e"]["error"] == "404"
+
+
 def test_doctor_fix_and_sync(env):
     out = mason(env, "doctor", "--fix", "--dry-run", "b", "web")
     assert "[dry-run] PATCH /repos/acme/plugin-b" in out

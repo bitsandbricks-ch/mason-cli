@@ -164,6 +164,37 @@ def test_a_mutation_makes_graphql_answers_stale(api):
     assert "a/b" not in t.caches.space("nodes")
 
 
+def test_reading_a_few_repos_again_leaves_the_rest_of_the_cache(api):
+    """fresh=1 with repos named (the web app's follow-ups): only those repos are asked again."""
+    t = gh(api)
+    api.answers["/graphql"] = {"data": {}}
+    for path in ("/repos/a/b/pulls", "/repos/a/c/pulls"):
+        t.api("GET", path)
+    ask_b = 'query { r0: repository(owner: "a", name: "b") { id } }'
+    ask_c = 'query { r0: repository(owner: "a", name: "c") { id } }'
+    t.graphql(ask_b, {})
+    t.graphql(ask_c, {})
+    t.caches.space("nodes").update({"a/b": {}, "a/c": {}})
+    t.forget_repos(["a/b"])
+    for path in ("/repos/a/b/pulls", "/repos/a/c/pulls"):
+        t.api("GET", path)
+    t.graphql(ask_b, {})
+    t.graphql(ask_c, {})
+    assert len(api.hits("/repos/a/b/pulls")) == 2 and len(api.hits("/repos/a/c/pulls")) == 1
+    assert len(api.hits("/graphql")) == 3  # a/b's query again, a/c's from the cache
+    assert "a/b" not in t.caches.space("nodes") and "a/c" in t.caches.space("nodes")
+
+
+def test_reading_a_gitlab_project_again(api):
+    gl = GitLab("t", api_url=api.url, web=api.url, cache="60s")
+    gl.api("GET", "/projects/g%2Fp/labels")
+    gl.api("GET", "/projects/g%2Fq/labels")
+    gl.forget_repos(["gitlab:g/p"])
+    gl.api("GET", "/projects/g%2Fp/labels")
+    gl.api("GET", "/projects/g%2Fq/labels")
+    assert len(api.hits("/projects/g%2Fp/labels")) == 2 and len(api.hits("/projects/g%2Fq/labels")) == 1
+
+
 def test_a_write_to_a_gitlab_project_makes_only_that_project_stale(api):
     gl = GitLab("t", api_url=api.url, web=api.url, cache="60s")
     gl.api("GET", "/projects/g%2Fp/labels")

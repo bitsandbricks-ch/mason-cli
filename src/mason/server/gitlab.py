@@ -74,6 +74,10 @@ class GitLab(HttpTransport):
             return "/".join(parts[:3]), full(urllib.parse.unquote(parts[2]))
         return "", ""
 
+    def repo_scope(self, repo: str) -> tuple[str, tuple[str, ...]]:
+        path = json.dumps(path_of(repo))
+        return self.project(repo), (path, json.dumps(path)[1:-1])  # in the variables, or in the query
+
     def project(self, repo: str) -> str:
         return "/projects/" + urllib.parse.quote(path_of(repo), safe="")
 
@@ -833,7 +837,8 @@ def release_page(gl: GitLab, cfg, repo: str, tag: str | None = None) -> dict:
     url = (rel or {}).get("html_url") or f"{gl.web}/{path_of(repo)}/-/releases"
     return {"repo": repo, "provider": "gitlab", "releases": [REL.row(r) for r in rels],
             "selected": (rel or {}).get("tag_name") or "", "url": url,
-            "text": REL.detail_text(cfg, repo, rel, runs, rels), "suggest": REL.suggest_from(rels)}
+            "text": REL.detail_text(cfg, repo, rel, runs, rels), "suggest": REL.suggest_from(rels),
+            "busy": REL.R.running(runs)}
 
 
 def create_release(gl: GitLab, repo: str, tag: str, title: str = "", notes: str = "", draft: bool = False,
@@ -898,3 +903,165 @@ def push_tag(gl: GitLab, repo: str, tag: str, target: str = "") -> str:
     gl.write("POST", f"{p}/repository/tags", {"tag_name": tag, "ref": ref})
     say(f"   {'[dry-run] push' if core.dry_run() else 'pushed'} the tag {tag} on {ref} of {repo}; {then}")
     return "" if core.dry_run() else f"{gl.web}/{path_of(repo)}/-/tags/{q}"
+
+
+# ── events (the detail pages' event log) and a pipeline's page ───────────────
+
+
+def _ev(at, what, who="", detail="", url="", state=""):
+    from mason import events as E
+    return E.event(at, what, who, detail, url, state, source="gitlab")
+
+
+def _who(obj) -> str:
+    return (obj or {}).get("username") or (obj or {}).get("name") or ""
+
+
+def _notes(gl: GitLab, base: str, web_url: str) -> list[dict]:
+    """A merge request's or issue's notes: system notes are GitLab's timeline (ready, auto-merge, commits
+    added, labels...), the others are comments."""
+    from mason import events as E
+    out = []
+    for n in gl.pages(f"{base}/notes?sort=asc&order_by=created_at", limit=500):
+        body = n.get("body") or ""
+        if n.get("system"):
+            body = re.sub(r"\*\*|`", "", body)  # system notes are Markdown: "marked ... as **ready**"
+            low = body.lower()
+            state = ("ok" if any(w in low for w in ("marked this merge request as ready", "approved", "merged",
+                                                    "enabled an automatic merge", "set to auto-merge"))
+                     else "warn" if any(w in low for w in ("draft", "canceled the automatic merge", "closed",
+                                                           "unapproved", "aborted the automatic merge")) else "")
+            out.append(_ev(n.get("created_at"), E.first_line(body, 160), _who(n.get("author")), "",
+                           f"{web_url}#note_{n.get('id')}" if web_url else "", state))
+        else:
+            out.append(_ev(n.get("created_at"), "commented", _who(n.get("author")), body,
+                           f"{web_url}#note_{n.get('id')}" if web_url else ""))
+    return out
+
+
+def _pipeline_ev(p: dict) -> dict:
+    from mason import events as E
+    word = p.get("status") or "?"
+    return _ev(p.get("updated_at") or p.get("created_at"), f"pipeline #{p.get('id')}: {word}", _who(p.get("user")),
+               f"{p.get('source', '')} on {p.get('ref', '')} {str(p.get('sha') or '')[:7]}".strip(),
+               p.get("web_url", ""), E.state_of(word))
+
+
+def mr_events(gl: GitLab, repo: str, iid: int) -> list[dict]:
+    from mason import events as E
+    base = f"{gl.project(repo)}/merge_requests/{int(iid)}"
+    m = gl.api("GET", base) or {}
+    out = [_ev(m.get("created_at"), "opened" + (" as a draft" if m.get("draft") else ""), _who(m.get("author")),
+               m.get("title"), m.get("web_url", ""))]
+    out += _notes(gl, base, m.get("web_url", ""))
+    try:
+        out += [_pipeline_ev(p) for p in gl.api("GET", f"{base}/pipelines?per_page=20") or []]
+    except core.RateLimited:
+        raise
+    except RuntimeError:
+        pass
+    if m.get("merged_at"):
+        out.append(_ev(m["merged_at"], "merged", _who(m.get("merged_by") or m.get("merge_user")), state="ok"))
+    return E.newest_first(out)
+
+
+def issue_events(gl: GitLab, repo: str, iid: int) -> list[dict]:
+    from mason import events as E
+    base = f"{gl.project(repo)}/issues/{int(iid)}"
+    i = gl.api("GET", base) or {}
+    out = [_ev(i.get("created_at"), "opened", _who(i.get("author")), i.get("title"), i.get("web_url", ""))]
+    out += _notes(gl, base, i.get("web_url", ""))
+    return E.newest_first(out)
+
+
+def repo_events(gl: GitLab, repo: str, limit: int = 50) -> list[dict]:
+    """The project's activity (pushes, merge requests, issues, comments, tags) and its newest pipelines."""
+    from mason import events as E
+    web = f"{gl.web}/{path_of(repo)}"
+    out = []
+    for e in gl.api("GET", f"{gl.project(repo)}/events?per_page={limit}") or []:
+        action, target = e.get("action_name") or "", e.get("target_type") or ""
+        push = e.get("push_data") or {}
+        if push:
+            n = push.get("commit_count") or 0
+            kind = "tag" if push.get("ref_type") == "tag" else "branch"
+            what = (f"{action} {kind} {push.get('ref', '')}" if not n
+                    else f"pushed {n} commit{'' if n == 1 else 's'} to {push.get('ref', '')}")
+            out.append(_ev(e.get("created_at"), what, _who(e.get("author")), push.get("commit_title"),
+                           f"{web}/-/commit/{push['commit_to']}" if push.get("commit_to") else ""))
+            continue
+        thing = {"MergeRequest": "MR", "Issue": "issue", "Note": "comment", "DiffNote": "comment",
+                 "DiscussionNote": "comment", "Milestone": "milestone"}.get(target, target.lower())
+        iid = e.get("target_iid")
+        ref = f" !{iid}" if target == "MergeRequest" and iid else f" #{iid}" if iid else ""
+        note = (e.get("note") or {}).get("body") if target.endswith("Note") else ""
+        out.append(_ev(e.get("created_at"), f"{action} {thing}{ref}".strip(), _who(e.get("author")),
+                       note or e.get("target_title"), "", "ok" if action in ("accepted", "merged") else ""))
+    try:
+        out += [_pipeline_ev(p) for p in gl.api("GET", f"{gl.project(repo)}/pipelines?per_page=15") or []]
+    except core.RateLimited:
+        raise
+    except RuntimeError:
+        pass
+    return E.newest_first(out)
+
+
+def release_events(gl: GitLab, repo: str, tag: str) -> list[dict]:
+    from mason import events as E
+    q = urllib.parse.quote(tag, safe="")
+    r = gl.api("GET", f"{gl.project(repo)}/releases/{q}") or {}
+    url = (r.get("_links") or {}).get("self", "")
+    out = [_ev(r.get("created_at"), f"created the release {r.get('name') or tag}", _who(r.get("author")),
+               "", url, "ok")]
+    if r.get("released_at") and r.get("released_at") != r.get("created_at"):
+        out.append(_ev(r["released_at"], "released", _who(r.get("author")), url=url, state="ok"))
+    for link in (r.get("assets") or {}).get("links") or []:
+        out.append(_ev(r.get("created_at"), f"asset {link.get('name')}", "", link.get("link_type", ""),
+                       link.get("url", "")))
+    try:
+        out += [_pipeline_ev(p) for p in gl.api("GET", f"{gl.project(repo)}/pipelines?ref={q}&per_page=20") or []]
+    except core.RateLimited:
+        raise
+    except RuntimeError:
+        pass
+    return E.newest_first(out)
+
+
+def pipeline_events(gl: GitLab, repo: str, pid: int) -> list[dict]:
+    from mason import events as E
+    base = f"{gl.project(repo)}/pipelines/{int(pid)}"
+    p = gl.api("GET", base) or {}
+    out = [_ev(p.get("created_at"), f"started by {p.get('source', '?')}", _who(p.get("user")),
+               f"{p.get('ref', '')} {str(p.get('sha') or '')[:7]}", p.get("web_url", ""))]
+    for j in gl.pages(f"{base}/jobs?include_retried=false", limit=300):
+        word = j.get("status") or "?"
+        out.append(_ev(j.get("finished_at") or j.get("started_at") or j.get("created_at"),
+                       f"job {j.get('stage')} / {j.get('name')}: {word}",
+                       (j.get("runner") or {}).get("description", ""),
+                       E.duration(j.get("started_at"), j.get("finished_at")), j.get("web_url", ""), E.state_of(word)))
+    if p.get("finished_at"):
+        out.append(_ev(p["finished_at"], f"finished: {p.get('status')}", "",
+                       E.duration(p.get("started_at") or p.get("created_at"), p["finished_at"]), p.get("web_url", ""),
+                       E.state_of(p.get("status"))))
+    return E.newest_first(out)
+
+
+def pipeline_detail(gl: GitLab, repo: str, pid: int) -> str:
+    from mason import events as E
+    base = f"{gl.project(repo)}/pipelines/{int(pid)}"
+    p = gl.api("GET", base) or {}
+    jobs = gl.pages(f"{base}/jobs?include_retried=false", limit=300)
+    lines = [f"pipeline #{p.get('id')} of {repo}", p.get("web_url", ""), "",
+             f"  state    {p.get('status', '?')}", f"  source   {p.get('source', '?')} by {_who(p.get('user')) or '?'}",
+             f"  ref      {p.get('ref', '')} @ {str(p.get('sha') or '')[:7]}",
+             f"  started  {ago(p.get('started_at') or p.get('created_at'))}"
+             + (f", {E.duration(p.get('started_at') or p.get('created_at'), p.get('finished_at'))}"
+                if p.get("finished_at") else ""), "", f"Jobs ({len(jobs)}):"]
+    for j in sorted(jobs, key=lambda j: j.get("id") or 0):
+        word = j.get("status") or "?"
+        took = E.duration(j.get("started_at"), j.get("finished_at")).removeprefix("took ")
+        lines.append(f"  {('- ' if word == 'failed' else '  ')}{word:<9} {j.get('stage')} / {j.get('name')}"
+                     + (f"  ({took})" if took else ""))
+        if word == "failed":
+            lines.append(f"             {j.get('web_url', '')}")
+    return "\n".join(lines)

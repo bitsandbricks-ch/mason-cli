@@ -9,7 +9,7 @@ import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 
 const days = ref(30)
-const { data, loading, load } = useLoad((q) => `/metrics${q}${q ? '&' : '?'}days=${days.value}`)
+const { data, error, loading, load } = useLoad((q) => `/metrics${q}${q ? '&' : '?'}days=${days.value}`)
 loadGroups()
 const sel = ref(null)
 const t = computed(() => data.value?.totals)
@@ -57,7 +57,7 @@ useKeys({ r: () => load(true) })
         <tbody><tr v-for="[g, v] in groups" :key="g"><td>{{ g }}</td><td class="right">{{ v.repos }}</td><td class="right">{{ v.merged }}</td><td class="right">{{ n(v.median_merge_hours, 'h') }}</td><td class="right">{{ v.open }}</td><td class="right">{{ n(v.success_rate, '%') }}</td><td class="right">{{ v.releases }}</td></tr></tbody>
       </table>
       <h2>per repo</h2>
-      <DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : 'nothing moved'" />
+      <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : 'nothing moved'" />
     </div>
   </div>
 </template>
