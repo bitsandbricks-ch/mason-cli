@@ -85,6 +85,7 @@ def create_app(op: S.Settings | None = None) -> Flask:
 
     from mason.server.api import (
         account,
+        branches,
         console,
         defaults,
         masonfiles,
@@ -95,7 +96,8 @@ def create_app(op: S.Settings | None = None) -> Flask:
         repos,
         reposettings,
     )
-    for mod in (account, repos, reposettings, proxy, console, defaults, masonfiles, metrics, plugins, operator):
+    for mod in (account, repos, reposettings, branches, proxy, console, defaults, masonfiles, metrics, plugins,
+                operator):
         app.register_blueprint(mod.bp)
 
     @app.get("/api/v1/health")

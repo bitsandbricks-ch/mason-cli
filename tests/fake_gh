@@ -208,9 +208,37 @@ def node(repo):
 if argv[:2] in (["auth", "status"], ["auth", "token"]):
     sys.exit(0)
 
+
+
+def ref(name, ahead, behind, date, pr=None, classic=False):
+    return {"name": name, "branchProtectionRule": {"pattern": name} if classic else None,
+            "compare": {"aheadBy": behind, "behindBy": ahead},  # compared from the branch to the default
+            "target": {"oid": hashlib.sha1(name.encode()).hexdigest(), "committedDate": date,
+                       "messageHeadline": f"Work on {name}", "author": {"name": "Ann", "user": {"login": "ann"}}},
+            "associatedPullRequests": {"nodes": [pr] if pr else []}}
+
+
+def pr_node(number, title, state, draft=False):
+    return {"number": number, "title": title, "state": state, "isDraft": draft, "url": f"{WEB}/acme/web/pull/{number}"}
+
+
+BRANCHES = {  # the branches of a repo (the default, main, for the rest)
+    "acme/web": [ref("main", 0, 0, "2026-11-05T09:00:00Z"),
+                 ref("feat/search", 2, 1, "2026-11-04T09:00:00Z", pr_node(23, "Add search", "OPEN")),
+                 ref("old-feature", 0, 5, "2025-06-01T09:00:00Z", pr_node(15, "Old feature", "MERGED")),
+                 ref("squashed", 3, 2, "2026-10-01T09:00:00Z", pr_node(18, "Squashed", "MERGED")),
+                 ref("spike", 4, 9, "2026-09-01T09:00:00Z"),
+                 ref("release/1.x", 1, 40, "2026-08-01T09:00:00Z", classic=True)],
+}
+
 QUERY = ""
 if argv[:2] == ["api", "graphql"]:
     QUERY = json.loads(stdin)["query"]
+    if "refs(refPrefix" in QUERY:
+        v = json.loads(stdin)["variables"]
+        nodes = BRANCHES.get(f"{v['owner']}/{v['name']}", [ref("main", 0, 0, "2026-11-01T00:00:00Z")])
+        out({"data": {"repository": {"refs": {"totalCount": len(nodes), "nodes": nodes,
+                                              "pageInfo": {"hasNextPage": False, "endCursor": None}}}}})
     data = {}
     for alias, owner, name in re.findall(r'(r\d+): repository\(owner: "([^"]+)", name: "([^"]+)"\)', QUERY):
         repo = f"{owner}/{name}"
