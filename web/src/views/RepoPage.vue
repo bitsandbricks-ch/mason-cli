@@ -13,6 +13,7 @@ import ActionList from '../components/ActionList.vue'
 import EventLog from '../components/EventLog.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
+import MasonPanel from '../components/MasonPanel.vue'
 import SecretsPanel from '../components/SecretsPanel.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
@@ -128,7 +129,8 @@ function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; fo
 const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
 const back = () => (window.history.state?.back ? router.back() : router.push('/'))
 const doctorPanel = ref(null)
-const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true) }
+const masonPanel = ref(null)
+const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true); masonPanel.value?.load() }
 const keys = { '.': () => sheet.value?.pick(), Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => reload() }
 watch(actions, (list) => list.forEach((a) => { keys[a.k] = () => !a.off && a.fn() }), { immediate: true })
 useKeys(keys)
@@ -150,6 +152,7 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
       <div class="pad">
         <div class="hide-xs"><h2>actions</h2><ActionList :actions="actions" /></div>
         <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" @result="(d) => (doctor = d)" @run="fixFrom" />
+        <MasonPanel ref="masonPanel" :repo="repo" @done="({ text, ok }) => { output = text; if (ok) { checked++; log?.burst() } }" />
         <SecretsPanel v-if="!gitlab" :repo="repo" @done="({ text }) => (output = text)" />
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
       </div>

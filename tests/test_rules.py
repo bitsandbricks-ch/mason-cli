@@ -189,3 +189,4 @@ def test_gitlab_protect_protects_the_default_branch(capsys):
     assert "the default branch main isn't protected" in capsys.readouterr().out
     GL.doctor(StubGitLab('skip = ["protect"]'), bare, "gitlab:acme/site")
     assert "isn't protected" not in capsys.readouterr().out
+

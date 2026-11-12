@@ -388,7 +388,7 @@ if argv[0] == "api":
         out({"name": "main", "protected": True})
     m = re.match(r"/rulesets/(\d+)$", rest)
     if m:
-        out(rsets[RS_IDS[(repo, int(m.group(1)))]])
+        out({**rsets[RS_IDS[(repo, int(m.group(1)))]], "id": int(m.group(1))})
     if rest.startswith("/contents/"):
         contents(repo, rest[len("/contents/"):])
     if rest.startswith("/git/trees/"):
