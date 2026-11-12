@@ -5,6 +5,8 @@
   <img src="docs/logo/mason-light.svg" alt="Mason" height="56">
 </picture>
 
+[![CI](https://github.com/bitsandbricks-ch/mason-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/bitsandbricks-ch/mason-cli/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE) [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-bitsandbricks-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/bitsandbricks)
+
 Mason (the `mason` command) is a terminal tool, TUI and web app for looking after many GitHub (and, in the web app, GitLab) repositories at once, across orgs and user accounts: status, pull requests, merges, workflow runs and approvals, security alerts, stats, and drift checks against shared defaults. It holds your bricks together.
 
 The defaults live in a repository you choose. Point `mason` at any repo (or local folder) that holds a `mason.toml`, and it checks your repos against it. Nothing is tied to one org: every user can keep their own defaults repo.
@@ -488,10 +490,6 @@ pytest          # runs every command against tests/fake_gh, a stand-in for gh
 ruff check .
 cd web && npm ci && npm run build   # Mason's UI (npm run dev for a live-reloading one)
 ```
-
-## Support
-
-If Mason is useful to you, you can [buy me a coffee](https://buymeacoffee.com/bitsandbricks).
 
 ## License
 
