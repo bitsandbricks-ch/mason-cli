@@ -10,6 +10,7 @@ import { act, cached, forget, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
 import DoctorPanel from '../components/DoctorPanel.vue'
 import ActionList from '../components/ActionList.vue'
+import BranchesPanel from '../components/BranchesPanel.vue'
 import EventLog from '../components/EventLog.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
@@ -132,7 +133,8 @@ const back = () => (window.history.state?.back ? router.back() : router.push('/'
 const doctorPanel = ref(null)
 const masonPanel = ref(null)
 const settingsPanel = ref(null)
-const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true); masonPanel.value?.load(); settingsPanel.value?.load() }
+const branchesPanel = ref(null)
+const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true); masonPanel.value?.load(); settingsPanel.value?.load(); branchesPanel.value?.load() }
 const keys = { '.': () => sheet.value?.pick(), Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => reload() }
 watch(actions, (list) => list.forEach((a) => { keys[a.k] = () => !a.off && a.fn() }), { immediate: true })
 useKeys(keys)
@@ -174,6 +176,7 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
           </li>
         </ul>
         <div v-else-if="info" class="empty" style="padding: 0 0 8px">no open {{ gitlab ? 'merge' : 'pull' }} requests</div>
+        <BranchesPanel ref="branchesPanel" :repo="repo" @done="({ text, ok }) => { output = text; if (ok) { load(true); log?.burst() } }" />
         <TextPane v-if="rest || !info" :text="info ? rest : detail" placeholder="loading…" />
       </div>
     </div>

@@ -143,6 +143,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("target", help="the repo")
     sp.add_argument("changes", nargs="*", help="an area to show, or key=value pairs to set (see --keys)")
     sp.add_argument("--keys", action="store_true", help="show each setting's key")
+    sp = sub.add_parser("branches", parents=[common], help="a repo's branches; `delete NAME...` deletes some")
+    sp.add_argument("target", help="the repo")
+    sp.add_argument("names", nargs="*", help="delete NAME...: the branches to delete")
+    sp.add_argument("--merged", action="store_true", help="delete: every merged branch too")
+    sp.add_argument("--yes", action="store_true", help="delete: don't ask first")
     sp = sub.add_parser("pr", parents=[common], help="one PR in detail")
     sp.add_argument("target", help="name#12 or a PR URL")
     sp.add_argument("--diff", action="store_true")
@@ -330,6 +335,8 @@ def main(argv: list[str] | None = None) -> None:
             return secrets_command(cfg, args)
         if args.cmd == "settings":
             return settings_command(cfg, args)
+        if args.cmd == "branches":
+            return branches_command(cfg, args)
         if args.cmd == "release" and args.repos[:1] in (["new"], ["view"], ["tag"]):
             return release_new_or_view(cfg, args)
         if args.cmd == "release":
@@ -429,6 +436,39 @@ def settings_command(cfg, args) -> None:
     kept = [k for k in changes if catalog.find("github", k).keep]
     if kept:
         core.say(f"to keep them, add them to {repo}'s .mason.toml (the web app's settings panel can write it)")
+
+
+def branches_command(cfg, args) -> None:
+    from mason import branches
+
+    repo, _ = repos.resolve(cfg, args.target)
+    if repo.startswith("gitlab:"):
+        sys.exit("GitLab projects' branches are in the web app (Mason reaches GitLab there)")
+    if not args.names:
+        if args.merged:
+            sys.exit(f"delete the merged branches with: mason branches {args.target} delete --merged")
+        return branches.show(branches.github(repo))
+    if args.names[0] != "delete" or (len(args.names) == 1 and not args.merged):
+        sys.exit("mason branches REPO delete NAME... (or delete --merged)")
+    try:
+        names = [branches.valid_name(n) for n in args.names[1:]]
+    except ValueError as err:
+        sys.exit(str(err))
+    if not core.dry_run() and not args.yes:
+        what = " and ".join(x for x in (", ".join(names), "every merged branch" if args.merged else "") if x)
+        try:
+            answer = input(f"Delete {what} of {repo}? [y/N] ")
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            print("left as they are")
+            return None
+    lines, ok = branches.delete(repo, names, merged=args.merged)
+    for line in lines:
+        core.say(f"{repo}: {line}")
+    if not ok:
+        sys.exit(1)
+    return None
 
 
 def issue(cfg, args) -> None:
