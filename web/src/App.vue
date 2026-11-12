@@ -5,6 +5,7 @@ import { get, loadMe, log, post, put, state } from './api.js'
 import { THEMES } from './themes.js'
 import { GROUPS, SECTIONS, TABS, sectionOf } from './router.js'
 import { typing } from './keys.js'
+import { arrowKey } from './arrows.js'
 import { closeDetail, phone, prompt } from './ui.js'
 import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
@@ -120,14 +121,18 @@ async function logout() {
   router.replace('/login')
 }
 
+let pointerAt = null // arrows scroll the pane the pointer is in
+window.addEventListener('pointerover', (e) => { pointerAt = e.target }, { passive: true })
 window.addEventListener('keydown', (e) => {
   if (prompt.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey || !signedIn.value) return
   const tab = TABS.find((t) => t.key === e.key)
   if (tab) { router.push(tab.path); e.preventDefault(); return }
+  if (arrowKey(e, document, pointerAt)) return
   if (e.key === '`' || (e.key === 'Escape' && logOpen.value)) { logOpen.value = e.key === '`' ? !logOpen.value : false; e.preventDefault(); e.stopImmediatePropagation(); return }
   if (e.key === 't') { theme.value = themes[(themes.indexOf(theme.value) + 1) % themes.length] }
   else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-    const i = TABS.findIndex((t) => t.name === route.name || t.name === route.meta.tab)
+    // only from a tab itself: on a repo's (or a PR's) page ←→ threw you out to the next tab
+    const i = TABS.findIndex((t) => t.name === route.name)
     if (i >= 0) { router.push(TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length].path); e.preventDefault() }
   } else if (e.key === '?') { router.push('/console'); log('keys: 1-9 tabs · ←→ next tab · ↑↓/jk move · Enter act · / filter · r reload · t theme · : console · ` log') }
 })

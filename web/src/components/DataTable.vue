@@ -43,7 +43,12 @@ const blank = (v) => v === '' || v === '-' || v == null
 const activates = !!getCurrentInstance()?.vnode.props?.onActivate
 const root = ref(null)
 const inSplit = ref(false)
-onMounted(() => { inSplit.value = !!root.value?.closest('.split.ld') })
+onMounted(() => {
+  inSplit.value = !!root.value?.closest('.split.ld')
+  // a list that opens with nothing else focused takes the keys at once (↑↓, j/k, Enter), not after a click
+  const at = document.activeElement
+  if (!at || at === document.body) table.value?.focus({ preventScroll: true })
+})
 function tap(r) {
   emit('update:modelValue', props.rowKey(r))
   if (inSplit.value) openDetail()

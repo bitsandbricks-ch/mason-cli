@@ -45,6 +45,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      - run: npm test
 
   package:
     # The wheel and sdist a pipx install builds must carry the web UI (hatch_build.py builds it).
