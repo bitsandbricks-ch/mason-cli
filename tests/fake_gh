@@ -18,7 +18,7 @@ argv = sys.argv[1:]
 stdin = sys.stdin.read() if "--input" in argv else ""
 with open(LOG, "a") as f:
     f.write(" ".join(argv) + "\n")
-    if stdin and any("/secrets/" in a for a in argv):  # the tests open the box with the fake's private key
+    if stdin and (any("/secrets/" in a for a in argv) or os.environ.get("FAKE_GH_BODIES")):  # the tests open the box with the fake's private key
         f.write(f"BODY {stdin.strip()}\n")
 
 WEB = "https://github.com"
@@ -496,6 +496,16 @@ if argv[0] == "api":
     }
     if repo == "mike/dotfiles" and rest in extra:
         out(extra[rest])
+    # what the settings panel reads besides (catalog.py)
+    more = {
+        "/automated-security-fixes": {"enabled": True, "paused": False},
+        "/interaction-limits": {},
+        "/collaborators": [{"login": "mike", "role_name": "admin"}, {"login": "ann", "role_name": "write"}],
+        "/teams": [{"slug": "ops", "permission": "maintain"}],
+        "/actions/runners": {"runners": []},
+    }
+    if rest in more:
+        out(more[rest])
     if rest == "/pages" or rest.startswith("/branches/"):
         fail("gh: Not Found (HTTP 404)")
     fail(f"fake gh: no answer for GET {path}")

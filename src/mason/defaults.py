@@ -21,7 +21,7 @@ REPO_SETTINGS = ("allow_auto_merge", "allow_forking", "allow_merge_commit", "all
                  "allow_update_branch", "delete_branch_on_merge", "has_discussions", "has_issues",
                  "has_projects", "has_wiki", "is_template", "merge_commit_message", "merge_commit_title",
                  "squash_merge_commit_message", "squash_merge_commit_title", "web_commit_signoff_required")
-PATCHABLE_SECURITY = ("advanced_security", "secret_scanning", "secret_scanning_push_protection",
+PATCHABLE_SECURITY = ("advanced_security", "code_security", "secret_scanning", "secret_scanning_push_protection",
                       "secret_scanning_non_provider_patterns", "secret_scanning_validity_checks")
 RULESET_FIELDS = ("name", "target", "enforcement", "conditions", "rules", "bypass_actors")
 ACTIONS = ("enabled", "allowed_actions")  # /actions/permissions

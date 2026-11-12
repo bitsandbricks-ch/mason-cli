@@ -1122,3 +1122,73 @@ def test_protect_written_into_a_repos_file():
     assert config.parse_defaults(off) == {"auto_fix": True, "protect": False, "release": {"version": "x"}}
     assert "protect" not in config.parse_defaults(with_protect(off, None))
     assert with_protect("", {"reviews": 1}) == "[protect]\nreviews = 1\n"
+
+
+def test_repo_settings_view(op, monkeypatch):
+    """Every setting of a GitHub repo by area, read-only ones saying why, the lists, and what its file keeps."""
+    _, c = op
+    monkeypatch.setenv("FAKE_GH_OWN", "settings = { has_wiki = true }")
+    v = c.get("/api/v1/repo/settings?repo=mike/dotfiles").json
+    rows = {r["key"]: r for a in v["areas"] for r in a["rows"]}
+    assert [a["name"] for a in v["areas"]][:3] == ["general", "features", "pull requests"]
+    wiki = rows["has_wiki"]
+    assert wiki["value"] is False and wiki["edit"] and wiki["keep"] == "settings.has_wiki"
+    assert rows["sec.secret_scanning"]["value"] is True and rows["autofix.enabled"]["value"] is True
+    assert rows["retention.days"]["value"] == 90 and rows["pvr.enabled"]["value"] is True
+    assert rows["pages.on"]["value"] is False and rows["pages.cname"]["why"] == "Pages is off"
+    assert rows["name"]["edit"] is False and "renaming" in rows["name"]["why"]
+    assert rows["limits.limit"]["value"] == "none"
+    lists = {x["key"]: x for x in v["lists"]}
+    assert lists["environments"]["items"] == [{"name": "production", "detail": "wait timer"}]
+    assert lists["collaborators"]["items"][1] == {"name": "ann", "detail": "write"}
+    assert lists["hooks"]["error"] and lists["hooks"]["manage"].endswith("/mike/dotfiles/settings/hooks")
+    assert v["file"] == ".mason.toml" and v["kept"] == {"settings.has_wiki": True}
+
+
+def test_repo_settings_change_and_keep(op, monkeypatch, tmp_path):
+    _, c = op
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    monkeypatch.setenv("FAKE_GH_BODIES", "1")
+    bad = c.post("/api/v1/repo/settings", json={"repo": "acme/web", "changes": {"nope": 1}}, headers=H)
+    assert bad.status_code == 400 and "isn't a github setting" in bad.json["error"]
+    assert c.post("/api/v1/repo/settings", json={"repo": "acme/web", "changes": {"name": "x"}},
+                  headers=H).status_code == 400  # read only
+    assert c.post("/api/v1/repo/settings", json={"repo": "acme/web", "changes": {"merge_commit_title": "x"}},
+                  headers=H).status_code == 400  # not one of the choices
+    r = c.post("/api/v1/repo/settings", json={"repo": "acme/web", "changes": {
+        "has_wiki": True, "sec.secret_scanning": True, "actions.allowed_actions": "local_only", "retention.days": "30",
+        "alerts.enabled": False, "pages.on": True, "limits.limit": "contributors_only"}}, headers=H).json
+    calls = log.read_text()
+    assert '-X PATCH /repos/acme/web' in calls
+    assert '"has_wiki": true' in calls and '"secret_scanning": {"status": "enabled"}' in calls
+    assert '"allowed_actions": "local_only"' in calls and '"days": 30' in calls
+    assert "-X DELETE /repos/acme/web/vulnerability-alerts" in calls and "-X POST /repos/acme/web/pages" in calls
+    assert '"limit": "contributors_only", "expiry": "one_week"' in calls
+    assert "contents/.mason" not in calls and "turned Pages on" in r["text"]
+    # keep: the ones doctor knows go into the repo's own file, the rest is said
+    log.write_text("")
+    r = c.post("/api/v1/repo/settings", json={"repo": "mike/dotfiles", "keep": True, "changes": {
+        "has_wiki": True, "sec.secret_scanning_push_protection": True, "description": "dots"}}, headers=H).json
+    calls = log.read_text()
+    assert "-X PUT /repos/mike/dotfiles/contents/.mason.toml" in calls and "pr create" in calls
+    assert "not kept (doctor has no key for them): description" in r["text"]
+    import base64
+    put = next(json.loads(x[5:]) for x in calls.splitlines() if x.startswith("BODY ") and '"content"' in x)
+    text = base64.b64decode(put["content"]).decode()
+    from mason import config
+    assert config.parse_defaults(text)["settings"] == {"has_wiki": True}
+    assert config.parse_defaults(text)["security"] == {"secret_scanning_push_protection": "enabled"}
+    assert config.parse_defaults(text)["release"]["version"] == "dots/__init__.py"
+    assert "repo.settings" in json.dumps(c.get("/api/v1/audit").json)
+
+
+def test_repo_settings_dry_run(op, monkeypatch, tmp_path):
+    _, c = op
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    r = c.post("/api/v1/repo/settings", json={"repo": "acme/web", "dry_run": True, "keep": True,
+                                              "changes": {"allow_squash_merge": False}}, headers=H).json
+    assert "[dry-run] acme/web: set allow_squash_merge" in r["text"]
+    assert "[dry-run] write .mason/mason.toml" in r["text"]
+    assert "-X PATCH" not in log.read_text() and "-X PUT" not in log.read_text()

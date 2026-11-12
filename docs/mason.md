@@ -69,6 +69,12 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   too (Enter, or **p** on the list): a PR's page merges, auto-merges, marks ready and shows the diff; an
   issue's page comments, closes and reopens; a run's page lists every job and step with its time and runs
   the failed jobs again (**R**). `Esc` goes back.
+- **Every repo setting is on the repo page** (the **settings** panel): all that GitHub's or GitLab's API reads,
+  by area (general, features, pull or merge requests, security, Actions or CI/CD, Pages, approvals, push
+  rules, ...), with collaborators, teams, members, webhooks, deploy keys, environments and variables as lists.
+  Change a setting in place; **apply** sends the changes, **apply and keep** also writes the ones doctor knows
+  into the repo's `.mason.toml`. A row that can't be changed says why. The full list is in
+  [settings.md](settings.md).
 - **An event log runs full width along the bottom** of the lists (repos, pull requests, issues, runs,
   releases: about the selected row) and of every detail page. It folds away with ▾ and stays folded. It shows
   what happened to the repo, PR, issue, release or run on
