@@ -22,6 +22,8 @@ repo of your orgs. --org and --group narrow that down.
   mason security                      Dependabot, secret and code scanning alerts
   mason doctor [names] [--fix]        settings, security, rulesets, environments, Pages and files against the defaults
   mason doctor --summary              one line per repo: ok, or how many issues
+  mason settings name [area]          every GitHub setting of a repo, by area, with webhooks, keys, teams, ...
+  mason settings name key=value ...   change settings (has_wiki=off, actions.allowed_actions=selected, ...)
   mason secrets [names]               the Actions secrets the defaults name: set or missing (names only)
   mason secrets set NAME [names]      store a secret's value (read from stdin) in each repo (--env ENV)
   mason issues [names] [--mine]       open issues; mason issue new|view|close|comment name[#12] ...
@@ -135,6 +137,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp = sub.add_parser("secrets", parents=[common], help="Actions secrets the defaults name; `set NAME` stores one")
     sp.add_argument("repos", nargs="*", help=f"{names}; or: set NAME [names]")
     sp.add_argument("--env", default=None, help="set: an environment's secret instead of the repo's")
+    sp = sub.add_parser("settings", parents=[common], help="every setting of a repo; key=value changes one")
+    sp.add_argument("target", help="the repo")
+    sp.add_argument("changes", nargs="*", help="an area to show, or key=value pairs to set (see --keys)")
+    sp.add_argument("--keys", action="store_true", help="show each setting's key")
     sp = sub.add_parser("pr", parents=[common], help="one PR in detail")
     sp.add_argument("target", help="name#12 or a PR URL")
     sp.add_argument("--diff", action="store_true")
@@ -320,6 +326,8 @@ def main(argv: list[str] | None = None) -> None:
             return versions.bump_all(cfg, names, level, args.auto_merge)
         if args.cmd == "secrets":
             return secrets_command(cfg, args)
+        if args.cmd == "settings":
+            return settings_command(cfg, args)
         if args.cmd == "release" and args.repos[:1] in (["new"], ["view"], ["tag"]):
             return release_new_or_view(cfg, args)
         if args.cmd == "release":
@@ -395,6 +403,30 @@ def release_new_or_view(cfg, args) -> None:
             return None
     releases.create(repo, tag, args.title, notes, args.draft, args.prerelease, args.target, args.generate_notes)
     return None
+
+
+def settings_command(cfg, args) -> None:
+    from mason import catalog
+
+    repo, _ = repos.resolve(cfg, args.target)
+    if repo.startswith("gitlab:"):
+        sys.exit("GitLab projects' settings are in the web app (Mason reaches GitLab there)")
+    pairs = [c for c in args.changes if "=" in c]
+    if not pairs:
+        catalog.show(catalog.read_github(repo), " ".join(args.changes), keys=args.keys)
+        return
+    try:
+        changes = catalog.clean("github", dict(c.split("=", 1) for c in pairs))
+    except ValueError as err:
+        sys.exit(str(err))
+    said = catalog.write_github(repo, changes)
+    for line in said:
+        core.say(f"{'[dry-run] ' if core.dry_run() else ''}{repo}: {line}")
+    if catalog.failed(said):
+        sys.exit(1)
+    kept = [k for k in changes if catalog.find("github", k).keep]
+    if kept:
+        core.say(f"to keep them, add them to {repo}'s .mason.toml (the web app's settings panel can write it)")
 
 
 def issue(cfg, args) -> None:

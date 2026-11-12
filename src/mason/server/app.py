@@ -83,8 +83,19 @@ def create_app(op: S.Settings | None = None) -> Flask:
     def _rate(err):
         return jsonify({"error": str(err), "reset": err.reset}), 429
 
-    from mason.server.api import account, console, defaults, masonfiles, metrics, operator, plugins, proxy, repos
-    for mod in (account, repos, proxy, console, defaults, masonfiles, metrics, plugins, operator):
+    from mason.server.api import (
+        account,
+        console,
+        defaults,
+        masonfiles,
+        metrics,
+        operator,
+        plugins,
+        proxy,
+        repos,
+        reposettings,
+    )
+    for mod in (account, repos, reposettings, proxy, console, defaults, masonfiles, metrics, plugins, operator):
         app.register_blueprint(mod.bp)
 
     @app.get("/api/v1/health")

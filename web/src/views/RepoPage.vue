@@ -15,6 +15,7 @@ import StatusHeader from '../components/StatusHeader.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import MasonPanel from '../components/MasonPanel.vue'
 import SecretsPanel from '../components/SecretsPanel.vue'
+import SettingsPanel from '../components/SettingsPanel.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 import { stateClass } from '../ui.js'
@@ -130,7 +131,8 @@ const open = () => { const url = info.value?.url || detail.value.split('\n')[1];
 const back = () => (window.history.state?.back ? router.back() : router.push('/'))
 const doctorPanel = ref(null)
 const masonPanel = ref(null)
-const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true); masonPanel.value?.load() }
+const settingsPanel = ref(null)
+const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true); masonPanel.value?.load(); settingsPanel.value?.load() }
 const keys = { '.': () => sheet.value?.pick(), Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => reload() }
 watch(actions, (list) => list.forEach((a) => { keys[a.k] = () => !a.off && a.fn() }), { immediate: true })
 useKeys(keys)
@@ -154,6 +156,7 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
         <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" @result="(d) => (doctor = d)" @run="fixFrom" />
         <MasonPanel ref="masonPanel" :repo="repo" @done="({ text, ok }) => { output = text; if (ok) { checked++; log?.burst() } }" />
         <SecretsPanel v-if="!gitlab" :repo="repo" @done="({ text }) => (output = text)" />
+        <SettingsPanel ref="settingsPanel" :repo="repo" @done="({ text, ok }) => { output = text; if (ok) { checked++; masonPanel?.load(); log?.burst() } }" />
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
       </div>
       <div class="pad">
