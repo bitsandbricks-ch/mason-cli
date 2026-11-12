@@ -48,7 +48,7 @@ Two files:
       1. your groups without `match` (the rest), only when no group of the org's `.mason` matches
       2. the org's `.mason` groups that match (GitLab: a parent group's, then the nearest group's)
       3. your groups that name the repo with `match`
-      4. the repo's own `.mason.toml` (settings_of: environments, pages, secrets, settings ...)
+      4. the repo's own `.mason.toml` or `.mason/mason.toml` (settings_of: environments, pages, settings ...)
 
   So the org's `.mason` replaces your catch-all for its repos, your own explicit groups go on
   top, and the repo itself has the last word. Org groups are named `org:name` (`acme:default`).
@@ -94,13 +94,42 @@ GROUP_KEYS = {"name", "match", "from", "files", "require", "settings", "security
               "version", "changelog", "topics", "labels", "actions", "required_files", "branch",
               "visibility", "description", "skip", "workflows", "environments", "variables", "secrets", "pages",
               "homepage", "code_scanning", "autolinks", "inherit", "auto_fix", "auto_push", "auto_merge"}
+# More keys, each {name: (kind, what it holds)}: kind "dict" merges key by key, "list" adds up, "scalar" is
+# replaced. They live in Group.more; doctor (rules.py) and `mason auto` (auto.py) read them.
+MORE: dict[str, tuple[str, str]] = {
+    "protect": ("dict", "branch protection in a few keys: reviews, checks, signed_commits, linear_history, ..."),
+    "skip_until": ("dict", "{check: date}: skip that check until the date, then check it again"),
+    "owner": ("scalar", "who to ask about the repo (a login)"),
+    "team": ("scalar", "the team that looks after it"),
+    "notes": ("scalar", "a line shown with the repo"),
+    "auto_release": ("scalar", "mason auto pushes the version tag once the version file is ahead"),
+    "auto_update_branch": ("scalar", "mason auto brings open PRs that are behind up to date"),
+    "auto_close_stale": ("scalar", "mason auto closes PRs and issues untouched for this many days"),
+    "auto_rerun_failed": ("scalar", "mason auto reruns a failed run's jobs up to this many attempts"),
+    "auto_delete_branches": ("scalar", "mason auto deletes branches of merged PRs older than this many days"),
+    "dependabot": ("dict", "a generated .github/dependabot.yml: ecosystems, interval, auto_merge"),
+    "renovate": ("scalar", "a generated renovate.json: true or {extends = [...]}"),
+    "codeowners": ("dict", "a generated .github/CODEOWNERS: {pattern = [owners]}"),
+    "templates": ("scalar", "issue and PR templates must exist"),
+    "release_notes": ("dict", "a generated .github/release.yml: {categories = {title = [labels]}, exclude}"),
+    "release_drafts": ("scalar", "releases mason creates are drafts"),
+    "discussions": ("list", "discussion categories that must exist"),
+    "social_preview": ("scalar", "a custom social preview image must be set"),
+    "archive_after": ("scalar", "months without a push before the repo is archived (--fix archives it)"),
+    "properties": ("dict", "custom property values {name: value}"),
+    "webhooks": ("list", "webhook URLs that must exist (checked only)"),
+    "deploy_keys": ("list", "deploy key titles that must exist (checked only)"),
+    "alerts": ("scalar", "where mason auto reports new drift: a Slack, Discord or other https webhook"),
+}
+GROUP_KEYS |= set(MORE)
 # What a repo's own .mason.toml may set for itself (besides [release]): it wins over every group.
 REPO_KEYS = GROUP_KEYS - {"name", "match", "from", "files", "require", "rulesets", "version", "changelog", "inherit"}
 # What doctor checks for a group; `skip = [...]` turns checks off.
 CHECKS = ("settings", "security", "vulnerability_reporting", "immutable_releases", "rulesets", "own_rulesets",
           "files", "required_files", "topics", "labels", "actions", "branch", "visibility", "description", "workflows",
           "plugins", "version", "environments", "variables", "secrets", "pages", "homepage", "code_scanning",
-          "autolinks")
+          "autolinks", "protect", "dependabot", "renovate", "codeowners", "templates", "release_notes", "discussions",
+          "social_preview", "archive", "properties", "webhooks", "deploy_keys")
 
 
 def config_dir() -> Path:
@@ -227,6 +256,7 @@ class Group:
     auto_fix: bool | None = None  # plain `mason doctor` fixes the drift too, as with --fix
     auto_push: bool | None = None  # mason's file changes go straight onto the default branch, not a PR
     auto_merge: bool | None = None  # the PRs mason opens get auto-merge
+    more: dict = field(default_factory=dict)  # the MORE keys a group sets
     extra: dict = field(default_factory=dict)
     source: Source | None = None  # where its rulesets and files folders live (None: the config's defaults)
     origin: str = ""  # "" for your defaults; "acme/.mason" for a group of an org's .mason repo
@@ -357,6 +387,7 @@ def stack(layers: list[Group]) -> Group | None:
     for g in layers:
         for key in MERGE_DICT + MERGE_LIST + MERGE_SCALAR + ("environments", "pages", "changelog"):
             setattr(out, key, merged(key, getattr(out, key), getattr(g, key)))
+        out.more = merged_more(out.more, g.more)
     with_ref = next((g for g in reversed(layers) if g.reference), None)
     if with_ref:  # a reference's file list belongs to that reference
         out.reference = with_ref.reference
@@ -366,19 +397,31 @@ def stack(layers: list[Group]) -> Group | None:
 
 
 REPO_LAYER = ".mason.toml"
+REPO_FOLDER_FILE = ".mason/mason.toml"  # the same file inside a .mason/ folder (next to .mason/rulesets)
 _repo_loaded = core.Scoped("repo_layer")
+
+
+def repo_file(read, repo: str) -> tuple[str, str | None]:
+    """(path, text) of a repo's own settings: .mason.toml, else .mason/mason.toml. `read(path)` gives a
+    file's text or None."""
+    for path in (REPO_LAYER, REPO_FOLDER_FILE):
+        text = read(path)
+        if text:
+            return path, text
+    return REPO_LAYER, None
 
 
 def repo_layer(repo: str) -> Group | None:
     """The settings a repo's own .mason.toml gives itself, as a group named ".mason.toml" (None without).
     Its [release] table is read by versions.py; group-only keys (match, from, files, rulesets ...) are
-    left out: the repo's own rulesets are its .github/rulesets files."""
+    left out: the repo's own rulesets are its .github/rulesets and .mason/rulesets files.
+    The file may also be .mason/mason.toml, for repos that keep mason's files in a .mason/ folder."""
     if repo in _repo_loaded:
         return _repo_loaded[repo]
-    text = file_on(repo, REPO_LAYER)
+    path, text = repo_file(lambda p: file_on(repo, p), repo)
     found = None
     if text:
-        raw = parse_defaults(text, f"{repo}/{REPO_LAYER}")
+        raw = parse_defaults(text, f"{repo}/{path}")
         own = {k: v for k, v in raw.items() if k in REPO_KEYS}
         if own:
             found = make_group({**own, "name": REPO_LAYER}, 0)
@@ -546,6 +589,7 @@ def make_group(raw: dict, i: int) -> Group:
         auto_fix=_flag(raw, "auto_fix"),
         auto_push=_flag(raw, "auto_push"),
         auto_merge=_flag(raw, "auto_merge"),
+        more=_more(raw),
         inherit=raw.get("inherit") is not False,
         extra={k: v for k, v in raw.items() if k not in GROUP_KEYS},
     )
@@ -559,6 +603,44 @@ def _flag(raw: dict, key: str) -> bool | None:
 
 
 AUTO = ("auto_fix", "auto_push", "auto_merge")
+
+
+def _more(raw: dict) -> dict:
+    out = {}
+    for key, (kind, _) in MORE.items():
+        if key not in raw:
+            continue
+        value = raw[key]
+        if kind == "dict" and isinstance(value, bool):
+            value = {"enabled": value}  # dependabot = true: the defaults
+        elif kind == "dict" and not isinstance(value, dict):
+            raise RuntimeError(f"{key} must be a table")
+        if kind == "list":
+            value = _list(value)
+        out[key] = value
+    return out
+
+
+def merged_more(low: dict, high: dict) -> dict:
+    """Two layers' MORE keys: `high` wins."""
+    out = dict(low or {})
+    for key, value in (high or {}).items():
+        kind = MORE[key][0]
+        if kind == "dict":
+            out[key] = {**(out.get(key) or {}), **value}
+        elif kind == "list":
+            out[key] = list(dict.fromkeys(list(out.get(key) or []) + list(value)))
+        else:
+            out[key] = value
+    return out
+
+
+def more_of(cfg: Config, repo: str) -> dict:
+    """The MORE keys for one repo: its stacked group, then its own .mason.toml."""
+    from mason.repos import listing
+
+    group = cfg.settings_of(repo, (listing(cfg).get(repo) or {}).get("topics"))
+    return dict(group.more) if group else {}
 
 
 def auto(cfg: Config, repo: str, key: str) -> bool:

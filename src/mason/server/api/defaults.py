@@ -82,6 +82,20 @@ def validate(path: str, text: str) -> list[str]:
             if off:
                 problems.append(f"{label}: skip doesn't know {', '.join(sorted(off))} "
                                 f"(checks: {', '.join(config.CHECKS)})")
+            try:
+                more = config._more(grp)
+            except RuntimeError as err:
+                problems.append(f"{label}: {err}")
+                more = {}
+            late = set(more.get("skip_until") or {}) - set(config.CHECKS)
+            if late:
+                problems.append(f"{label}: skip_until doesn't know {', '.join(sorted(late))}")
+            for key in ("auto_close_stale", "auto_rerun_failed", "auto_delete_branches", "archive_after"):
+                if key in more and (isinstance(more[key], bool) or not isinstance(more[key], int) or more[key] < 1):
+                    problems.append(f"{label}: {key} is a number of {'attempts' if 'rerun' in key else 'days'}"
+                                    if key != "archive_after" else f"{label}: archive_after is a number of months")
+            if more.get("alerts") and not str(more["alerts"]).startswith("https://"):
+                problems.append(f"{label}: alerts is an https:// webhook address")
             if grp.get("visibility") not in (None, "public", "private", "internal"):
                 problems.append(f"{label}: visibility is public, private or internal")
             acts = grp.get("actions") or {}

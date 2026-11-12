@@ -277,6 +277,9 @@ def test_proxy_allowlist():
     assert allowed("GET", "/orgs/acme/teams/ops") and not allowed("PUT", "/orgs/acme/teams/ops/members/eve")
     assert not allowed("POST", "/user/keys")
     assert not allowed("GET", "/admin/users")
+    assert allowed("GET", "/repos/acme/web/hooks") and allowed("GET", "/repos/acme/web/keys")  # doctor reads the lists
+    assert not allowed("GET", "/repos/acme/web/hooks/1") and not allowed("POST", "/repos/acme/web/hooks")
+    assert not allowed("POST", "/repos/acme/web/keys") and allowed("PATCH", "/repos/acme/web/properties/values")
 
 
 def test_defaults_editor(op):

@@ -20,7 +20,7 @@ bp = Blueprint("console", __name__, url_prefix="/api/v1")
 
 READS = {"status", "prs", "pr", "runs", "releases", "packages", "security", "repos", "plugins", "stats", "workflows",
          "issues"}
-WRITES = {"merge", "approve", "doctor", "sync", "new", "rerun", "bump", "release", "issue"}
+WRITES = {"merge", "approve", "doctor", "sync", "new", "rerun", "bump", "release", "issue", "auto"}
 # write unless --dry-run (doctor, workflows: unless no --fix; release: unless --list or no names; issue: view)
 LOCAL = {"serve", "init", "tui", "open", "config", "login", "logout", "whoami", "market", "key"}
 
