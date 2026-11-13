@@ -1,13 +1,13 @@
 <script setup>
 // Checks: the repos against the defaults (mason doctor), fixing drift, syncing files, plus plugin checks.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { get, log, post } from '../api.js'
 import { act, forget } from '../load.js'
 import { useRouter } from 'vue-router'
 import { useKeys } from '../keys.js'
-import { loadGroups, ownerLabel, scope } from '../scope.js'
+import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
-import GroupSelect from '../components/GroupSelect.vue'
+import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 
 const output = ref('')
@@ -32,14 +32,16 @@ onMounted(async () => {
   } catch { /* none */ }
 })
 const repos = computed(() => only.value.split(/[\s,]+/).filter(Boolean))
-const where = computed(() => (repos.value.length ? repos.value.join(', ') : scope.group.endsWith('/') ? ownerLabel(scope.group) : scope.group ? `group ${scope.group}` : 'every repo'))
+const where = computed(() => (repos.value.length ? repos.value.join(', ') : scopeLabel()))
+// results of another scope would read as this one's
+watch(() => [scope.provider, scope.group], () => { found.value = []; output.value = '' })
 
 async function doctor() {
   running.value = 'doctor'
   output.value = ''
   found.value = []
   try {
-    const got = await post('/doctor', { repos: repos.value, group: scope.group || undefined })
+    const got = await post('/doctor', { repos: repos.value, ...scoped() })
     output.value = got.text || 'ok'
     found.value = got.repos || []
     forget('/status') // the repo list's doctor column
@@ -47,11 +49,11 @@ async function doctor() {
   running.value = ''
 }
 async function fix() {
-  const t = await act(`Apply the defaults to ${where.value} (settings, security, rulesets, protected branches)?`, '/doctor', { repos: repos.value, group: scope.group || undefined, fix: true })
+  const t = await act(`Apply the defaults to ${where.value} (settings, security, rulesets, protected branches)?`, '/doctor', { repos: repos.value, ...scoped(), fix: true })
   if (t !== null) { output.value = t; found.value = [] }
 }
 async function sync() {
-  const t = await act(`Open PRs that sync the shared files into ${where.value}?`, '/sync', { repos: repos.value, group: scope.group || undefined })
+  const t = await act(`Open PRs that sync the shared files into ${where.value}?`, '/sync', { repos: repos.value, ...scoped() })
   if (t !== null) output.value = t
 }
 async function plugin(c) {
@@ -65,9 +67,9 @@ useKeys({ c: doctor, f: fix, s: sync })
 <template>
   <div class="view">
     <div class="toolbar">
-      <GroupSelect :groups="scope.groups" />
+      <Scope :groups="scope.groups" />
       <input v-model="only" placeholder="repos (empty: all), e.g. web api gitlab:grp/x" style="min-width: 28ch">
-      <button class="primary" :disabled="!!running" @click="doctor"><span class="k">c</span> check every repo</button>
+      <button class="primary" :disabled="!!running" @click="doctor"><span class="k">c</span> check {{ where }}</button>
       <button :disabled="!!running" @click="fix"><span class="k">f</span> fix the drift</button>
       <button :disabled="!!running" @click="sync"><span class="k">s</span> open PRs with the shared files</button>
       <span class="spacer" />

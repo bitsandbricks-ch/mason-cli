@@ -273,7 +273,7 @@ def merge():
         abort(400, "method: squash, merge or rebase")
     with as_user(dry) as (gh, gl):
         cfg = load_config()
-        gh_r, gl_r, pick = all_repos(cfg, gh, gl, targets, data.get("group"))
+        gh_r, gl_r, pick = all_repos(cfg, gh, gl, targets, data.get("group"), str(data.get("provider") or "all"))
         if not targets and not data.get("all"):
             abort(400, "name the PRs (targets), or send all: true to auto-merge every ready PR")
         bypass = bool(data.get("bypass"))
@@ -667,17 +667,33 @@ def bump():
 @bp.post("/release/version")
 @need("read")
 def release_version():
-    """Release: push v<version> from the version file once it is newer than the latest release (mason release)."""
+    """Release: push v<version> from the version file once it is newer than the latest release (mason release).
+    {repo} or {repos: [...]} (every unreleased one at once, each on its own)."""
     from mason import versions as V
     data = body()
-    repo = valid_repo(str(data.get("repo") or ""))
-    github_only(repo)
+    many = data.get("repos")
+    if many is not None and not isinstance(many, list):
+        abort(400, "repos is a list")
+    names = [valid_repo(str(r)) for r in (many or [data.get("repo") or ""])][:100]
+    if not names:
+        abort(400, "name the repos")
+    for repo in names:
+        github_only(repo)
     dry = write_allowed(bool(data.get("dry_run")))
     with as_user(dry):
         cfg = load_config()
-        text = capture_rate(V.release, cfg, repo, True)
-    audit("release", repo, dry, detail=text)
-    return jsonify({"text": text, "ok": not text.lstrip().startswith("error")})
+        if many is None:
+            text = capture_rate(V.release, cfg, names[0], True)
+            ok = not text.lstrip().startswith("error")
+        else:
+            parts, ok = [], True
+            for repo in names:  # one that fails doesn't stop the others
+                out = capture_rate(V.release, cfg, repo, True)
+                ok = ok and not out.lstrip().startswith("error")
+                parts.append(f"== {repo}\n{out.rstrip()}")
+            text = "\n".join(parts) + "\n"
+    audit("release", ", ".join(names), dry, detail=text)
+    return jsonify({"text": text, "ok": ok})
 
 
 @bp.get("/releases/jobs")
@@ -872,7 +888,8 @@ def doctor():
     dry = write_allowed(bool(data.get("dry_run")) or not fix)
     with as_user(dry) as (gh, gl):
         cfg = load_config()
-        gh_r, gl_r, _ = all_repos(cfg, gh, gl, [str(x) for x in data.get("repos") or []], data.get("group"))
+        gh_r, gl_r, _ = all_repos(cfg, gh, gl, [str(x) for x in data.get("repos") or []], data.get("group"),
+                                  str(data.get("provider") or "all"))
         text = run_doctor(cfg, gl, gh_r, gl_r, fix)
         found = D.parse_report(text)
         if not (fix and dry):  # a dry-run fix leaves out what it would fix: not what the repo has
@@ -947,7 +964,8 @@ def sync():
     only = [str(x) for x in data.get("only") or []] or None
     with as_user(dry) as (gh, gl):
         cfg = load_config()
-        gh_r, gl_r, _ = all_repos(cfg, gh, gl, [str(x) for x in data.get("repos") or []], data.get("group"))
+        gh_r, gl_r, _ = all_repos(cfg, gh, gl, [str(x) for x in data.get("repos") or []], data.get("group"),
+                                  str(data.get("provider") or "all"))
         text = ""
         if gh_r:
             ctx = D.sync_ctx(cfg, gh_r, only)

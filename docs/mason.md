@@ -94,7 +94,14 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   version file: when the group names one, the tag must be `v<version>`.
 - **Bump and release** (`mason bump`, `mason release`) are on a repo's page and its releases page too: the
   version file against the latest release, **b** opens the bump PR (version and changelog), **R** pushes
-  `v<version>` once it is merged.
+  `v<version>` once it is merged. In Releases, **A** (release all new) pushes the tag of every repo in the
+  list whose version is ahead of its latest release, each on its own (`POST /release/version` with `repos`).
+- **The group filter** (provider and group or org, on every list) stays across views, reloads and new tabs;
+  a link can set it with `?group=acme/` or `?provider=gitlab`. Changes over many repos (auto-merge all ready,
+  checks, fix the drift, sync) and the repo pickers of new releases and issues follow it too.
+- **Approvals** leave out runs nobody needs any more: a run of a PR that was closed or got newer commits, a run
+  a newer one of the same workflow and branch replaced, and on GitLab manual jobs of older pipelines and older
+  blocked deployments of an environment.
 - **Caching:** a tab you go back to shows its last answer at once and asks again after a minute; `r` and
   every change ask again right away.
 - **Follow-ups:** a change shows without `r`. Marking a PR ready or turning on auto-merge changes its row at

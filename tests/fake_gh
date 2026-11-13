@@ -476,8 +476,14 @@ if argv[0] == "api":
             out({"workflow_runs": [{"id": 12, "name": "Release", "head_branch": "v1.0.0", "triggering_actor": {"login": "mike"},
                                     "created_at": "2026-11-05T09:00:00Z", "html_url": f"{WEB}/{repo}/actions/runs/12"}]})
         if params.get("status") == "action_required" and repo == "acme/web":
+            # 4: replaced by 6 (same workflow and branch); 14: its PR is closed (no open PR has eve:gone)
             out({"workflow_runs": [{"id": 6, "name": "CI", "head_branch": "fork-pr",
-                                    "created_at": "2026-11-05T09:00:00Z", "html_url": f"{WEB}/{repo}/actions/runs/6"}]})
+                                    "created_at": "2026-11-05T09:00:00Z", "html_url": f"{WEB}/{repo}/actions/runs/6"},
+                                   {"id": 4, "name": "CI", "head_branch": "fork-pr",
+                                    "created_at": "2026-11-04T09:00:00Z", "html_url": f"{WEB}/{repo}/actions/runs/4"},
+                                   {"id": 14, "name": "CI", "event": "pull_request", "head_branch": "gone",
+                                    "head_repository": {"full_name": "eve/web"}, "head_sha": "abc",
+                                    "created_at": "2026-11-03T09:00:00Z", "html_url": f"{WEB}/{repo}/actions/runs/14"}]})
         if params.get("status"):
             out({"workflow_runs": []})
         if repo == "acme/plugin-b":

@@ -927,6 +927,12 @@ def test_bump_and_release_from_the_web(op):
     got = c.post("/api/v1/release/version", json={"repo": "acme/plugin-b", "dry_run": True}, headers=H).json
     assert "[dry-run] push tag v0.4.0 on main" in got["text"]
     assert c.post("/api/v1/bump", json={"repo": "gitlab:g/p"}, headers=H).status_code == 400
+    # every unreleased one at once (Releases: "release all new")
+    got = c.post("/api/v1/release/version", json={"repos": ["acme/plugin-b", "acme/plugin-a"], "dry_run": True},
+                 headers=H).json
+    assert "== acme/plugin-b\n" in got["text"] and "== acme/plugin-a\n" in got["text"]
+    assert "[dry-run] push tag v0.4.0 on main" in got["text"]
+    assert c.post("/api/v1/release/version", json={"repos": ["gitlab:g/p"]}, headers=H).status_code == 400
 
 
 def test_unreleased_versions_in_the_releases_list(op):

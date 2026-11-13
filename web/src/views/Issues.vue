@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router'
 import { get, log, qs } from '../api.js'
 import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
-import { loadGroups, scope } from '../scope.js'
+import { loadGroups, scope, scopedRepos } from '../scope.js'
 import { ago, ask, openDetail } from '../ui.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
@@ -64,13 +64,14 @@ async function comment() {
 
 // the new-issue form
 const form = reactive({ open: false, repo: '', title: '', body: '', labels: '', assignees: '' })
-const repoNames = ref([])
+const repoNames = ref([]) // the picker's repos: those of the filter, read again when it changes
+watch(() => [scope.provider, scope.group], () => { repoNames.value = [] })
 async function newIssue() {
   form.open = true
   openDetail()
   if (!form.repo && current.value) form.repo = current.value.repo
   if (!repoNames.value.length) {
-    try { repoNames.value = (await get('/repos')).repos.map((r) => r.repo) } catch (e) { log(e.message, 'error') }
+    try { repoNames.value = await scopedRepos() } catch (e) { log(e.message, 'error') }
   }
 }
 const split = (s) => s.split(',').map((x) => x.trim()).filter(Boolean)

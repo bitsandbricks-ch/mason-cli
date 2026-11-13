@@ -380,18 +380,42 @@ def runs(gl: GitLab, repos: list[str], limit: int = 3, failed: bool = False) -> 
     return [r for rows in core.pmap(fetch, repos) for r in rows]
 
 
+def current_jobs(jobs: list[dict]) -> list[dict]:
+    """Manual jobs of each ref's newest pipeline: GitLab lists the ones of every old pipeline too, for good."""
+    def pipe(j: dict) -> tuple:
+        p = j.get("pipeline") or {}
+        return p.get("ref") or j.get("ref"), p.get("id") or 0
+
+    newest: dict = {}
+    for j in jobs:
+        ref, pid = pipe(j)
+        newest[ref] = max(newest.get(ref, 0), pid)
+    return [j for j in jobs if pipe(j)[1] == newest[pipe(j)[0]]]
+
+
+def current_deployments(deps: list[dict]) -> list[dict]:
+    """The newest blocked deployment of each environment: an older one would deploy what the newer replaced."""
+    newest: dict = {}
+    for d in deps:
+        env = (d.get("environment") or {}).get("name")
+        if env not in newest or d["id"] > newest[env]["id"]:
+            newest[env] = d
+    return [d for d in deps if newest[(d.get("environment") or {}).get("name")] is d]
+
+
 def waiting(gl: GitLab, repos: list[str]) -> list[dict]:
     """Deployments waiting for an approval, and manual jobs waiting to be played."""
     def fetch(repo: str) -> list[dict]:
         out = []
         try:
-            for d in gl.api("GET", f"{gl.project(repo)}/deployments?status=blocked&per_page=20") or []:
+            blocked = gl.api("GET", f"{gl.project(repo)}/deployments?status=blocked&per_page=20") or []
+            for d in current_deployments(blocked):
                 out.append({"repo": repo, "provider": "gitlab", "kind": "deployment", "id": d["id"],
                             "name": f"deploy to {(d.get('environment') or {}).get('name', '?')}",
                             "branch": d.get("ref", ""), "created": d.get("created_at"),
                             "url": (d.get("deployable") or {}).get("web_url", ""),
                             "waits_for": (d.get("environment") or {}).get("name", "")})
-            for j in gl.api("GET", f"{gl.project(repo)}/jobs?scope[]=manual&per_page=20") or []:
+            for j in current_jobs(gl.api("GET", f"{gl.project(repo)}/jobs?scope[]=manual&per_page=20") or []):
                 out.append({"repo": repo, "provider": "gitlab", "kind": "manual", "id": j["id"],
                             "name": f"{j.get('stage')} / {j.get('name')}", "branch": j.get("ref", ""),
                             "created": j.get("created_at"), "url": j.get("web_url", ""), "waits_for": "manual job"})

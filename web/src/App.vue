@@ -6,7 +6,7 @@ import { THEMES } from './themes.js'
 import { GROUPS, SECTIONS, TABS, sectionOf } from './router.js'
 import { typing } from './keys.js'
 import { arrowKey } from './arrows.js'
-import { closeDetail, phone, prompt } from './ui.js'
+import { closeDetail, detailName, phone, prompt } from './ui.js'
 import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
 
@@ -92,7 +92,8 @@ const title = computed(() => {
   const label = t ? t.label.replace(/ /g, '-') : route.name
   const q = route.query
   const which = q.number ? `#${q.number}` : q.id ? ` ${q.id}` : q.tag ? ` ${q.tag}` : ''
-  return q.repo && route.name !== current.value ? `${label}/${q.repo}${which}` : label
+  if (q.repo && route.name !== current.value) return `${label}/${q.repo}${which}`
+  return detail.value && detailName.value ? `${label}/${detailName.value}` : label
 })
 // ‹ in the title bar: closes a detail, or leaves a row's own page (a repo, its releases) for its list
 const canBack = computed(() => detail.value || (!!route.meta.tab && route.name !== route.meta.tab))
@@ -105,7 +106,7 @@ const moreLabel = computed(() => (inDock.value || menu.value ? 'more' : TABS.fin
 watch(() => route.path, () => { menu.value = false })
 watch(phone, (p) => { if (!p) menu.value = false })
 
-// the last log line, for a few seconds (errors longer), above the bottom bar
+// the last log line, for a few seconds (errors longer), in a row of its own above the bottom bar
 const toast = ref(null)
 let toastTimer = null
 watch(() => state.log[0], (l) => {
@@ -190,6 +191,8 @@ window.addEventListener('keydown', (e) => {
         </section>
       </div>
     </main>
+    <div v-if="toast" class="toast" :class="toast.kind === 'error' ? 'bad' : toast.kind === 'ok' ? 'ok' : ''" role="status"
+         @click="toast = null">{{ toast.text }}</div>
     <nav class="dock" aria-label="views">
       <router-link v-for="d in DOCK" :key="d.name" :to="d.path" :class="{ active: !menu && current === d.name }">
         <span class="ico" aria-hidden="true">{{ d.icon }}</span>{{ d.label }}
@@ -198,8 +201,6 @@ window.addEventListener('keydown', (e) => {
         <span class="ico" aria-hidden="true">{{ menu ? '✕' : '≡' }}</span>{{ moreLabel }}
       </button>
     </nav>
-    <div v-if="toast" class="toast" :class="toast.kind === 'error' ? 'bad' : toast.kind === 'ok' ? 'ok' : ''" role="status"
-         @click="toast = null">{{ toast.text }}</div>
   </div>
   <div v-else class="screen">
     <header class="top">
