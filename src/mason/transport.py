@@ -361,27 +361,30 @@ class HttpTransport:
             self._note_rate(err.headers, res)
             if err.code == 304:
                 return 304, dict(err.headers or {}), b""
-            data = err.read() or b""
-            hdr = err.headers.get if err.headers else (lambda _k, _d=None: None)
-            remaining = hdr(self.RATE_HEADERS[0])
-            retry = hdr("retry-after")
-            if err.code == 429 or (err.code == 403 and (remaining == "0" or retry or b"rate limit" in data.lower())):
-                reset = hdr(self.RATE_HEADERS[2])
-                when = int(reset) if reset and reset.isdigit() else None
-                if retry and retry.isdigit():  # a secondary limit: wait that long before this kind of call again
-                    self.blocked[res] = time.time() + int(retry)
-                    when = int(time.time()) + int(retry)
-                raise _rate_error(when, self.label) from err
-            try:
-                msg = json.loads(data).get("message") or ""
-            except (ValueError, AttributeError):
-                msg = data.decode(errors="replace")[:200]
-            if isinstance(msg, (list, dict)):
-                msg = json.dumps(msg)[:200]
-            reason = {401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 422: "Unprocessable"}.get(err.code, "")
-            raise HttpError(f"{method} {self._path(url)}: {msg or reason} (HTTP {err.code})", err.code, data) from err
+            self._fail(method, url, err.code, err.headers, err.read() or b"", res)
         except urllib.error.URLError as err:
             raise RuntimeError(f"{method} {url}: {err.reason}") from err
+
+    def _fail(self, method: str, url: str, status: int, headers, data: bytes, res: str = "core"):
+        """Raise what an error answer means: RateLimited, or HttpError with the API's message."""
+        hdr = headers.get if headers else (lambda _k, _d=None: None)
+        remaining = hdr(self.RATE_HEADERS[0])
+        retry = hdr("retry-after")
+        if status == 429 or (status == 403 and (remaining == "0" or retry or b"rate limit" in data.lower())):
+            reset = hdr(self.RATE_HEADERS[2])
+            when = int(reset) if reset and reset.isdigit() else None
+            if retry and retry.isdigit():  # a secondary limit: wait that long before this kind of call again
+                self.blocked[res] = time.time() + int(retry)
+                when = int(time.time()) + int(retry)
+            raise _rate_error(when, self.label)
+        try:
+            msg = json.loads(data).get("message") or ""
+        except (ValueError, AttributeError):
+            msg = data.decode(errors="replace")[:200]
+        if isinstance(msg, (list, dict)):
+            msg = json.dumps(msg)[:200]
+        reason = {401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 422: "Unprocessable"}.get(status, "")
+        raise HttpError(f"{method} {self._path(url)}: {msg or reason} (HTTP {status})", status, data)
 
     def _note_rate(self, headers, res: str = "core") -> None:
         if not headers:

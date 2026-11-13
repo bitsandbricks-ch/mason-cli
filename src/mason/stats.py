@@ -144,14 +144,19 @@ def totals(rows: list[dict], days: int) -> dict:
     }
 
 
-def show(repos: list[str], days: int = 30) -> None:
-    rows = github(repos, days)
+def label(repo: str) -> str:
+    return repo if repo.startswith("gitlab:") else short(repo)  # gitlab:grp/web, not a second "web"
+
+
+def show(repos: list[str], days: int = 30, more: list[dict] | None = None) -> None:
+    """The table and totals; `more`: rows already counted elsewhere (GitLab's, from gitlab.stats)."""
+    rows = (github(repos, days) if repos else []) + list(more or [])
 
     def cell(v, unit=""):
         return "-" if v is None else f"{v}{unit}"
 
     table(["repo", "merged", "opened", "merge time", "open", "stale", "runs", "ok", "run time", "releases"],
-          [[short(r["repo"]), str(r["merged"]), str(r["opened"]), cell(r["median_merge_hours"], "h"), str(r["open"]),
+          [[label(r["repo"]), str(r["merged"]), str(r["opened"]), cell(r["median_merge_hours"], "h"), str(r["open"]),
             str(r["stale"]), str(r["runs"]), cell(r["success_rate"], "%"), cell(r["median_run_minutes"], "m"),
             str(r["releases"])] for r in rows if r["merged"] or r["open"] or r["runs"] or r["releases"]])
     t = totals(rows, days)

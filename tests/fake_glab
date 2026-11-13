@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Stand-in for glab: canned GitLab answers for a made-up group `acme-gl` and user `mike-gl`; logs every call.
+
+acme-gl: web (two open merge requests, a failed pipeline), tools/cli (in line, released v2.0.0).
+Answers look like `glab api --include`: the status line, the headers, a blank line, the body.
+FAKE_GLAB_SIGNED_OUT=1: `glab auth status` fails, as before `glab auth login`.
+FAKE_GH_LOG names a file that gets one line per call (prefixed `glab`).
+"""
+import json
+import os
+import re
+import sys
+import urllib.parse
+
+argv = sys.argv[1:]
+stdin = sys.stdin.read() if "--input" in argv else ""
+with open(os.environ.get("FAKE_GH_LOG", "/dev/null"), "a") as f:
+    f.write("glab " + " ".join(argv) + "\n")
+    if stdin:
+        f.write(f"BODY {stdin.strip()}\n")
+
+WEB = "https://gitlab.com"
+PROJECTS = {"acme-gl/web": 1, "acme-gl/tools/cli": 2}
+
+
+def answer(status, obj=None, headers=None):
+    head = {"Content-Type": "application/json", "Ratelimit-Limit": "2000", "Ratelimit-Remaining": "1999",
+            "Ratelimit-Reset": "1700000000", **(headers or {})}
+    reason = {200: "OK", 201: "Created", 204: "No Content", 304: "Not Modified", 404: "Not Found"}.get(status, "")
+    out = f"HTTP/2.0 {status} {reason}\r\n" + "".join(f"{k}: {v}\r\n" for k, v in sorted(head.items())) + "\r\n"
+    sys.stdout.write(out + ("" if obj is None else json.dumps(obj)))
+    sys.exit(0 if status < 400 else 1)
+
+
+def project(path):
+    return {"id": PROJECTS[path], "path_with_namespace": path, "web_url": f"{WEB}/{path}", "default_branch": "main",
+            "topics": [], "visibility": "private", "archived": False}
+
+
+def mr(iid, title, draft=False, conflicts=False):
+    return {"iid": iid, "title": title, "webUrl": f"{WEB}/acme-gl/web/-/merge_requests/{iid}", "draft": draft,
+            "conflicts": conflicts, "approved": not draft, "autoMergeEnabled": False, "sourceBranch": f"feat-{iid}",
+            "detailedMergeStatus": "MERGEABLE" if not (draft or conflicts) else "DRAFT_STATUS",
+            "createdAt": "2026-11-01T10:00:00Z", "author": {"username": "ann"}, "headPipeline": {"status": "SUCCESS"}}
+
+
+def node(path):
+    web = path == "acme-gl/web"
+    mrs = [mr(4, "Add dark mode"), mr(5, "Draft: new logo", draft=True)] if web else []
+    return {"fullPath": path, "webUrl": f"{WEB}/{path}", "archived": False,
+            "repository": {"rootRef": "main", "tree": {"lastCommit": {"pipelines": {"nodes": [
+                {"status": "FAILED" if web else "SUCCESS"}]}}}},
+            "releases": {"nodes": [] if web else [{"tagName": "v2.0.0"}]},
+            "mergeRequests": {"count": len(mrs), "nodes": mrs}}
+
+
+if argv[:2] == ["auth", "status"]:
+    if os.environ.get("FAKE_GLAB_SIGNED_OUT"):
+        print("x gitlab.com: not logged in", file=sys.stderr)
+        sys.exit(1)
+    print("gitlab.com: logged in as mike-gl", file=sys.stderr)
+    sys.exit(0)
+if argv[:1] != ["api"]:
+    print(f"fake glab: no answer for {argv}", file=sys.stderr)
+    sys.exit(2)
+
+method = argv[argv.index("--method") + 1] if "--method" in argv else "GET"
+flags_with_value = {"--method", "--hostname", "--header", "--input"}
+rest, skip = [], False
+for a in argv[1:]:
+    if skip:
+        skip = False
+    elif a in flags_with_value:
+        skip = True
+    elif not a.startswith("--"):
+        rest.append(a)
+path = rest[0]
+bare, _, query = path.partition("?")
+q = urllib.parse.parse_qs(query)
+
+if path == "graphql":
+    body = json.loads(stdin)
+    found = re.findall(r'(p\d+): project\(fullPath: "([^"]+)"\)', body["query"])
+    answer(200, {"data": {alias: node(p) if p in PROJECTS else None for alias, p in found}})
+if bare == "user":
+    answer(200, {"id": 9, "username": "mike-gl", "name": "Mike"})
+if bare.startswith("groups/acme-gl/projects"):
+    answer(200, [project(p) for p in PROJECTS] if q.get("page", ["1"])[0] == "1" else [])
+m = re.match(r"projects/([^/]+)(/.*)?$", bare)
+if m:
+    name = urllib.parse.unquote(m.group(1))
+    sub = m.group(2) or ""
+    if name not in PROJECTS:
+        answer(404, {"message": "404 Project Not Found"})
+    if sub == "":
+        answer(200, project(name))
+    if sub == "/pipelines":
+        failed = name == "acme-gl/web"
+        if q.get("status") == ["failed"] and not failed:
+            answer(200, [])
+        answer(200, [{"id": 77, "status": "failed" if failed else "success", "source": "push", "ref": "main",
+                      "created_at": "2026-11-12T09:00:00Z", "web_url": f"{WEB}/{name}/-/pipelines/77"}])
+    if sub == "/issues":
+        answer(200, [{"iid": 3, "title": "Login is slow", "web_url": f"{WEB}/{name}/-/issues/3", "state": "opened",
+                      "labels": ["bug"], "assignees": [], "author": {"username": "ann"}, "user_notes_count": 1,
+                      "created_at": "2026-11-01T10:00:00Z", "updated_at": "2026-11-10T10:00:00Z"}]
+               if name == "acme-gl/web" else [])
+    if sub == "/merge_requests/4/merge" and method == "PUT":
+        answer(200, {"iid": 4, "state": "opened", "merge_when_pipeline_succeeds": True})
+    if sub == "/merge_requests/4":
+        answer(200, {"iid": 4, "title": "Add dark mode", "state": "opened", "draft": False,
+                     "web_url": f"{WEB}/{name}/-/merge_requests/4", "has_conflicts": False,
+                     "merge_when_pipeline_succeeds": False})
+    if sub == "/merge_requests":
+        web = name == "acme-gl/web" and q.get("state") in (["opened"], None)
+        answer(200, [{"iid": 4, "title": "Add dark mode", "state": "opened", "draft": False,
+                      "web_url": f"{WEB}/{name}/-/merge_requests/4", "has_conflicts": False,
+                      "merge_when_pipeline_succeeds": False, "created_at": "2026-11-01T10:00:00Z"},
+                     {"iid": 5, "title": "Draft: new logo", "state": "opened", "draft": True,
+                      "web_url": f"{WEB}/{name}/-/merge_requests/5", "has_conflicts": False,
+                      "created_at": "2026-11-02T10:00:00Z"}] if web else [])
+    if sub == "/protected_branches":  # tools/cli protects main the way the defaults want; web doesn't
+        answer(200, [{"name": "main", "push_access_levels": [{"access_level": 0}],
+                      "merge_access_levels": [{"access_level": 30}]}] if name == "acme-gl/tools/cli" else [])
+    if sub == "/releases":
+        answer(200, [{"tag_name": "v2.0.0", "released_at": "2026-11-05T10:00:00Z", "assets": {"links": []},
+                      "_links": {"self": f"{WEB}/{name}/-/releases/v2.0.0"}}] if name == "acme-gl/tools/cli" else [])
+    if sub == "/repository/tree" or sub.startswith(("/deployments", "/jobs")):
+        answer(200, [])
+answer(404, {"message": "404 Not Found"})

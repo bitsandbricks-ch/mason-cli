@@ -73,7 +73,7 @@ def test_bump_kind():
 
 
 class StubGitLab:
-    """Just enough of server.gitlab.GitLab for doctor and sync."""
+    """Just enough of gitlab.GitLab for doctor and sync."""
 
     def __init__(self, own: str):
         self.own, self.calls = own, []
@@ -98,7 +98,7 @@ class StubGitLab:
 
 
 def test_a_gitlab_projects_own_mason_toml(capsys):
-    from mason.server import gitlab as GL
+    from mason import gitlab as GL
 
     c = Config(source=None, orgs=[], repos=[], exclude=[], org_defaults=False, groups=[])
     gl = StubGitLab('auto_fix = true\n[gitlab.settings]\nsquash_option = "always"\n')
@@ -175,7 +175,7 @@ def test_default_branch_protection_check(monkeypatch):
 
 
 def test_gitlab_protect_protects_the_default_branch(capsys):
-    from mason.server import gitlab as GL
+    from mason import gitlab as GL
 
     c = Config(source=None, orgs=[], repos=[], exclude=[], org_defaults=False,
                groups=[Group("all", more={"protect": {"reviews": 1}})])

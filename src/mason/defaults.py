@@ -629,9 +629,9 @@ def summary_line(r: dict, width: int = 0) -> str:
     return f"{name}  {n} issue{'s' * (n != 1)}" + (f"  fix: {fix}" if fix else "")
 
 
-def doctor_summary(cfg: Config, repos: list[str]) -> None:
-    """`mason doctor --summary`: one line per repo, the repos with issues first."""
-    results = list(report(cfg, repos).values())
+def doctor_summary(cfg: Config, repos: list[str], more: dict[str, dict] | None = None) -> None:
+    """`mason doctor --summary`: one line per repo, the repos with issues first. `more`: GitLab's results."""
+    results = list((report(cfg, repos) if repos else {}).values()) + list((more or {}).values())
     if not results:
         return
     width = max(len(r["repo"]) for r in results)
