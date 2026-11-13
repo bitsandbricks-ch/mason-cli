@@ -7,6 +7,7 @@ import fnmatch
 import json
 import re
 import webbrowser
+from urllib.parse import quote
 
 from mason import config, core, plugins
 from mason.config import Config, group_label, orgs_of
@@ -497,20 +498,76 @@ def merge(repo: str, ctx: dict) -> None:
 RUN_APPROVAL = {"id": None, "name": "approval to run (outside contributor)"}
 
 
+PR_EVENTS = ("pull_request", "pull_request_target")
+
+
+def _line(repo: str, run: dict) -> tuple:
+    """A run's workflow, branch and the repo the branch is in (a fork's PR): runs on one line replace each other."""
+    head = (run.get("head_repository") or {}).get("full_name") or repo
+    return run.get("workflow_id") or run.get("name"), run.get("head_branch"), head
+
+
+def stale_runs(repo: str, runs: list[dict]) -> set:
+    """The ids of waiting runs nobody needs any more. GitHub keeps them waiting for good: an outside contributor's
+    run of a PR that was closed or got newer commits, and a run a newer one of the same workflow and branch
+    replaced (still waiting, or since run)."""
+    stale: set = set()
+    prs = [r for r in runs if r.get("event") in PR_EVENTS and r.get("head_branch")]
+    if prs:
+        try:
+            heads = {}
+            for p in api_pages(f"/repos/{repo}/pulls?state=open"):
+                h = p.get("head") or {}
+                heads[((h.get("repo") or {}).get("full_name") or repo, h.get("ref"))] = h.get("sha")
+        except RuntimeError:
+            heads = None  # can't tell: keep them all
+        for r in prs if heads is not None else []:
+            _, branch, head = _line(repo, r)
+            sha = heads.get((head, branch), False)
+            if sha is False or (sha and r.get("head_sha") and sha != r["head_sha"]):
+                stale.add(r["id"])
+    newest_on: dict = {}
+    for r in runs:
+        line = _line(repo, r)
+        if line[1] is None:
+            continue
+        if line in newest_on and newest_on[line]["id"] > r["id"]:
+            stale.add(r["id"])
+        else:
+            if line in newest_on:
+                stale.add(newest_on[line]["id"])
+            newest_on[line] = r
+    for line, r in newest_on.items():
+        if r["id"] in stale or not r.get("workflow_id"):
+            continue
+        try:
+            got = api("GET", f"/repos/{repo}/actions/workflows/{r['workflow_id']}/runs"
+                             f"?branch={quote(line[1], safe='')}&per_page=5") or {}
+        except RuntimeError:
+            continue
+        if any(x["id"] > r["id"] and _line(repo, x) == line for x in got.get("workflow_runs") or []):
+            stale.add(r["id"])
+    return stale
+
+
 def waiting_runs(repo: str) -> list[tuple[str, dict, list[dict]]]:
-    """Runs waiting for you: environments you review, and outside contributors' runs."""
-    out = []
+    """Runs waiting for you: environments you review, and outside contributors' runs (not the stale ones)."""
     found = api("GET", f"/repos/{repo}/actions/runs?status=waiting&per_page=20") or {}
-    for run in found.get("workflow_runs") or []:
+    waiting = found.get("workflow_runs") or []
+    found = api("GET", f"/repos/{repo}/actions/runs?status=action_required&per_page=20") or {}
+    asking = found.get("workflow_runs") or []
+    stale = stale_runs(repo, waiting + asking)
+    out = []
+    for run in waiting:
+        if run["id"] in stale:
+            continue
         pending = api("GET", f"/repos/{repo}/actions/runs/{run['id']}/pending_deployments") or []
         envs = [p["environment"] for p in pending if p.get("current_user_can_approve")]
         if envs:
             out.append((repo, run, envs))
         elif pending:  # waiting, but not for you: say why, so it isn't just missing
             out.append((repo, run, [dict(p["environment"], blocked=blocked_reason(repo, run, p)) for p in pending]))
-    found = api("GET", f"/repos/{repo}/actions/runs?status=action_required&per_page=20") or {}
-    for run in found.get("workflow_runs") or []:
-        out.append((repo, run, [RUN_APPROVAL]))
+    out += [(repo, run, [RUN_APPROVAL]) for run in asking if run["id"] not in stale]
     return out
 
 

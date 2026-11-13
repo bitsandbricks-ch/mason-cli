@@ -14,7 +14,7 @@ import StatusHeader from '../components/StatusHeader.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
-import { openDetail } from '../ui.js'
+import { openDetail, replaceQuery } from '../ui.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,7 +39,7 @@ async function load(tag = '', fresh = false) {
   } catch (e) { text.value = `error: ${e.message}` } finally { loading.value = false }
 }
 watch(repo, () => { page.value = null; form.value = ''; output.value = ''; waitFor = ''; load(String(route.query.tag || '')) }, { immediate: true })
-watch(sel, (tag, before) => { if (tag && before && tag !== before) { router.replace({ query: { ...route.query, tag } }); load(tag) } })
+watch(sel, (tag, before) => { if (tag && before && tag !== before) { replaceQuery({ tag }); load(tag) } })
 
 const rows = computed(() => page.value?.releases || [])
 const columns = [

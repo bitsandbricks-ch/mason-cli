@@ -169,7 +169,8 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
   .screen.phone { grid-template-rows: auto minmax(0, 1fr) auto; }
   .phone .top { gap: 8px; padding: 0 10px; padding-top: env(safe-area-inset-top); min-height: 46px; overflow: hidden; }
   .phone .top .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-  .phone .top .back { border: 0; font-size: 26px; line-height: 1; padding: 0 10px 2px 0; min-height: 44px; color: var(--accent); }
+  .phone .top .back { border: 0; font-size: 30px; line-height: 1; padding: 0 0 4px; min-width: 44px; min-height: 44px;
+    margin-left: -10px; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); } /* a thumb-sized target */
   .phone .top .chip { color: var(--warn); border-color: var(--warn); min-height: 30px; }
   .phone main { position: relative; }
   .dock { display: flex; border-top: 1px solid var(--line); background: var(--bg2);
@@ -180,9 +181,10 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
   .dock .ico { font-size: 18px; line-height: 22px; }
   .dock a:hover, .dock button:hover { text-decoration: none; color: var(--fg); }
   .dock .active, .dock .router-link-exact-active { color: var(--accent); border-top-color: var(--accent); background: var(--bg3); }
-  .toast { position: fixed; left: 10px; right: 10px; bottom: calc(62px + env(safe-area-inset-bottom)); z-index: 40;
-    background: var(--bg3); border: 1px solid var(--line); padding: 8px 12px; overflow-wrap: anywhere;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, .35); }
+  .screen.phone:has(> .toast) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
+  /* its own row above the bottom bar, not over the view: a detail's buttons sit just above the bar too */
+  .toast { background: var(--bg3); border-top: 1px solid var(--line); padding: 8px 12px; overflow-wrap: anywhere;
+    max-height: 30vh; overflow-y: auto; }
 
   /* the menu of every view */
   .sheet { position: absolute; inset: 0; z-index: 30; overflow-y: auto; background: var(--bg); padding: 4px 0 16px;
@@ -386,6 +388,9 @@ button.wide { width: 100%; text-align: left; }
   .view:has(> .split.ld) > .events.band { display: none; } /* a list: the events show with the picked row */
   main.detail .view:has(> .split.ld) > .events.band { display: block; order: 1; height: 38vh; }
   .events.band .about { max-width: 100%; flex-basis: 100%; order: 9; }
+  /* thumb-sized: the fold toggle and an error's details were 16px and 18px high */
+  .events .fold { min-width: 44px; min-height: 44px; font-size: 18px; }
+  button.link { min-height: 36px; padding: 0 8px; }
 }
 /* a detail page on a phone: header, content and the event log scroll as one page, so the log never squeezes
    the content away */

@@ -5,7 +5,7 @@
 // (.split.ld) a tap opens the detail; elsewhere a tap selects and the selected card offers activate.
 import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
 import ErrorNote from './ErrorNote.vue'
-import { glyph, openDetail, phone, stateClass } from '../ui.js'
+import { detailName, glyph, openDetail, phone, stateClass } from '../ui.js'
 
 const props = defineProps({
   columns: { type: Array, required: true }, // [{key, label, cls?: (row) => str, fmt?: (v,row) => str, right?, mark?: false}]
@@ -51,7 +51,9 @@ onMounted(() => {
 })
 function tap(r) {
   emit('update:modelValue', props.rowKey(r))
-  if (inSplit.value) openDetail()
+  if (!inSplit.value) return
+  detailName.value = head.value.map((c) => cell(c, r)).filter((v) => !blank(v)).join(' ')
+  openDetail()
 }
 const sortChoice = computed({
   get: () => (sortKey.value ? `${sortKey.value}:${sortDir.value}` : ''),

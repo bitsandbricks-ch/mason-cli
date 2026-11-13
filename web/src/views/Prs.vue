@@ -8,7 +8,7 @@ import { useRouter } from 'vue-router'
 import { get, qs } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
-import { loadGroups, scope } from '../scope.js'
+import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
@@ -77,7 +77,8 @@ async function doMerge(now) {
   follow.now([p.repo])
 }
 async function mergeAll() {
-  const text = await act('Auto-merge every ready PR (drafts and conflicts stay open)?', '/merge', { all: true })
+  // only the PRs the list shows: the group filter used to be dropped here, so this merged in every repo
+  const text = await act(`Auto-merge every ready PR of ${scopeLabel()} (drafts and conflicts stay open)?`, '/merge', { all: true, ...scoped() })
   if (text !== null) { detail.value = text; load(true) }
 }
 async function ready() {

@@ -82,10 +82,23 @@ const narrow = (() => { try { return matchMedia('(max-width: 700px)') } catch { 
 export const phone = ref(!!narrow?.matches)
 narrow?.addEventListener?.('change', (e) => { phone.value = e.matches })
 
+let opening = null // openDetail's navigation while it is under way
+// what the open detail shows (the tapped card's name), for the title bar: it said only "releases" or "runs"
+export const detailName = ref('')
 export function openDetail() {
   const r = router.currentRoute.value
   if (!phone.value || r.hash === '#detail') return
-  router.push({ path: r.path, query: r.query, hash: '#detail' })
+  const nav = router.push({ path: r.path, query: r.query, hash: '#detail' })
+  opening = nav.finally(() => { if (opening === nav) opening = null })
+  return nav
+}
+
+// Change the query of the open view and keep its #detail. A tap selects a row and opens its detail at once:
+// a replace started before that push lands would cancel it and drop #detail, so it waits for it.
+export async function replaceQuery(patch) {
+  if (opening) await opening.catch(() => {})
+  const r = router.currentRoute.value
+  return router.replace({ path: r.path, query: { ...r.query, ...patch }, hash: r.hash })
 }
 
 export function closeDetail() {
