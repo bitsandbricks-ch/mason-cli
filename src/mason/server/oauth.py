@@ -329,7 +329,7 @@ def github(user: User):
 
 
 def gitlab(user: User):
-    from mason.server.gitlab import GitLab
+    from mason.gitlab import GitLab
     ident = user.identity("gitlab")
     if ident is None:
         return None

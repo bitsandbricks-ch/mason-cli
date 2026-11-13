@@ -1,6 +1,6 @@
 """Approvals leave out runs nobody needs any more: closed PRs, newer commits, replaced runs."""
+from mason import gitlab as GL
 from mason import repos as R
-from mason.server import gitlab as GL
 
 
 def test_stale_runs(monkeypatch):

@@ -123,8 +123,10 @@ class GitLab(HttpTransport):
 # ── which projects ───────────────────────────────────────────────────────────
 
 
-def projects(gl: GitLab, groups: list[str], extra: list[str] | None = None, exclude: list[str] | None = None) -> dict:
-    """{gitlab:path: info} of the groups' projects (subgroups too), or of your projects when no group is set."""
+def projects(gl: GitLab, groups: list[str], extra: list[str] | None = None, exclude: list[str] | None = None,
+             mine: bool = True) -> dict:
+    """{gitlab:path: info} of the groups' projects (subgroups too), or of your projects when no group is set
+    (`mine`; the CLI passes False, so naming a few projects doesn't pull in all of yours)."""
     found: dict[str, dict] = {}
 
     def add(p: dict) -> None:
@@ -139,7 +141,7 @@ def projects(gl: GitLab, groups: list[str], extra: list[str] | None = None, excl
                                                  "include_subgroups=true&archived=false&with_shared=false"), groups):
             for p in got:
                 add(p)
-    else:
+    elif mine:
         for p in gl.pages("/projects?membership=true&archived=false&min_access_level=30&order_by=path&sort=asc"):
             add(p)
     for repo in extra or []:

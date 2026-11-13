@@ -7,7 +7,7 @@
 
 [![CI](https://github.com/bitsandbricks-ch/mason-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/bitsandbricks-ch/mason-cli/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE) [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-bitsandbricks-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/bitsandbricks)
 
-Mason (the `mason` command) is a terminal tool, TUI and web app for looking after many GitHub (and, in the web app, GitLab) repositories at once, across orgs and user accounts: status, pull requests, merges, workflow runs and approvals, security alerts, stats, and drift checks against shared defaults. It holds your bricks together.
+Mason (the `mason` command) is a terminal tool, TUI and web app for looking after many GitHub and GitLab repositories at once, across orgs and user accounts: status, pull requests, merges, workflow runs and approvals, security alerts, stats, and drift checks against shared defaults. It holds your bricks together.
 
 The defaults live in a repository you choose. Point `mason` at any repo (or local folder) that holds a `mason.toml`, and it checks your repos against it. Nothing is tied to one org: every user can keep their own defaults repo.
 
@@ -18,7 +18,8 @@ Mason isn't on PyPI yet, so install it from GitHub with pipx. The `tui` extra ad
 ```sh
 pipx install "mason-cli[tui,server] @ git+https://github.com/bitsandbricks-ch/mason-cli"
 gh auth login          # on its own, mason talks to GitHub through the gh CLI and never sees a token
-mason init your-org/your-defaults
+glab auth login        # optional, for GitLab: the same through the glab CLI
+mason init your-org/your-defaults [--gitlab-group your-group]
 ```
 
 To update: `pipx install --force "mason-cli[tui,server] @ git+https://github.com/bitsandbricks-ch/mason-cli"`. The install builds the web UI into the package, which needs Node.js (`npm`) on your PATH; without it, mason installs fine but `mason serve` has no UI and tells you how to build it. `mason serve --check` shows whether the UI is built. The Docker image always has it (see [Mason (web app)](#mason-web-app)).
@@ -68,6 +69,30 @@ Repos are named as `owner/name`, as a bare `name` when only one repo has it, or 
 | `mason tui` | Everything above, full screen. |
 
 Security alerts need the `security_events` scope and packages the `read:packages` scope: `gh auth refresh -s security_events,read:packages`.
+
+## GitLab
+
+On your machine mason reaches GitLab through the [glab CLI](https://gitlab.com/gitlab-org/cli#installation), as it
+reaches GitHub through gh: `glab auth login` signs glab in, and mason hands every GitLab call to `glab api`, so it
+never sees a GitLab token either. GitLab projects are named `gitlab:group/project` (`gitlab:group/sub/project` in a
+subgroup) or by their last part when that is unique, and `--group gitlab:grp/` takes every project under a group.
+
+Name the groups mason looks after in your config (`mason init ... --gitlab-group your-group` adds one), and every
+command without names runs on their projects too, next to your GitHub repos. Without GitLab groups or projects in
+your config mason doesn't touch GitLab, and doesn't need glab, unless you name a `gitlab:` project.
+
+```toml
+gitlab_groups = ["your-group"]                # every project of the group and its subgroups
+gitlab_projects = ["other-group/one-project"] # and single projects
+gitlab_url = "https://gitlab.example.com"     # self-managed GitLab (or GITLAB_URL); glab must be signed in there
+```
+
+`status`, `prs`, `pr`, `open`, `merge`, `runs` (pipelines), `approve` (blocked deployments and manual jobs),
+`releases`, `security` (vulnerabilities, GitLab Ultimate), `issues`, `issue`, `stats`, `doctor` (also `--fix` and
+`--summary`), `sync` (a merge request with the shared files) and `repos` know GitLab projects; the rest are GitHub
+only for now and say which projects they leave out. The defaults' `gitlab_groups` count too, and a defaults repo on
+GitLab (`mason init gitlab:group/defaults`) is read through glab. The TUI and `mason login` (going through Mason,
+the web app) are GitHub only so far; the web app itself has GitLab (see [Mason (web app)](#mason-web-app)).
 
 ## TUI
 
@@ -151,6 +176,8 @@ It lives in `$XDG_CONFIG_HOME/mason` when that is set, and `MASON_CONFIG` points
 | `MASON_CONFIG` | Your config file, instead of `~/.config/mason/config.toml`. |
 | `MASON_DEFAULTS`, `MASON_DEFAULTS_REF` | The defaults repo (or folder) and its branch or tag. |
 | `MASON_ORGS` | The orgs to look at, comma separated. |
+| `MASON_GITLAB_GROUPS` | The GitLab groups to look at, comma separated (replacing `gitlab_groups`); see [GitLab](#gitlab). |
+| `GITLAB_URL` | A self-managed GitLab, instead of `https://gitlab.com` (the web app reads it too). |
 | `MASON_ORG_DEFAULTS` | `0` (or `off`) leaves each org's `.mason` repo out for one run. |
 | `MASON_SERVER`, `MASON_KEY` | Go through Mason with this URL and API key (for CI). `MASON_SERVER=` (set but empty) uses gh even after `mason login`. |
 | `MASON_OPEN` | How `mason open` opens links: `browser`, `copy` or `print`. |

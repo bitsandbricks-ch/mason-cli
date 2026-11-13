@@ -9,7 +9,7 @@ import re
 import webbrowser
 from urllib.parse import quote
 
-from mason import config, core, plugins
+from mason import config, core, glab, plugins
 from mason.config import Config, group_label, orgs_of
 from mason.core import WEB, ago, api, api_pages, for_each, graphql, newest, say, short, table
 
@@ -81,6 +81,8 @@ def resolve(cfg: Config, arg: str) -> tuple[str, int | None]:
     hits = [r for r in known if short(r) == name]
     if not hits:
         hits = [r for r in known if (g := group_of(cfg, r)) and g.alias(r) == name]
+    if not hits:  # a GitLab project by its last part (gitlab:grp/sub/web is web)
+        hits = [r for r in glab.projects(cfg) if r.rsplit("/", 1)[-1] == name]
     if len(hits) == 1:
         return hits[0], number
     if len(hits) > 1:
@@ -93,10 +95,13 @@ def resolve(cfg: Config, arg: str) -> tuple[str, int | None]:
 def pick_repos(cfg: Config, names: list[str], group: str | None = None) -> tuple[list[str], dict[str, list[int]]]:
     """The repos a command runs on (all of them when none are named) and any PR numbers named."""
     pick: dict[str, list[int]] = {}
+    gitlab = glab.projects(cfg) if not names or group else {}
     if not names:
         repos = [r for r in listing(cfg) if not listing(cfg)[r].get("missing")]
+        repos += [r for r in gitlab if not gitlab[r].get("missing")]
         if not repos:
-            raise RuntimeError("No repos: name an org with mason init <defaults repo>, MASON_ORGS or --org")
+            raise RuntimeError("No repos: name an org with mason init <defaults repo>, MASON_ORGS or --org"
+                               " (GitLab: gitlab_groups in your config)")
     else:
         repos = []
         for arg in names:
@@ -106,7 +111,7 @@ def pick_repos(cfg: Config, names: list[str], group: str | None = None) -> tuple
             if number:
                 pick.setdefault(repo, []).append(number)
     if group:
-        known = listing(cfg)
+        known = {**listing(cfg), **gitlab}
         repos_all, repos = repos, [r for r in repos if cfg.in_group(r, group, (known.get(r) or {}).get("topics"))]
         if not repos:
             groups = ", ".join(g.name for g in cfg.groups_for(repos_all)) or "none"
@@ -1009,6 +1014,11 @@ def security(repos: list[str]) -> None:
 
 
 def page_url(repo: str, number: int | None = None, actions: bool = False, releases: bool = False) -> str:
+    if repo.startswith("gitlab:"):
+        url = f"{glab.web_url()}/{repo.removeprefix('gitlab:')}"
+        if number:
+            return f"{url}/-/merge_requests/{number}"
+        return url + ("/-/pipelines" if actions else "/-/releases" if releases else "")
     url = f"{core.WEB}/{repo}"
     if number:
         url += f"/pull/{number}"

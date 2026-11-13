@@ -2,7 +2,9 @@
 
 Repos are named as owner/name, as a bare name when only one repo has it, or by
 their group alias (the group's prefix dropped). name#12 is a PR. No names: every
-repo of your orgs. --org and --group narrow that down.
+repo of your orgs. --org and --group narrow that down. GitLab projects are
+gitlab:group/project; mason reaches them through glab (glab auth login), and
+gitlab_groups in your config adds a group's projects to every command.
 
   mason init your-org/your-defaults   point mason at a defaults repo (or a local folder)
   mason status | prs | runs           what's going on
@@ -41,10 +43,13 @@ repo of your orgs. --org and --group narrow that down.
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 
-from mason import __version__, auto, config, core, defaults, issues, packages, plugins, repos, versions, workflows
+from mason import __version__, auto, config, core, defaults, glab, issues, packages, plugins, repos, versions, workflows
 
+# Commands that don't know GitLab projects yet (Mason, the web app, has most of them).
+GITHUB_ONLY = {"rerun", "packages", "workflows", "auto", "bump", "release", "secrets", "new"}
 ON_REPOS = ("status", "prs", "merge", "runs", "rerun", "releases", "packages", "approve", "security", "doctor", "sync",
             "repos", "stats", "workflows", "issues", "auto")
 
@@ -165,9 +170,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("--actions", action="store_true")
     sp.add_argument("--releases", action="store_true")
     sp = sub.add_parser("init", help="point mason at a defaults repo (owner/repo or a local folder)")
-    sp.add_argument("defaults", help="owner/repo or a folder with mason.toml")
+    sp.add_argument("defaults", help="owner/repo, gitlab:group/project or a folder with mason.toml")
     sp.add_argument("--ref", help="branch or tag of the defaults repo")
     sp.add_argument("--org", action="append", metavar="ORG", help="orgs for a new mason.toml")
+    sp.add_argument("--gitlab-group", action="append", metavar="GROUP",
+                    help="a GitLab group whose projects mason looks after, through glab (repeatable)")
     sp = sub.add_parser("new", parents=[common], help="create a repo the way its group wants it")
     sp.add_argument("repo", help="owner/name (name alone when mason knows one org)")
     sp.add_argument("--public", action="store_true", help="public (default: private)")
@@ -178,7 +185,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("--read", action="store_true", help="a read-only key")
     sp.add_argument("--key", help="use this API key instead of approving a code in the browser")
     sub.add_parser("logout", help="forget Mason's API key")
-    sub.add_parser("whoami", help="how mason reaches GitHub, and as whom")
+    sub.add_parser("whoami", help="how mason reaches GitHub and GitLab, and as whom")
     sp = sub.add_parser("market", help="plugins in the plugin index: list, install, sign")
     sp.add_argument("action", nargs="?", default="list", choices=("list", "install", "keygen", "sign", "verify"))
     sp.add_argument("name", nargs="?", help="plugin to install, or the index file to sign/verify")
@@ -204,6 +211,10 @@ def show_config() -> None:
     print(f"orgs         {', '.join(cfg.orgs) or 'none'}")
     if cfg.repos:
         print(f"extra repos  {', '.join(cfg.repos)}")
+    gl_groups, gl_projects = glab.wanted(cfg)
+    if gl_groups or gl_projects:
+        where = ", ".join([g + "/" for g in gl_groups] + gl_projects)
+        print(f"GitLab       {where} on {glab.web_url()} (through glab)")
     if mine.get("orgs"):
         print(f"your orgs    {', '.join(mine['orgs'])} (from your config)")
     print(f"groups       {len(cfg.groups)}")
@@ -237,6 +248,8 @@ def init(args) -> None:
     values["defaults"] = args.defaults
     if args.ref:
         values["ref"] = args.ref
+    if args.gitlab_group:
+        values["gitlab_groups"] = list(dict.fromkeys(config._list(values.get("gitlab_groups")) + args.gitlab_group))
     source = config.Source(args.defaults, args.ref)
     if config.read_defaults(source)[1] is None:
         owners = args.org or ([] if source.local else [args.defaults.split("/")[0]])
@@ -254,8 +267,9 @@ def init(args) -> None:
 
 
 def list_repos(cfg, names: list[str]) -> None:
+    gitlab = glab.projects(cfg) if any(r.startswith("gitlab:") for r in names) else {}
     for r in names:
-        g = repos.group_of(cfg, r)
+        g = cfg.group_of(r, (gitlab.get(r) or {}).get("topics")) if r in gitlab else repos.group_of(cfg, r)
         alias = g.alias(r) if g else ""
         extra = f"  ({alias})" if g and alias != core.short(r) else ""
         print(f"{r:<45} {config.group_label(g, r)}{extra}")
@@ -281,6 +295,14 @@ def main(argv: list[str] | None = None) -> None:
         parser.error(f"unrecognized arguments: {' '.join(extra)}")
     args._extra = extra  # plugin commands pass these on (options before their own arguments)
     core.set_dry_run(getattr(args, "dry_run", False))
+    local = glab.LOCAL.set(config.OVERRIDE.get() is None)  # glab only on this machine, never in the web console
+    try:
+        return command(parser, handlers, args)
+    finally:
+        glab.LOCAL.reset(local)
+
+
+def command(parser, handlers: dict, args) -> None:
     try:
         if args.cmd == "init":
             return init(args)
@@ -290,7 +312,10 @@ def main(argv: list[str] | None = None) -> None:
             from mason import login
             if args.cmd == "login":
                 return login.login(args.url, "read" if args.read else "write", args.key)
-            return login.logout() if args.cmd == "logout" else login.whoami()
+            if args.cmd == "logout":
+                return login.logout()
+            login.whoami()
+            return glab.whoami() if glab.wanted_here() or shutil.which("glab") else None
         if args.cmd == "market":
             from mason import market
             return market.command(args.action, args.name, args.index, args.key)
@@ -302,8 +327,8 @@ def main(argv: list[str] | None = None) -> None:
             if not plugins.load() and not plugins.errors:
                 print("No plugins installed (pipx inject mason-cli <package>).")
             return None
-        if not core.transport().logged_in():
-            sys.exit("Log in first: gh auth login (or mason login <Mason URL>)")
+        if not core.transport().logged_in() and not glab.wanted_here(getattr(args, "repos", None)):
+            sys.exit("Log in first: gh auth login (or mason login <Mason URL>; GitLab: glab auth login)")
         if args.cmd in handlers:
             return handlers[args.cmd](args)
         cfg = config.load(getattr(args, "org", None))
@@ -322,6 +347,9 @@ def main(argv: list[str] | None = None) -> None:
                 return repos.open_page(repo, number, args.actions, args.releases)
             if not number:
                 sys.exit("Name the PR: mason pr name#12")
+            if repo.startswith("gitlab:"):
+                from mason import gitlab as GL
+                return GL.mr_detail(glab.need(), repo, number, args.diff)
             return repos.pr_detail(repo, number, args.diff, args.body)
         if args.cmd == "issue":
             return issue(cfg, args)
@@ -347,6 +375,10 @@ def main(argv: list[str] | None = None) -> None:
         names, pick = repos.pick_repos(cfg, args.repos, args.group)
         if pick and args.cmd != "merge":
             sys.exit("name#12 works with merge, pr and open")
+        if args.cmd in GITHUB_ONLY:
+            names = github_only(args.cmd, names)
+            if not names:
+                return None
         return run(cfg, args, names, pick)
     except RuntimeError as err:
         sys.exit(str(err))
@@ -473,6 +505,8 @@ def branches_command(cfg, args) -> None:
 
 def issue(cfg, args) -> None:
     repo, number = repos.resolve(cfg, args.target)
+    if repo.startswith("gitlab:"):
+        return gitlab_issue(repo, number, args)
     if args.action == "new":
         body = sys.stdin.read() if args.body == "-" else args.body
         issues.create(repo, args.text, body, args.label, args.assignee)
@@ -487,7 +521,37 @@ def issue(cfg, args) -> None:
         issues.set_state(repo, number, args.action == "close", args.not_planned)
 
 
+def github_only(cmd: str, names: list[str]) -> list[str]:
+    """The GitHub repos of `names`; says which GitLab projects `mason cmd` leaves out."""
+    gh, gl = glab.split(names)
+    if gl:
+        print(f"`mason {cmd}` doesn't know GitLab projects yet (Mason, the web app, does): left out "
+              f"{', '.join(gl[:5])}{' ...' if len(gl) > 5 else ''}", file=sys.stderr)
+    return gh
+
+
+def gitlab_issue(repo: str, number: int | None, args) -> None:
+    from mason import gitlab as GL
+    gl = glab.need()
+    if args.action == "new":
+        if args.assignee:
+            sys.exit("--assignee is GitHub only for now")
+        GL.create_issue(gl, repo, args.text, sys.stdin.read() if args.body == "-" else args.body, args.label)
+        return
+    if not number:
+        sys.exit(f"Name the issue: mason issue {args.action} name#12")
+    if args.action == "view":
+        GL.issue_view(gl, repo, number)
+    elif args.action == "comment":
+        GL.issue_comment(gl, repo, number, sys.stdin.read() if args.text == "-" else args.text)
+    else:
+        GL.issue_state(gl, repo, number, args.action == "close")
+
+
 def run(cfg, args, names: list[str], pick: dict) -> None:
+    gh, gl = glab.split(names)
+    if gl:
+        return run_both(cfg, args, gh, gl, pick)
     if args.cmd == "repos":
         return list_repos(cfg, names)
     if args.cmd == "status":
@@ -536,3 +600,47 @@ def run(cfg, args, names: list[str], pick: dict) -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def run_both(cfg, args, gh: list[str], gl: list[str], pick: dict) -> None:
+    """A command over GitHub repos (maybe none) and GitLab projects: the GitHub half as always, then GitLab's."""
+    cmd = args.cmd
+    if cmd == "repos":
+        return list_repos(cfg, gh + gl)
+    if cmd == "status":
+        rows = repos.status_rows(cfg, gh) if gh else []
+        pad = [""] * len(repos.status_columns())
+        return core.table(repos.status_head(), rows + [r + pad for r in glab.status_rows(cfg, gl)])
+    if cmd == "stats":
+        from mason import stats
+        return stats.show(gh, args.days, more=glab.stats(gl, args.days))
+    if cmd == "doctor" and args.summary and not args.fix:
+        return defaults.doctor_summary(cfg, gh, more=glab.doctor_report(cfg, gl))
+    if gh and cmd != "approve":
+        run(cfg, args, gh, pick)
+    if cmd == "prs":
+        n = glab.prs(gl)
+        core.say(f"{n} open merge request{'s' if n != 1 else ''}")
+    elif cmd == "runs":
+        glab.runs(gl, args.limit, args.failed)
+    elif cmd == "releases":
+        if args.unreleased:
+            print("--unreleased is GitHub only for now: left out the GitLab projects", file=sys.stderr)
+        else:
+            glab.releases(cfg, gl, args.problems)
+    elif cmd == "approve":
+        if gh:
+            repos.approve(gh, args.yes)
+        if not glab.approve(gl, args.yes):
+            print("No GitLab deployments or manual jobs are waiting.")
+    elif cmd == "security":
+        glab.security(gl)
+    elif cmd == "doctor":
+        glab.doctor(cfg, gl, args.fix, not args.no_auto)
+    elif cmd == "issues":
+        glab.issues(gl, args.state, args.label, args.assignee, args.mine, args.stale, args.limit)
+    elif cmd == "sync":
+        glab.sync(cfg, gl, args.only)
+    elif cmd == "merge":
+        glab.merge(gl, {"pick": pick, "now": args.now or args.admin, "ready": args.ready, "method": args.method})
+    return None

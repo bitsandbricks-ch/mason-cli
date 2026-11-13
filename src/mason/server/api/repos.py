@@ -17,6 +17,7 @@ from mason import config, core, plugins
 from mason import defaults as D
 from mason import events as E
 from mason import extras as X
+from mason import gitlab as GL
 from mason import issues as I
 from mason import packages as P
 from mason import releases as REL
@@ -24,7 +25,6 @@ from mason import repos as R
 from mason import workflows as W
 from mason.cache import TTLDict
 from mason.config import group_label, orgs_of
-from mason.server import gitlab as GL
 from mason.server.api.account import body
 from mason.server.auth import audit, can_write, need
 from mason.server.context import as_user, gitlab_projects, load_config, valid_repo
