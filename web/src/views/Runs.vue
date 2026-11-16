@@ -33,19 +33,23 @@ const page = (r) => { const x = r || current.value; if (x?.id) router.push({ pat
 const toggle = () => { failed.value = !failed.value; load() }
 // R: every failed run in the list (the newest of each workflow) runs its failed jobs again, after one question
 const failedRuns = computed(() => rerunnable(rows.value))
+let rerunning = false // a second R while the first go is still sending would send them all again
 async function rerunAll() {
   const list = failedRuns.value.slice(0, BULK_MAX)
-  if (!list.length) return
+  if (!list.length || rerunning) return
   const { question, detail } = bulkQuestion('Run the failed jobs again', 'run', list, (x) => `${x.repo}  ${x.name}  (${x.branch || x.event || x.id})`)
   const a = await ask(question, { detail: detail + (state.dryRun ? '\n\ndry run is on: nothing changes' : '') })
   if (!a) return
   const dry = a === 'dry'
   const out = []
   let bad = 0
-  for (const x of list) { // one after the other: GitHub's secondary rate limit dislikes bursts of writes
-    try { out.push((await post('/run/rerun', { repo: x.repo, id: x.id, dry_run: dry })).text || `${x.repo}: ${x.id}`) }
-    catch (e) { bad++; out.push(`error: ${x.repo} run ${x.id}: ${e.message}`) }
-  }
+  rerunning = true
+  try {
+    for (const x of list) { // one after the other: GitHub's secondary rate limit dislikes bursts of writes
+      try { out.push((await post('/run/rerun', { repo: x.repo, id: x.id, dry_run: dry })).text || `${x.repo}: ${x.id}`) }
+      catch (e) { bad++; out.push(`error: ${x.repo} run ${x.id}: ${e.message}`) }
+    }
+  } finally { rerunning = false }
   log(`${dry ? '[dry-run] ' : ''}ran the failed jobs again in ${list.length - bad} of ${list.length} runs`, bad ? 'error' : 'ok', { detail: out.join('\n') })
   if (!dry) { forget('/runs'); setTimeout(() => load(true), 2000) }
 }
