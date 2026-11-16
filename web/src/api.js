@@ -1,14 +1,23 @@
 // Every call to the operator's /api/v1. Writes carry the session's CSRF token; errors become exceptions
 // with the operator's message, which the views show in the log line.
-import { reactive } from 'vue'
+import { reactive, watch } from 'vue'
 
 export const state = reactive({
   me: null,          // /api/v1/me
   loaded: false,
-  dryRun: false,     // every change is a dry run while this is on
+  dryRun: dryAtStart(), // every change is a dry run while this is on
   log: [],           // [{at, text, kind, detail, where}] the bottom log (click it for all of them)
   busy: 0,
   rate: null,
+})
+
+// Dry run outlives a reload of the tab: turned on to try things out, a reload must not quietly make the next
+// change a real one. Per tab (sessionStorage), so a new tab starts with real changes, as the header shows.
+function dryAtStart() {
+  try { return sessionStorage.getItem('mason-dry-run') === '1' } catch { return false }
+}
+watch(() => state.dryRun, (on) => {
+  try { if (on) sessionStorage.setItem('mason-dry-run', '1'); else sessionStorage.removeItem('mason-dry-run') } catch { /* private mode */ }
 })
 
 export class ApiError extends Error {
