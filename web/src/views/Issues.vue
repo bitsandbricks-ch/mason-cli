@@ -114,13 +114,13 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
         <div v-if="form.open" class="box">
           <div class="form">
             <label>repo</label>
-            <input v-model="form.repo" list="issue-repos" placeholder="owner/name or gitlab:group/project">
-            <label>title</label><input v-model="form.title" placeholder="what's wrong, or what's wanted" @keydown.enter="submit">
-            <label>labels</label><input v-model="form.labels" placeholder="bug, docs">
-            <label>assignees</label><input v-model="form.assignees" placeholder="login, login (GitHub)">
+            <input v-model="form.repo" list="issue-repos" aria-label="repo" placeholder="owner/name or gitlab:group/project">
+            <label>title</label><input aria-label="title" v-model="form.title" placeholder="what's wrong, or what's wanted" @keydown.enter="submit">
+            <label>labels</label><input aria-label="labels" v-model="form.labels" placeholder="bug, docs">
+            <label>assignees</label><input aria-label="assignees" v-model="form.assignees" placeholder="login, login (GitHub)">
           </div>
           <datalist id="issue-repos"><option v-for="r in repoNames" :key="r" :value="r" /></datalist>
-          <textarea v-model="form.body" rows="10" placeholder="details (Markdown)" style="margin-top: 8px" />
+          <textarea v-model="form.body" aria-label="details" rows="10" placeholder="details (Markdown)" style="margin-top: 8px" />
           <div class="row" style="margin-top: 8px">
             <button class="primary" @click="submit">open issue</button>
             <button @click="form.open = false; show()">cancel</button>

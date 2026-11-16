@@ -49,14 +49,14 @@ function key(e) {
 
 <template>
   <div v-if="prompt.open" class="modal" @click.self="answer(null)">
-    <div ref="box" class="dialog" tabindex="0" role="dialog" aria-modal="true" @keydown="key">
+    <div ref="box" class="dialog" tabindex="0" role="dialog" aria-modal="true" :aria-label="prompt.question" @keydown="key">
       <div class="q">{{ prompt.question }}</div>
       <pre v-if="prompt.detail" class="text dim" style="margin-top: 8px">{{ prompt.detail }}</pre>
       <div v-for="l in prompt.links" :key="l.href" style="margin-top: 6px">
         <a class="accent" :href="safeUrl(l.href)" target="_blank" rel="noopener">{{ l.label }}</a>
       </div>
       <div v-if="prompt.input" style="margin-top: 10px">
-        <input ref="field" v-model="text" :type="prompt.input.password ? 'password' : 'text'" :placeholder="prompt.input.placeholder"
+        <input ref="field" v-model="text" :aria-label="prompt.question" :type="prompt.input.password ? 'password' : 'text'" :placeholder="prompt.input.placeholder"
                style="width: 100%" autofocus>
       </div>
       <div class="row" style="margin-top: 12px">

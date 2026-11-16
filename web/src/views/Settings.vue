@@ -121,13 +121,13 @@ onMounted(load)
         <div class="accent">defaults and repos</div>
         <p class="dim">The defaults repo holds mason.toml, like <span class="accent">mason init</span> sets up. Lists take names separated by commas.</p>
         <div class="form">
-          <label>defaults repo</label><input v-model="s.defaults" placeholder="acme/defaults or gitlab:grp/defaults">
-          <label>branch or tag</label><input v-model="s.ref" placeholder="(default branch)">
-          <label>GitHub orgs</label><input v-model="s.orgs" placeholder="acme, acme-labs">
-          <label>extra repos</label><input v-model="s.repos" placeholder="someone/tool">
-          <label>leave out</label><input v-model="s.exclude" placeholder="acme/archive">
-          <label>GitLab groups</label><input v-model="s.gitlab_groups" placeholder="grp, grp/sub">
-          <label>GitLab projects</label><input v-model="s.gitlab_repos" placeholder="gitlab:grp/proj">
+          <label>defaults repo</label><input aria-label="defaults repo" v-model="s.defaults" placeholder="acme/defaults or gitlab:grp/defaults">
+          <label>branch or tag</label><input aria-label="branch or tag" v-model="s.ref" placeholder="(default branch)">
+          <label>GitHub orgs</label><input aria-label="GitHub orgs" v-model="s.orgs" placeholder="acme, acme-labs">
+          <label>extra repos</label><input aria-label="extra repos" v-model="s.repos" placeholder="someone/tool">
+          <label>leave out</label><input aria-label="leave out" v-model="s.exclude" placeholder="acme/archive">
+          <label>GitLab groups</label><input aria-label="GitLab groups" v-model="s.gitlab_groups" placeholder="grp, grp/sub">
+          <label>GitLab projects</label><input aria-label="GitLab projects" v-model="s.gitlab_repos" placeholder="gitlab:grp/proj">
           <label>org defaults</label>
           <label class="row"><input v-model="s.org_defaults" type="checkbox">
             <span class="dim">use each org's (or GitLab group's) <span class="accent">.mason</span> repo for its repos</span></label>

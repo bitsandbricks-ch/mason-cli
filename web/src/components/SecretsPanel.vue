@@ -44,8 +44,8 @@ async function save(r) {
     <div v-for="r in rows" :key="id(r)" class="secret">
       <span :class="r.set ? 'ok' : 'bad'">{{ r.set ? '✓ set' : '✗ missing' }}</span>
       <span>{{ r.env ? `${r.env}: ` : '' }}{{ r.name }}<span v-if="!r.wanted" class="dim"> (not in the defaults)</span></span>
-      <input v-model="values[id(r)]" type="password" autocomplete="off" :placeholder="r.set ? 'new value' : 'value'" @keydown.enter="save(r)">
-      <input v-model="also[id(r)]" class="hide-xs" placeholder="also in: api web" style="min-width: 14ch">
+      <input v-model="values[id(r)]" :aria-label="`value of ${r.name}`" type="password" autocomplete="off" :placeholder="r.set ? 'new value' : 'value'" @keydown.enter="save(r)">
+      <input v-model="also[id(r)]" class="hide-xs" :aria-label="`also set ${r.name} in`" placeholder="also in: api web" style="min-width: 14ch">
       <button :disabled="!values[id(r)]" @click="save(r)">set</button>
     </div>
   </div>

@@ -68,7 +68,7 @@ useKeys({ c: doctor, f: fix, s: sync })
   <div class="view">
     <div class="toolbar">
       <Scope :groups="scope.groups" />
-      <input v-model="only" placeholder="repos (empty: all), e.g. web api gitlab:grp/x" style="min-width: 28ch">
+      <input v-model="only" aria-label="repos to check" placeholder="repos (empty: all), e.g. web api gitlab:grp/x" style="min-width: 28ch">
       <button class="primary" :disabled="!!running" @click="doctor"><span class="k">c</span> check {{ where }}</button>
       <button :disabled="!!running" @click="fix"><span class="k">f</span> fix the drift</button>
       <button :disabled="!!running" @click="sync"><span class="k">s</span> open PRs with the shared files</button>
