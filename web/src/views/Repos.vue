@@ -95,11 +95,16 @@ const router = useRouter()
 const page = (r) => router.push({ path: '/repo', query: { repo: r?.repo || sel.value } })
 const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) openLink(url) }
 async function newRepo() {
-  const { ask } = await import('../ui.js')
-  const name = await ask('New repo (owner/name, or gitlab:group/name)', { input: { placeholder: 'acme/new-service' }, allowDry: false })
+  const { ask, choose } = await import('../ui.js')
+  const name = (await ask('New repo (owner/name, or gitlab:group/name)', { input: { placeholder: 'acme/new-service' }, allowDry: false }))?.trim()
   if (!name) return
-  const vis = await ask(`Make ${name} public? (n: private)`, { allowDry: false })
-  await run(`Create ${name} the way its group wants it?`, '/new', { repo: name, public: vis === 'yes' })
+  // esc used to mean "private" here and went on to create the repo: now it cancels
+  const vis = await choose(`Who may see ${name}?`, [
+    { key: 'p', value: 'private', label: 'private', hint: 'you and who you invite' },
+    { key: 'u', value: 'public', label: 'public', hint: 'everyone' },
+  ])
+  if (!vis) return
+  await run(`Create ${name} (${vis}) the way its group wants it?`, '/new', { repo: name, public: vis === 'public' })
 }
 const sheet = ref(null)
 const releases = () => sel.value && router.push({ path: '/release', query: { repo: sel.value } })
