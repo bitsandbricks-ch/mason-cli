@@ -1,7 +1,7 @@
 <script setup>
 import { forget } from './load.js'
 import { safeNext } from './links.js'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { forgetLocal, get, loadMe, log, post, put, state } from './api.js'
 import { THEMES } from './themes.js'
@@ -100,6 +100,14 @@ const title = computed(() => {
   const which = q.number ? `#${q.number}` : q.id ? ` ${q.id}` : q.tag ? ` ${q.tag}` : ''
   if (q.repo && route.name !== current.value) return `${label}/${q.repo}${which}`
   return detail.value && detailName.value ? `${label}/${detailName.value}` : label
+})
+// The browser tab's title: which page, and which repo, PR or run, so several Mason tabs can be told apart.
+watchEffect(() => {
+  const t = TABS.find((x) => x.name === (route.meta.tab || route.name))
+  const label = route.name === 'login' ? 'sign in' : route.name === 'plugin-tab' ? route.params.plugin : t?.label || route.name || ''
+  const q = route.query
+  const what = q.repo ? `${q.repo}${q.number ? `#${q.number}` : q.id ? ` run ${q.id}` : q.tag ? ` ${q.tag}` : ''}` : ''
+  document.title = [what, label, 'Mason'].filter(Boolean).join(' · ')
 })
 // ‹ in the title bar: closes a detail, or leaves a row's own page (a repo, its releases) for its list
 const canBack = computed(() => detail.value || (!!route.meta.tab && route.name !== route.meta.tab))
