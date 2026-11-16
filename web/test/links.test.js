@@ -21,3 +21,11 @@ test('openOut opens good links in a new tab, without the opener, and nothing els
   assert.equal(openOut(undefined, win), false)
   assert.deepEqual(opened, [['https://example.com/a', '_blank', 'noopener']])
 })
+
+test('a view file the server no longer has is told apart from other errors', async () => {
+  const { staleChunk } = await import('../src/links.js')
+  assert.ok(staleChunk(new TypeError('Failed to fetch dynamically imported module: https://example.com/assets/Prs-1.js')))
+  assert.ok(staleChunk(new TypeError('Importing a module script failed.')))
+  assert.ok(!staleChunk(new Error('404 NOT FOUND')))
+  assert.ok(!staleChunk(undefined))
+})

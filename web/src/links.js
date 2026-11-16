@@ -13,3 +13,8 @@ export function openOut(url, win = globalThis.window) {
   if (u) win?.open(u, '_blank', 'noopener')
   return !!u
 }
+
+// A view's file that the server no longer has (an update came in since the tab opened).
+export function staleChunk(err) {
+  return /dynamically imported module|Importing a module script failed|error loading dynamically|Unable to preload CSS/i.test(String(err?.message || err || ''))
+}
