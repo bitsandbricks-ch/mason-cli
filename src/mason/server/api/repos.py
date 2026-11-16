@@ -17,6 +17,7 @@ from mason import config, core, plugins
 from mason import defaults as D
 from mason import events as E
 from mason import extras as X
+from mason import gitlab as GL
 from mason import issues as I
 from mason import packages as P
 from mason import releases as REL
@@ -24,10 +25,10 @@ from mason import repos as R
 from mason import workflows as W
 from mason.cache import TTLDict
 from mason.config import group_label, orgs_of
-from mason.server import gitlab as GL
 from mason.server.api.account import body
 from mason.server.auth import audit, can_write, need
-from mason.server.context import as_user, gitlab_projects, load_config, valid_repo
+from mason.server.context import NAME, as_user, gitlab_projects, load_config, valid_repo
+from mason.server.context import number as number_of
 
 bp = Blueprint("repos", __name__, url_prefix="/api/v1")
 
@@ -61,6 +62,8 @@ def all_repos(cfg, gh, gl, names: list[str] | None = None, group: str | None = N
                 if num.isdigit():
                     pick.setdefault(repo, []).append(int(num))
             else:
+                if not NAME.match(n):
+                    abort(400, f"not a repo name: {n[:80]!r}")
                 gh_names.append(n)
         found: list[str] = []
         if gh_names and github_ok(gh):
@@ -215,13 +218,6 @@ def repo_detail():
         return jsonify({"text": "\n".join(lines), "info": info})
 
 
-def requested(p: dict) -> list[str]:
-    """The people a PR asks for a review (teams are left out: the web app can't tell whose team it is)."""
-    who = [((n or {}).get("requestedReviewer") or {}).get("login")
-           for n in (p.get("reviewRequests") or {}).get("nodes") or []]
-    return [w for w in who if w]
-
-
 @bp.get("/prs")
 @need("read")
 def prs():
@@ -243,7 +239,7 @@ def prs():
                             "review": (p.get("reviewDecision") or "").lower().replace("_", " "),
                             "auto": bool(p.get("autoMergeRequest")), "merge": R.merge_word(p),
                             "author": (p.get("author") or {}).get("login", ""),
-                            "requested": requested(p), "updated": p.get("updatedAt"),
+                            "reviewers": reviewers(p), "updated": p.get("updatedAt"),
                             "branch": p.get("headRefName", "")})
             for p in (node.get("merged") or {}).get("nodes") or []:
                 merged.append({"repo": repo, "provider": "github", "number": p["number"], "title": p["title"],
@@ -268,6 +264,18 @@ def pr():
                 abort(409, "connect GitLab first")
             return jsonify({"text": capture_rate(GL.mr_detail, gl, repo, number, diff)})
         return jsonify({"text": capture_rate(R.pr_detail, repo, number, diff, request.args.get("body") == "1")})
+
+
+def reviewers(p: dict) -> list[str]:
+    """Who the PR waits on for a review: logins, and teams as team:slug."""
+    out = []
+    for n in (p.get("reviewRequests") or {}).get("nodes") or []:
+        r = (n or {}).get("requestedReviewer") or {}
+        if r.get("login"):
+            out.append(r["login"])
+        elif r.get("slug"):
+            out.append(f"team:{r['slug']}")
+    return out
 
 
 @bp.post("/merge")
@@ -324,7 +332,7 @@ def pr_bypass():
 def ready():
     data = body()
     dry = write_allowed(bool(data.get("dry_run")))
-    repo, number = valid_repo(str(data.get("repo", ""))), int(data.get("number") or 0)
+    repo, number = valid_repo(str(data.get("repo", ""))), number_of(data.get("number"))
     with as_user(dry) as (_gh, gl):
         if is_gl(repo):
             text = capture_rate(GL.mark_ready, gl, repo, number)
@@ -366,7 +374,7 @@ def run_rerun():
     """Run the failed jobs of a GitHub run again, or retry a GitLab pipeline's failed jobs: {repo, id, dry_run?}."""
     data = body()
     dry = write_allowed(bool(data.get("dry_run")))
-    repo, ident = valid_repo(str(data.get("repo", ""))), int(data.get("id") or 0)
+    repo, ident = valid_repo(str(data.get("repo", ""))), number_of(data.get("id"), "id")
     if not ident:
         abort(400, "id: the run or pipeline id")
     with as_user(dry) as (_gh, gl):
@@ -514,7 +522,7 @@ def approvals():
 def approve():
     data = body()
     dry = write_allowed(bool(data.get("dry_run")))
-    repo, ident = valid_repo(str(data.get("repo", ""))), int(data.get("id") or 0)
+    repo, ident = valid_repo(str(data.get("repo", ""))), number_of(data.get("id"), "id")
     with as_user(dry) as (_gh, gl):
         if is_gl(repo):
             text = capture_rate(GL.approve, gl, repo, str(data.get("kind") or ""), ident)
@@ -773,11 +781,23 @@ def issues():
         if request.args.get("mine") == "1":
             gh_who = I.me() if gh_r else None
             gl_who = (gl.api("GET", "/user") or {}).get("username") if gl and gl_r else None
+        failed: list[str] = []
+
+        def each(fetch):  # one repo that can't be read (gone, no access) doesn't sink the whole list
+            def run(r):
+                try:
+                    return fetch(r)
+                except core.RateLimited:
+                    raise
+                except RuntimeError as err:
+                    failed.append(f"{r}: {str(err)[:200]}")
+                    return []
+            return run
         try:
-            out = [r for rows in core.pmap(lambda r: I.repo_issues(r, state, labels, gh_who, limit), gh_r)
+            out = [r for rows in core.pmap(each(lambda r: I.repo_issues(r, state, labels, gh_who, limit)), gh_r)
                    for r in rows]
             if gl and gl_r:
-                out += [r for rows in core.pmap(lambda r: GL.issues(gl, r, state, labels, gl_who, limit), gl_r)
+                out += [r for rows in core.pmap(each(lambda r: GL.issues(gl, r, state, labels, gl_who, limit)), gl_r)
                         for r in rows]
         except core.RateLimited as err:
             abort(429, str(err))
@@ -785,7 +805,8 @@ def issues():
     if stale:
         out = I.stale(out, stale)
     out.sort(key=lambda r: r.get("updated") or "", reverse=True)
-    return jsonify({"issues": out, "labels": sorted({lab for r in out for lab in r["labels"]})})
+    return jsonify({"issues": out, "labels": sorted({lab for r in out for lab in r["labels"]}),
+                    "failed": sorted(failed)})
 
 
 @bp.get("/issue")
@@ -832,10 +853,10 @@ def issue_change():
     """close, reopen or comment: {repo, number, action, text?, not_planned?}."""
     data = body()
     repo = valid_repo(str(data.get("repo") or ""))
-    number = int(data.get("number") or 0)
+    number = number_of(data.get("number"))
     action = data.get("action")
-    if number <= 0 or action not in ("close", "reopen", "comment"):
-        abort(400, "number, and action close, reopen or comment")
+    if action not in ("close", "reopen", "comment"):
+        abort(400, "action: close, reopen or comment")
     text = str(data.get("text") or "")[:60000]
     dry = write_allowed(bool(data.get("dry_run")))
     with as_user(dry) as (_gh, gl):

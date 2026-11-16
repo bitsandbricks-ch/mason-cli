@@ -1,5 +1,5 @@
 """Issues across repos: `mason issues` lists and filters them, `mason issue` creates, shows, closes, reopens and
-comments. GitHub here; Mason (the web app) adds GitLab issues (server/gitlab.py).
+comments. GitHub here; GitLab projects' issues are in gitlab.py (glab.py on this machine).
 """
 
 from __future__ import annotations
@@ -55,8 +55,13 @@ def report(repo: str, ctx: dict) -> None:
     rows = repo_issues(repo, ctx["state"], ctx["labels"], ctx["assignee"], ctx["limit"])
     if ctx.get("stale"):
         rows = stale(rows, ctx["stale"])
+    show_rows(rows, ctx["state"])
+
+
+def show_rows(rows: list[dict], state: str = "open") -> None:
+    """One repo's issues under its heading (GitHub's and GitLab's alike)."""
     if not rows:
-        say("   no issues" if ctx["state"] == "open" else f"   no {ctx['state']} issues")
+        say("   no issues" if state == "open" else f"   no {state} issues")
         return
     for r in rows:
         extra = []
@@ -64,9 +69,9 @@ def report(repo: str, ctx: dict) -> None:
             extra.append(f"[{', '.join(r['labels'])}]")
         if r["assignees"]:
             extra.append(" ".join(f"@{a}" for a in r["assignees"]))
-        state = "" if ctx["state"] == "open" else f"{r['state']:<7}"
+        word = "" if state == "open" else f"{r['state']:<7}"
         when = ago(r["updated"]).replace(" ago", "")
-        say(f"   #{r['number']:<5} {state}{r['title'][:70]}  {' '.join(extra)}  {when}".rstrip())
+        say(f"   #{r['number']:<5} {word}{r['title'][:70]}  {' '.join(extra)}  {when}".rstrip())
 
 
 def issues(repos: list[str], state: str = "open", labels: list[str] | None = None, assignee: str | None = None,

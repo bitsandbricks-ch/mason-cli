@@ -7,12 +7,12 @@ import { ask } from '../ui.js'
 import TextPane from '../components/TextPane.vue'
 
 const list = ref([])
-const broken = ref({})
+const broken = ref([])
 const output = ref('')
 const params = ref({}) // `${plugin}/${action}` -> {repo, name: value}
 
 async function load() {
-  try { const got = await get('/plugins'); list.value = got.plugins; broken.value = got.broken || {} } catch (e) { log(e.message, 'error') }
+  try { const got = await get('/plugins'); list.value = got.plugins; broken.value = got.broken || [] } catch (e) { log(e.message, 'error') }
 }
 async function toggle(p, body) {
   try { const got = await put(`/plugins/${p.name}`, body); list.value = got.plugins } catch (e) { log(e.message, 'error') }
@@ -67,7 +67,7 @@ onMounted(load)
             <span class="dim">{{ a.help }}</span>
           </div>
         </div>
-        <div v-for="(err, name) in broken" :key="name" class="box bad">{{ name }} failed to load: {{ err }}</div>
+        <div v-for="b in broken" :key="b" class="box bad">plugin failed to load: {{ b }}</div>
       </div>
       <div class="scroll pad"><TextPane :text="output" placeholder="what an action prints shows here" /></div>
     </div>

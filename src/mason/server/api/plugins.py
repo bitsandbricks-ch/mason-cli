@@ -15,7 +15,7 @@ from flask import Blueprint, abort, current_app, g, jsonify, request
 
 from mason import core, market, plugins
 from mason.server.api.account import body, secret_names, secret_of
-from mason.server.auth import audit, can_write, need
+from mason.server.auth import audit, can_write, is_operator, need
 from mason.server.context import as_user, load_config, user_settings, valid_repo
 from mason.server.models import db
 
@@ -76,7 +76,8 @@ def plugins_list():
     names, everyone = {p.name for p in active()}, off_for_all()
     return jsonify({"plugins": [dict(describe(p, p.name in names), off_for_all=p.name in everyone)
                                 for p in plugins.load()],
-                    "broken": plugins.errors})
+                    # the reason can name paths on the server: only operators see it
+                    "broken": plugins.errors if is_operator(g.user) else [e.split(":", 1)[0] for e in plugins.errors]})
 
 
 @bp.put("/plugins/<name>")
@@ -166,10 +167,12 @@ def market_list():
     try:
         got = market.listing(op.plugin_index, op.plugin_index_keys)
     except (RuntimeError, OSError) as err:
-        abort(502, f"the plugin index: {err}")
+        # the error names a file or address on the server: only operators, the log and `mason serve --check` see it
+        current_app.logger.warning("plugin index %s: %s", op.plugin_index, err)
+        abort(502, f"the plugin index: {err}" if is_operator(g.user) else "the plugin index can't be read right now")
     loaded = {p.name for p in plugins.load()}
     for p in got["plugins"]:
         p["loaded"] = p["name"] in loaded
-    got["index"] = op.plugin_index
+    got["index"] = op.plugin_index if op.plugin_index.startswith("https://") else "(a file where Mason runs)"
     return jsonify(got)
 

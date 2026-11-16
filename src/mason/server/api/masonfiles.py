@@ -24,7 +24,7 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from mason import config, core, rules
 from mason import defaults as D
-from mason.server import gitlab as GL
+from mason import gitlab as GL
 from mason.server.api.account import body
 from mason.server.api.defaults import check_path
 from mason.server.api.defaults import validate as validate_defaults
@@ -312,7 +312,7 @@ def write(gl, repo: str, changes: dict[str, str | None], mode: str, message: str
     base = info.get("default_branch") or "main"
     branch = base if mode == "commit" else f"mason/settings-{secrets.token_hex(3)}"
     if mode != "commit":
-        head = core.api("GET", f"/repos/{repo}/git/ref/heads/{base}")["object"]["sha"]
+        head = core.api("GET", f"/repos/{repo}/git/ref/heads/{core.quote_ref(base)}")["object"]["sha"]
         core.api("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": head})
     for path, text in changes.items():
         got = core.get_file(repo, path, branch)
@@ -419,6 +419,15 @@ def put_file():
     if problems and not data.get("force"):
         return jsonify({"problems": problems}), 422
     message = str(data.get("message") or f"{'Remove' if delete else 'Update'} {path} (Mason)")[:200]
+    base = data.get("base")  # the text the editor started from: someone else's change since isn't overwritten
+    if isinstance(base, str):
+        with as_user() as (_gh, gl):
+            try:
+                now = read(gl, repo, path)
+            except RuntimeError as err:
+                abort(502, str(err))
+        if (now or "") != base:
+            abort(409, f"{path} changed in {repo} since you opened it: open it again to see the new version")
     return commit(repo, {path: None if delete else text}, str(data.get("mode") or "auto"), message, "mason.write",
                   write_allowed(bool(data.get("dry_run"))))
 

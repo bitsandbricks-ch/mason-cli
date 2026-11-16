@@ -5,8 +5,8 @@ from __future__ import annotations
 from flask import Blueprint, abort, jsonify, request
 
 from mason import core, stats
+from mason import gitlab as GL
 from mason.config import group_label
-from mason.server import gitlab as GL
 from mason.server.api.repos import all_repos, names_arg
 from mason.server.auth import need
 from mason.server.context import as_user, load_config
