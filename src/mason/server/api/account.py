@@ -606,7 +606,7 @@ def secret_of(user: User, name: str) -> str:
 @need("read")
 def audit_log():
     q = db.query(Audit).filter(Audit.user_id == g.user.id)  # only your own: nobody reads another user's
-    rows = q.order_by(Audit.id.desc()).limit(min(int(request.args.get("limit", 200)), 1000)).all()
+    rows = q.order_by(Audit.id.desc()).limit(max(1, min(request.args.get("limit", 200, type=int), 1000))).all()
     names = {u.id: u.name for u in db.query(User).filter(User.id.in_({r.user_id for r in rows if r.user_id}))}
     return jsonify([{"at": iso(r.at), "user": names.get(r.user_id, ""), "via": r.via, "ip": r.ip, "action": r.action,
                      "target": r.target, "dry_run": r.dry_run, "ok": r.ok, "detail": r.detail} for r in rows])

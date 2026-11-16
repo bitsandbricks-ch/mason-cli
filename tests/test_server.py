@@ -84,6 +84,9 @@ def test_me_csrf_settings(op):
     assert r.status_code == 403
     assert c.put("/api/v1/settings", json={"defaults": "/etc"}, headers=H).status_code == 400  # no server folders
     assert c.put("/api/v1/settings", json={"orgs": "acme, mike"}, headers=H).json["orgs"] == ["acme", "mike"]
+    r = c.put("/api/v1/settings", json={"repos": "acme/web, tool"}, headers=H)  # tool has no owner
+    assert r.status_code == 400 and "tool" in r.json["error"]
+    assert c.put("/api/v1/settings", json={"orgs": ["acme/web"]}, headers=H).status_code == 400
     assert c.get("/api/v1/settings").json["org_defaults"] is True  # each org's .mason: on unless turned off
     assert c.put("/api/v1/settings", json={"org_defaults": "no"}, headers=H).status_code == 400
     assert c.put("/api/v1/settings", json={"org_defaults": False}, headers=H).json["org_defaults"] is False
@@ -311,6 +314,8 @@ def test_graphql_proxy_refuses_hidden_mutations(op):
                                                          "{ x } }"}, headers=H)
     assert r.status_code == 400 and "one GraphQL operation" in r.json["error"]
     assert c.post("/api/v1/github/graphql", json={"query": "fragment F on X { y }"}, headers=H).status_code == 400
+    assert c.post("/api/v1/github/graphql", json="x", headers=H).status_code == 400
+    assert c.get("/api/v1/audit?limit=x").status_code == 200
 
 
 def test_bad_numbers_are_a_400_not_a_500(op):
@@ -836,7 +841,7 @@ def test_key_and_session_caps(op, monkeypatch):
 def test_settings_size_and_device_lookups(op):
     app, c = op
     big = [f"org-{n:03d}-" + "x" * 180 for n in range(200)]
-    r = c.put("/api/v1/settings", json={"orgs": big, "repos": big}, headers=H)
+    r = c.put("/api/v1/settings", json={"orgs": big, "repos": [f"acme/{x}" for x in big]}, headers=H)
     assert r.status_code == 413 and "KB" in r.json["error"]
     codes = [c.get("/api/v1/device/info?code=BCDF-GHJK").status_code for _ in range(11)]
     assert codes[:10] == [404] * 10 and codes[10] == 429

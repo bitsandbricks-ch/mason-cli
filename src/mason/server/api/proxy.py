@@ -219,6 +219,8 @@ def rest(path: str):
 @need("read")
 def graphql():
     payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        abort(400, "send a JSON object: {query, variables}")
     query = str(payload.get("query") or "")
     try:
         ops = operations(query)
