@@ -1353,3 +1353,14 @@ def test_move_or_remove_github_rulesets(op, monkeypatch, tmp_path):
     assert "-X DELETE /repos/acme/api/contents/.github/rulesets/release.json" in calls and "-X PUT" not in calls
     assert c.post("/api/v1/mason/move", json={"repo": "acme/api", "paths": [".mason.toml"]},
                   headers=H).status_code == 400
+
+
+def test_broken_plugin_reason_only_for_operators(op, monkeypatch):
+    app, mike = op
+    from mason import plugins
+    from mason.server import operators
+    monkeypatch.setattr(plugins, "errors", ["bad: No module named '/srv/secret/path'"])
+    assert mike.get("/api/v1/plugins").json["broken"] == ["bad"]
+    with app.app_context():
+        operators.add("github:mike")
+    assert mike.get("/api/v1/plugins").json["broken"] == ["bad: No module named '/srv/secret/path'"]

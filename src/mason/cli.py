@@ -192,7 +192,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
         try:
             handlers.update(plugin.add_commands(sub) or {})
         except Exception as err:  # argparse conflicts and the like
-            plugins.errors.append(f"{plugin.name}: {err}")
+            if f"{plugin.name}: {err}" not in plugins.errors:  # the web console builds the parser on every line
+                plugins.errors.append(f"{plugin.name}: {err}")
     return p, handlers
 
 
