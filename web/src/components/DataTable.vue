@@ -82,6 +82,14 @@ function sort(c) {
   else { sortKey.value = c.key; sortDir.value = 1 }
 }
 watch(() => props.rows, () => { if (index.value < 0 && shown.value.length && props.modelValue == null) select(0, false) })
+// The selected row must be one you can see: the keys and buttons act on it (m merged a PR the filter had hidden).
+// When the filter hides it, the first row it shows is selected instead, or none.
+watch(shown, () => {
+  if (props.modelValue == null || index.value >= 0) return
+  if (!props.rows.some((r) => props.rowKey(r) === props.modelValue)) return // gone from the list: the view decides
+  if (shown.value.length) select(0, false)
+  else emit('update:modelValue', null)
+})
 defineExpose({ focus: () => table.value?.focus(), shown })
 </script>
 
