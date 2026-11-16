@@ -9,6 +9,7 @@ export const state = reactive({
   log: [],           // [{at, text, kind, detail, where}] the bottom log (click it for all of them)
   busy: 0,
   rate: null,
+  unreachable: '', // why /me failed when the server couldn't answer it
 })
 
 // Dry run outlives a reload of the tab: turned on to try things out, a reload must not quietly make the next
@@ -38,9 +39,14 @@ export async function api(method, path, body, { quiet = false } = {}) {
   if (method !== 'GET' && state.me?.csrf) headers['X-CSRF-Token'] = state.me.csrf
   if (!quiet) state.busy++
   try {
-    const res = await fetch(`/api/v1${path}`, {
-      method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    let res
+    try {
+      res = await fetch(`/api/v1${path}`, {
+        method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    } catch { // the browser's own words ("Failed to fetch", "NetworkError…") don't say what to do
+      throw new ApiError("can't reach Mason: check your connection and try again", 0)
+    }
     const data = res.status === 204 ? {} : await res.json().catch(() => ({}))
     if (!res.ok) {
       if (res.status === 401 && path !== '/me') { state.me = { user: null, providers: state.me?.providers || [] } }
@@ -65,7 +71,13 @@ export function forgetLocal() {
 }
 
 export async function loadMe() {
-  try { state.me = await get('/me') } catch (e) { state.me = { user: null, providers: [] }; log(e.message, 'error') }
+  state.unreachable = ''
+  try { state.me = await get('/me') } catch (e) {
+    // down or unreachable isn't signed out: say so and offer a retry instead of a sign-in page with no way in
+    if (e.status === 0 || e.status >= 500) state.unreachable = e.status ? `Mason answered ${e.message}` : e.message
+    state.me = { user: null, providers: [] }
+    log(e.message, 'error')
+  }
   state.loaded = true
   return state.me
 }

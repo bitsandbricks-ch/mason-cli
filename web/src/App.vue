@@ -55,8 +55,9 @@ onMounted(async () => {
     try { plugins.value = (await get('/plugins')).plugins.filter((p) => p.on && p.tabs.length) } catch { /* none */ }
   }
 })
+const retry = () => window.location.reload()
 function guard() {
-  if (!state.loaded) return
+  if (!state.loaded || state.unreachable) return
   if (!signedIn.value && !route.meta.public) router.replace({ name: 'login', query: route.path !== '/' ? { next: route.fullPath } : {} })
   // signed in already (a bookmark, the back button after signing in): the sign-in page has nothing to offer
   else if (signedIn.value && route.name === 'login') router.replace(safeNext(route.query.next))
@@ -158,6 +159,9 @@ window.addEventListener('keydown', (e) => {
 
 <template>
   <div v-if="!state.loaded" class="center"><span class="cursor">connecting</span></div>
+  <div v-else-if="state.unreachable" class="center">
+    <div class="box"><span class="bad">{{ state.unreachable }}</span><br><br><button class="primary" @click="retry">try again</button></div>
+  </div>
   <router-view v-else-if="!signedIn || route.meta.public" />
   <div v-else-if="phone" class="screen phone">
     <header class="top">
