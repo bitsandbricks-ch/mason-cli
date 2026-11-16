@@ -77,7 +77,8 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   defaults, versions not released yet and your open issues (assigned to you; marked after 30 days untouched). What appeared since your last look in this browser is marked "new". **z** puts an item off for a week (it comes back by itself; **Z** shows those too). Enter opens one in the side panel, and ↑↓ walk through them.
 - **ctrl+k (⌘k, or ⌕ jump in the top bar) jumps anywhere:** type a few letters of a repo, a PR or MR, an
   issue or a view; ↑↓ pick, Enter goes there (a repo, PR or issue opens in the side panel on a wide screen).
-  Before you type it offers what you opened last (kept in this browser).
+  Before you type it offers what you opened last (kept in this browser). It also runs a few commands: switch
+  the theme, turn dry run on or off, open the session log, sign out.
 - **On a wide screen the page opens in a side panel** on the right, and the list stays where it was. Moving
   in the list (↑↓, j/k, a click, or ↑ ↓ in the panel's header) shows the new row in the panel, and the list selects the row the panel shows; `Esc` or ✕ closes it; **⤢ page** opens it as
   its own page; its left edge drags it wider or narrower (←→ on the edge too), kept on that device. A link in
@@ -141,6 +142,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
 - **Rerun failed runs at once:** **F** (or **rerun all failed**) on the runs list runs the failed jobs of every
   failed run in the list again, after one question that lists them (`d` for a dry run). Only the newest run
   of each repo and workflow counts, so a failure a later run already fixed is left alone; at most 30 per go.
+- **Export:** **⤓ csv** next to a list's filter downloads the list as shown (filter and sort applied, cells
+  in words) as a CSV file. It is made in the browser; cells that a spreadsheet would run as a formula
+  start with `'`.
 
 ## Run it
 
