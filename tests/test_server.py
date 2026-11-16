@@ -232,6 +232,8 @@ def test_console(op):
     assert c.post("/api/v1/console", json={"line": "mason init /etc"}, headers=H).status_code == 400
     assert c.post("/api/v1/console", json={"line": "rm -rf /"}, headers=H).status_code == 400
     assert "usage" in c.post("/api/v1/console", json={"line": "mason status --nope"}, headers=H).json["text"]
+    from mason import core
+    assert core.dry_run() is False  # the dry run of `merge --dry-run` above ended with the command
     r = c.post("/api/v1/console", json={"line": "mason issue comment web#3 -"}, headers=H)
     assert r.status_code == 400 and "stdin" in r.json["error"]  # the server's stdin would hang the request
 
@@ -326,6 +328,18 @@ def test_bad_numbers_are_a_400_not_a_500(op):
                        ("/api/v1/issue", {"repo": "acme/web", "number": -3, "action": "close"})):
         r = c.post(path, json={**data, "dry_run": True}, headers=H)
         assert r.status_code == 400, (path, r.status_code)
+
+
+def test_a_crash_is_json_without_details(op, monkeypatch):
+    app, c = op
+    from mason.server.api import repos as repos_api
+
+    def boom(*_a, **_kw):
+        raise KeyError("secret detail")
+    monkeypatch.setattr(repos_api, "load_config", boom)
+    app.config["PROPAGATE_EXCEPTIONS"] = False  # as in production: the test client would re-raise it
+    r = c.get("/api/v1/repos")
+    assert r.status_code == 500 and "server log" in r.json["error"] and "secret detail" not in r.get_data(as_text=True)
 
 
 def test_sign_in_only_goes_back_to_this_site():

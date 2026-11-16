@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 WEB = "https://github.com"
 WORKERS = 8  # repos handled at the same time
 DRY_RUN = False  # the CLI's; a context can override it (set_dry_run)
+SERVING = False  # the web app: one process for many users, so a dry run never goes in the global
 CACHE: str | None = None  # e.g. "90s": GET answers come from a cache for that long (the TUI sets it)
 
 
@@ -51,11 +52,16 @@ def dry_run() -> bool:
     return DRY_RUN if value is None else value
 
 
+def forget_dry_run() -> None:
+    """The server, before each request: a dry run set in this thread's context for an earlier one ends."""
+    _dry_run.set(None)
+
+
 def set_dry_run(value: bool) -> None:
     """Dry run for this context (and the CLI's global, so code reading core.DRY_RUN agrees)."""
     global DRY_RUN
     _dry_run.set(bool(value))
-    if not _context_stdout_installed():
+    if not SERVING and not _context_stdout_installed():
         DRY_RUN = bool(value)
 
 

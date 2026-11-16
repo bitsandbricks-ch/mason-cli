@@ -7,6 +7,7 @@ that don't say they are safe for the web (a plugin lists those in `web_commands`
 
 from __future__ import annotations
 
+import contextvars
 import shlex
 
 from flask import Blueprint, abort, jsonify
@@ -88,7 +89,9 @@ def run():
     with as_user():
         token = config.OVERRIDE.set(mine)
         try:
-            text = core.capture(cli.main, argv)
+            # in a copy of the context: the CLI sets its dry run for the context (set_dry_run), and on a server
+            # thread that serves the next request too, that setting outlived the command
+            text = contextvars.copy_context().run(core.capture, cli.main, argv)
         except core.RateLimited as err:
             abort(429, str(err))
         finally:

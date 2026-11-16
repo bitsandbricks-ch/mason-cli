@@ -33,6 +33,7 @@ def create_app(op: S.Settings | None = None) -> Flask:
                       PROBLEMS=problems, JSON_SORT_KEYS=False)
     models.init(op.database)
     core.install_context_stdout()
+    core.SERVING = True  # a test runner may swap stdout; a console command's dry run must still stay in its context
     cache.BUDGET.configure(op.cache_size, op.cache_user_size)
     # The operator acts only with each user's own token: never with gh or a token of the server's.
     transport.set_default(NoTransport("sign in first"))
@@ -44,6 +45,7 @@ def create_app(op: S.Settings | None = None) -> Flask:
     @app.before_request
     def _who():
         retention.housekeeping()  # at most every few minutes
+        core.forget_dry_run()  # threads serve many requests: nothing of an earlier one's dry run stays
         auth.resolve()
         if request.path.startswith("/api/"):
             if request.path != "/api/v1/health":
@@ -82,6 +84,14 @@ def create_app(op: S.Settings | None = None) -> Flask:
     @app.errorhandler(core.RateLimited)
     def _rate(err):
         return jsonify({"error": str(err), "reset": err.reset}), 429
+
+    @app.errorhandler(Exception)
+    def _crash(err):
+        # a bug: logged with its traceback; the API answers in JSON like every other error, without the details
+        app.logger.exception("unhandled error on %s %s", request.method, request.path)
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "something went wrong in Mason; it is in the server log"}), 500
+        return "Internal Server Error", 500
 
     from mason.server.api import (
         account,
