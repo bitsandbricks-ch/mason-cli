@@ -41,3 +41,18 @@ test('ranking: the best match first, the hint counts less, a limit', () => {
   assert.ok(rank(items, 'bug').some((i) => i.kind === 'issue')) // through the hint
   assert.ok(!rank(items, 'login').some((i) => i.kind === 'view')) // not 'open puLl and merGe requests'… scattered in a hint
 })
+
+test('recent: newest first, each once, at most max', async () => {
+  const { remember, recentItem } = await import('../src/palette.js')
+  let list = []
+  list = remember(list, { kind: 'repo', repo: 'a/b' })
+  list = remember(list, { kind: 'pr', repo: 'a/b', number: 7 })
+  list = remember(list, { kind: 'repo', repo: 'a/b' })
+  assert.deepEqual(list.map((t) => t.kind), ['repo', 'pr'])
+  for (let i = 0; i < 20; i++) list = remember(list, { kind: 'issue', repo: 'a/b', number: i + 1 }, 5)
+  assert.equal(list.length, 5)
+  assert.equal(list[0].number, 20)
+  assert.equal(remember(list, null), list)
+  assert.equal(recentItem({ kind: 'pr', repo: 'gitlab:g/a', number: 2 }).label, 'gitlab:g/a!2')
+  assert.equal(recentItem({ kind: 'run', repo: 'a/b', id: 9 }).label, 'a/b run 9')
+})

@@ -3,7 +3,8 @@
 // in the panel reads its query from the panel instead of the route (usePage), and its back closes the panel.
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { decodeSide, follow, pageRoute, queryOf, sideFor, withSide } from './panel.js'
+import { decodeSide, follow, pageRoute, queryOf, sideFor, targetOf, withSide } from './panel.js'
+import { remember } from './palette.js'
 import { phone, replaceQuery } from './ui.js'
 
 export const SIDE = Symbol('side') // provided by SidePanel to the page inside it
@@ -28,7 +29,13 @@ export function installSide(router) {
       return t ? pageRoute(t) : { path: to.path, query: q, hash: to.hash }
     }
   })
-  router.afterEach(() => { popping = false })
+  router.afterEach((to) => {
+    popping = false
+    // what you opened, for the jump box's "recent" (this device only)
+    const t = decodeSide(to.query.side) || targetOf(to)
+    // not a replace: walking a list with the panel open isn't opening each row
+    if (t && !window.history.state?.replaced) saveRecent(remember(recent(), t))
+  })
 }
 
 export function openAsPage(router, t) {
@@ -83,3 +90,9 @@ export function useTrack(fn, { sel, key, kind = '' } = {}) {
   if (kind) { listKind.value = kind; onBeforeUnmount(() => { if (listKind.value === kind) listKind.value = '' }) }
   if (sel && key) watch(target, (t) => { const k = t && key(t); if (k != null && k !== sel.value) sel.value = k }, { immediate: true })
 }
+
+const RECENT = 'mason-recent'
+export function recent() { try { return JSON.parse(localStorage.getItem(RECENT) || '[]').filter((t) => t?.kind && t.repo) } catch { return [] } }
+function saveRecent(list) { try { localStorage.setItem(RECENT, JSON.stringify(list)) } catch { /* private mode */ } }
+// signing out: the next person in this browser doesn't see what you opened
+export function clearRecent() { try { localStorage.removeItem(RECENT) } catch { /* private mode */ } }

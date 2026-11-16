@@ -50,3 +50,17 @@ export function itemsFrom({ views = [], repos = [], prs = [], issues = [] }) {
       to: { path: '/issue', query: { repo: i.repo, number: String(i.number) } } })),
   ]
 }
+
+// the things you opened last (a repo, a PR…), newest first, each once, at most max: what the jump box offers
+// before you type
+export function remember(list, target, max = 8) {
+  const key = (t) => `${t.kind}:${t.repo}:${t.number ?? t.id ?? t.tag ?? ''}`
+  if (!target?.kind || !target.repo) return list
+  return [target, ...list.filter((t) => key(t) !== key(target))].slice(0, max)
+}
+
+// a remembered target as a jump box item (it goes where it went before; a PR's title is in the lists, not here)
+export function recentItem(t) {
+  const ref = t.number ? `${t.repo}${t.kind === 'pr' && t.repo.startsWith('gitlab:') ? '!' : '#'}${t.number}` : t.id ? `${t.repo} run ${t.id}` : t.tag ? `${t.repo} ${t.tag}` : t.repo
+  return { kind: 'recent', label: ref, hint: { repo: 'repo', pr: 'pull request', issue: 'issue', run: 'run', release: 'releases' }[t.kind] || '', target: t }
+}

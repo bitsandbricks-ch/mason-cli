@@ -450,7 +450,7 @@ button.wide { width: 100%; text-align: left; }
 .palette li.sel { background: var(--sel); }
 .palette li.sel .label::before { content: "▸ "; color: var(--accent); }
 .palette li.static { cursor: default; }
-.palette .kind { flex: 0 0 5ch; }
+.palette .kind { flex: 0 0 6ch; }
 .palette .label { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .palette .hint { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; text-align: right; }
 .palette .foot-keys { border-top: 1px solid var(--line); padding: 4px 12px; }

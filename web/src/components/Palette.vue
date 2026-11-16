@@ -6,7 +6,9 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { cached } from '../load.js'
 import { TABS } from '../router.js'
-import { itemsFrom, rank } from '../palette.js'
+import { itemsFrom, rank, recentItem } from '../palette.js'
+import { pageRoute } from '../panel.js'
+import { recent } from '../side.js'
 
 const open = defineModel({ type: Boolean, default: false })
 const router = useRouter()
@@ -24,12 +26,16 @@ async function load() {
   loading.value = false
 }
 const items = computed(() => itemsFrom({ views: TABS, ...data.value }))
-const shown = computed(() => rank(items.value, query.value, 12))
+const recents = ref([])
+// nothing typed yet: what you opened last, then the views
+const shown = computed(() => (query.value.trim() ? rank(items.value, query.value, 12)
+  : [...recents.value.map((t) => ({ ...recentItem(t), to: pageRoute(t) })), ...items.value.filter((i) => i.kind === 'view')].slice(0, 12)))
 watch(shown, () => { at.value = 0 })
 watch(open, (o) => {
   if (!o) return
   query.value = ''
   at.value = 0
+  recents.value = recent()
   load()
   nextTick(() => input.value?.focus())
 })
@@ -49,7 +55,7 @@ function key(e) {
   e.preventDefault()
   e.stopPropagation()
 }
-const KIND = { view: 'view', repo: 'repo', pr: 'PR', issue: 'issue' }
+const KIND = { view: 'view', repo: 'repo', pr: 'PR', issue: 'issue', recent: 'recent' }
 </script>
 
 <template>
