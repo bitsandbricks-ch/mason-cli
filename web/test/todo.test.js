@@ -1,7 +1,7 @@
 // node --test (npm test): what the "to do" view lists, and in which order.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { todoItems } from '../src/todo.js'
+import { sinceLastLook, todoItems } from '../src/todo.js'
 
 const status = {
   head: ['group', 'released', 'PRs ready/draft', 'CI'],
@@ -76,4 +76,16 @@ test('a PR that asks you for a review waits for you', () => {
     { repo: 'acme/web', number: 9, title: 'Draft', draft: true, reviewers: ['mike'] },
   ], me: ['mike'] })
   assert.deepEqual(got.map((i) => [i.rank, i.why, i.target.number]), [[1, 'asks for your review', 7]])
+})
+
+test('new since the last look: nothing on the first one, then what appeared', () => {
+  const first = sinceLastLook(['a', 'b'], null, { now: 1000 })
+  assert.deepEqual(first.fresh, [])
+  const second = sinceLastLook(['a', 'c'], first.seen, { now: 2000 })
+  assert.deepEqual(second.fresh, ['c'])
+  assert.deepEqual(second.seen, { a: 2000, b: 1000, c: 2000 }) // b stays: another filter may list it
+  // r in the same visit keeps what was new a moment ago
+  assert.deepEqual(sinceLastLook(['a', 'c'], second.seen, { now: 3000, before: second.fresh }).fresh, ['c'])
+  // what wasn't listed for a month is forgotten
+  assert.deepEqual(Object.keys(sinceLastLook([], { old: 0, b: 40 * 86_400_000 }, { now: 41 * 86_400_000 }).seen), ['b'])
 })

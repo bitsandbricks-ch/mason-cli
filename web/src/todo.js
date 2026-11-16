@@ -68,3 +68,15 @@ export function todoItems({ status = null, prs = [], approvals = [], releases = 
 }
 
 export const RANKS = { 1: 'waits for you', 2: 'broken', 3: 'ready to go', 4: 'drift and releases', 5: 'your issues' }
+
+// What is new since your last look: keys not in seen ({key: when last listed}). The first look (no seen yet)
+// marks nothing, or everything would be "new". Returns the new keys and the seen map to keep: this list's keys
+// as of now, plus older ones (other filters) from the last `keepDays` days.
+export function sinceLastLook(keys, seen, { now = Date.now(), keepDays = 30, before = [] } = {}) {
+  const fresh = seen ? keys.filter((k) => !(k in seen) || before.includes(k)) : []
+  const next = {}
+  const oldest = now - keepDays * 86_400_000
+  for (const [k, at] of Object.entries(seen || {})) if (at >= oldest) next[k] = at
+  for (const k of keys) next[k] = now
+  return { fresh, seen: next }
+}

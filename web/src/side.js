@@ -96,5 +96,5 @@ export function recent() { try { return JSON.parse(localStorage.getItem(RECENT) 
 function saveRecent(list) { try { localStorage.setItem(RECENT, JSON.stringify(list)) } catch { /* private mode */ } }
 // signing out: the next person in this browser doesn't see what you opened or typed in the console
 export function clearRecent() {
-  try { localStorage.removeItem(RECENT); localStorage.removeItem('mason.console.history') } catch { /* private mode */ }
+  try { for (const k of [RECENT, 'mason.console.history', 'mason.todo.seen']) localStorage.removeItem(k) } catch { /* private mode */ }
 }

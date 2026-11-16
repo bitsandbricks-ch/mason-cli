@@ -3,7 +3,7 @@
 // you for a review, what is broken (CI on the default branch, conflicts, failing checks, a failed release run),
 // PRs ready to merge, drift against the defaults, versions not released yet and open issues assigned to you.
 // Enter opens one (in the side panel on a wide screen, where ↑↓ then walk through the list).
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { cached, useLoad } from '../load.js'
 import { state } from '../api.js'
@@ -11,7 +11,7 @@ import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import { pageRoute, encodeSide } from '../panel.js'
 import { useTrack } from '../side.js'
-import { RANKS, todoItems } from '../todo.js'
+import { RANKS, sinceLastLook, todoItems } from '../todo.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 
@@ -31,7 +31,22 @@ const { data, error, loading, load } = useLoad(async (q, fresh) => {
 })
 loadGroups()
 const sel = ref(null)
-const rows = computed(() => (data.value || []).map((i) => ({ ...i, key: `${encodeSide(i.target)}|${i.why}`, group: RANKS[i.rank] })))
+const keyOf = (i) => `${encodeSide(i.target)}|${i.why}`
+// what appeared since your last look at the to do (in this browser) is marked "new"
+const SEEN = 'mason.todo.seen'
+const fresh = ref([])
+watch(data, (items) => {
+  if (!items) return
+  let seen = null
+  try { seen = JSON.parse(localStorage.getItem(SEEN) || 'null') } catch { /* private mode */ }
+  const got = sinceLastLook(items.map(keyOf), seen, { before: fresh.value })
+  fresh.value = got.fresh
+  try { localStorage.setItem(SEEN, JSON.stringify(got.seen)) } catch { /* private mode */ }
+})
+const rows = computed(() => (data.value || []).map((i) => {
+  const key = keyOf(i)
+  return { ...i, key, group: fresh.value.includes(key) ? `${RANKS[i.rank]} · new` : RANKS[i.rank] }
+}))
 const columns = [
   { key: 'group', label: 'what', cls: (r) => r.cls, mark: false, card: 'head' },
   { key: 'repo', label: 'repo', cls: () => '' },
@@ -54,6 +69,7 @@ useKeys({ r: () => load(true), p: () => page() })
       <button class="hide-xs" @click="load(true)"><span class="k">r</span> reload</button>
       <span class="row todo-counts">
         <span v-for="c in counts" :key="c.label" :class="c.n ? '' : 'dim'"><b>{{ c.n }}</b> {{ c.label }}</span>
+        <span v-if="fresh.length" class="accent"><b>{{ fresh.length }}</b> new since your last look</span>
       </span>
       <span class="spacer" />
       <button class="primary" :disabled="!current" @click="page()"><span class="k">⏎</span> open</button>
