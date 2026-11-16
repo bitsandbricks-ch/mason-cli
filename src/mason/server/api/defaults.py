@@ -59,6 +59,9 @@ def validate(path: str, text: str) -> list[str]:
         for key in ("orgs", "repos", "exclude", "gitlab_groups"):
             if key in raw and not (isinstance(raw[key], list) and all(isinstance(x, str) for x in raw[key])):
                 problems.append(f"{key} must be a list of names")
+        bare = [r for r in raw.get("repos") or [] if isinstance(r, str) and "/" not in r]
+        if bare:  # mason can't ask GitHub about a repo without its owner
+            problems.append(f"repos are owner/name: {', '.join(bare[:5])}")
         groups = raw.get("group") or []
         if not isinstance(groups, list):
             return problems + ["[[group]] must be a list of tables"]

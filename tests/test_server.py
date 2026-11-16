@@ -355,6 +355,9 @@ def test_defaults_editor(op):
     bad = c.post("/api/v1/defaults/validate", json={"path": "mason.toml",
                                                     "text": '[[group]]\nname="a"\nmatch={nope=1}\n'}, headers=H).json
     assert "match doesn't know nope" in bad["problems"][0]
+    bad = c.post("/api/v1/defaults/validate", json={"path": "mason.toml", "text": 'repos = ["acme/web", "tool"]\n'},
+                 headers=H).json
+    assert bad["problems"] == ["repos are owner/name: tool"]
     bad = c.post("/api/v1/defaults/validate", headers=H, json={
         "path": "mason.toml", "text": '[[group]]\nname="a"\nskip=["nope"]\nvisibility="x"\nactions={y=1}\n'}).json
     assert [p.split(": ")[1][:14] for p in bad["problems"]] == ["skip doesn't k", "visibility is ", "actions knows "]
