@@ -1,12 +1,16 @@
 <script setup>
 // Settings: logins, the defaults repo and which repos to manage, API keys, sessions and plugin secrets.
 // Everything a CLI user keeps in files lives here, per user: nobody else sees or changes yours.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { del, get, loadMe, log, post, put, state } from '../api.js'
 import { deviceSignIn } from '../signin.js'
 import { ago, ask, tellRevoked } from '../ui.js'
 import { notifyOn, notifySupported, setNotify } from '../notify.js'
+import { useUnsaved } from '../unsaved.js'
+import { safeHref } from '../links.js'
+import { forget } from '../load.js'
+import { clearRecent } from '../side.js'
 
 const router = useRouter()
 const s = ref(null)
@@ -32,10 +36,15 @@ function cancelLink() { stopLink?.(); stopLink = null; linking.value = null }
 onBeforeUnmount(() => stopLink?.())
 
 const asText = (v) => (v || []).join(', ')
+// leaving asks first while the form has changes, or a new key is still shown (it isn't shown again)
+const saved = ref('')
+useUnsaved(computed(() => !!s.value && JSON.stringify(s.value) !== saved.value), 'your settings')
+useUnsaved(computed(() => !!fresh.value), 'the new API key (it is not shown again)')
 async function load() {
   try {
     const got = await get('/settings')
     s.value = { ...got, ...Object.fromEntries(LISTS.map((k) => [k, asText(got[k])])) }
+    saved.value = JSON.stringify(s.value)
     ;[keys.value, sessions.value, secrets.value] = await Promise.all([get('/keys'), get('/sessions'), get('/secrets')])
   } catch (e) { log(e.message, 'error') }
 }
@@ -44,6 +53,7 @@ async function saveSettings() {
     const { theme, plugins_off, ...rest } = s.value // eslint-disable-line no-unused-vars
     await put('/settings', rest)
     log('settings saved', 'ok')
+    forget() // the lists remembered for the old orgs and repos: the next visit asks again
     await loadMe()
     load()
   } catch (e) { log(e.message, 'error') }
@@ -52,13 +62,16 @@ async function unlink(i) {
   if (!(await ask(`Disconnect ${i.provider} (${i.login})? Mason deletes its token and revokes it where ${i.provider} lets it.`, { allowDry: false }))) return
   try { const got = await del(`/me/identities/${i.id}`); await loadMe(); await tellRevoked(got) } catch (e) { log(e.message, 'error') }
 }
+const making = ref(false) // a double click made two keys
 async function makeKey() {
+  if (making.value) return
+  making.value = true
   try {
     const body = { name: newKey.value.name, scope: newKey.value.scope }
     if (newKey.value.days) body.days = Number(newKey.value.days)
     fresh.value = await post('/keys', body)
     load()
-  } catch (e) { log(e.message, 'error') }
+  } catch (e) { log(e.message, 'error') } finally { making.value = false }
 }
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); log('copied', 'ok') } catch { log('select the key and copy it', 'warn') }
@@ -76,13 +89,18 @@ async function setSecret(x) {
   try { await put(`/secrets/${x.name}`, { value: v }); load() } catch (e) { log(e.message, 'error') }
 }
 async function dropSecret(x) {
+  // it can't be shown again, so removing it by a slip of the mouse means typing it in again
+  if (!(await ask(`Remove ${x.label}? Plugins that need it stop working until you set it again.`, { allowDry: false }))) return
   try { await del(`/secrets/${x.name}`); load() } catch (e) { log(e.message, 'error') }
 }
 async function deleteAccount() {
   const name = await ask('Delete your account? Type your user name to confirm. Your keys, sessions and secrets go too; your repos stay as they are.', { input: { placeholder: state.me.user.name }, allowDry: false })
-  if (name !== state.me.user.name) return
+  if (name === null) return
+  if (name !== state.me.user.name) { log(`that isn't your user name (${state.me.user.name}): nothing was deleted`, 'error'); return }
   try {
     const got = await del('/me')
+    forget()
+    clearRecent()
     state.me = { user: null, providers: state.me.providers }
     await tellRevoked(got)
     router.push('/login')
@@ -98,8 +116,10 @@ onMounted(load)
         <div class="accent">accounts</div>
         <div v-for="i in state.me.identities" :key="i.id" class="row">
           <span class="ok">●</span><span>{{ i.provider }}</span><span class="accent">{{ i.login }}</span>
-          <span class="dim">{{ i.host }} · scopes {{ i.scopes || '-' }}</span><span class="spacer" />
-          <button @click="unlink(i)">disconnect</button>
+          <span class="dim">{{ i.host }}{{ i.scopes ? ` · scopes ${i.scopes}` : '' }}</span><span class="spacer" />
+          <!-- the only login can't go (the server says so too): deleting the account is below -->
+          <button v-if="state.me.identities.length > 1" @click="unlink(i)">disconnect</button>
+          <span v-else class="dim" title="connect another account first, or delete your account below">your only login</span>
         </div>
         <div class="row" style="margin-top: 6px">
           <template v-for="p in state.me.providers" :key="p">
@@ -110,7 +130,7 @@ onMounted(load)
           </template>
         </div>
         <p v-if="linking">Enter <span class="accent">{{ linking.user_code }}</span> at
-          <a class="accent" :href="linking.verification_uri" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
+          <a class="accent" :href="safeHref(linking.verification_uri) || undefined" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
           <span class="dim"> (waiting<span class="cursor" />)</span>
           <button @click="cancelLink">cancel</button></p>
       </div>
@@ -151,7 +171,7 @@ onMounted(load)
           <input v-model="newKey.name" placeholder="name" aria-label="key name">
           <select v-model="newKey.scope" aria-label="scope"><option value="read">read</option><option value="write">write</option></select>
           <select v-model="newKey.days" aria-label="expires"><option :value="30">30 days</option><option :value="90">90 days</option><option :value="365">a year</option><option :value="null">never expires</option></select>
-          <button class="primary" @click="makeKey">new key</button>
+          <button class="primary" :disabled="making" @click="makeKey">new key</button>
         </div>
         <table class="table" style="margin-top: 8px">
           <tr v-for="k in keys.filter((x) => !x.revoked)" :key="k.id">

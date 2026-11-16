@@ -2,7 +2,7 @@
 
 Every event is a dict: {at, who, what, detail, more, url, source, state}; `at` is an ISO time, `state` is
 "ok", "bad", "warn" or "" (how the web app colours it), `source` is "github" here ("gitlab" in
-server/gitlab.py, "mason" for the audit rows the operator adds). Lists come newest first.
+gitlab.py, "mason" for the audit rows the operator adds). Lists come newest first.
 
 Also the text of a workflow run's page (run_detail), which mason had no view of before.
 """

@@ -18,7 +18,7 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from mason import config, core, templates
 from mason import defaults as D
-from mason.server import gitlab as GL
+from mason import gitlab as GL
 from mason.server.api.account import body
 from mason.server.auth import audit, need
 from mason.server.context import as_user, user_settings, valid_repo
@@ -59,6 +59,9 @@ def validate(path: str, text: str) -> list[str]:
         for key in ("orgs", "repos", "exclude", "gitlab_groups"):
             if key in raw and not (isinstance(raw[key], list) and all(isinstance(x, str) for x in raw[key])):
                 problems.append(f"{key} must be a list of names")
+        bare = [r for r in raw.get("repos") or [] if isinstance(r, str) and "/" not in r]
+        if bare:  # mason can't ask GitHub about a repo without its owner
+            problems.append(f"repos are owner/name: {', '.join(bare[:5])}")
         groups = raw.get("group") or []
         if not isinstance(groups, list):
             return problems + ["[[group]] must be a list of tables"]
@@ -143,7 +146,7 @@ def validate(path: str, text: str) -> list[str]:
 def read_tree(gl, repo: str, ref: str | None) -> list[str]:
     if repo.startswith(GL.PREFIX):
         return sorted(gl.blobs(repo, ref)) if gl else []
-    t = core.api("GET", f"/repos/{repo}/git/trees/{ref or 'HEAD'}?recursive=1") or {}
+    t = core.api("GET", f"/repos/{repo}/git/trees/{urllib.parse.quote(ref or 'HEAD')}?recursive=1") or {}
     return sorted(e["path"] for e in t.get("tree") or [] if e.get("type") == "blob")
 
 
@@ -211,7 +214,15 @@ def put_file():
     if problems and not data.get("force"):
         return jsonify({"problems": problems}), 422
     message = str(data.get("message") or f"{'Remove' if delete else 'Update'} {path} (Mason)")[:200]
+    base = data.get("base")  # the text the editor started from: a change since then isn't overwritten unasked
     with as_user() as (_gh, gl):
+        if isinstance(base, str):
+            try:
+                now, _ = read_file(gl, repo, path, ref)
+            except RuntimeError as err:
+                abort(502, str(err))
+            if (now or "") != base:
+                abort(409, f"{path} changed in {repo} since you opened it")
         try:
             url = (write_gitlab(gl, repo, ref, path, text, delete, mode, message) if repo.startswith(GL.PREFIX)
                    else write_github(repo, ref, path, text, delete, mode, message))
@@ -232,7 +243,7 @@ def write_github(repo: str, ref: str | None, path: str, text: str, delete: bool,
         raise RuntimeError(f"{path} isn't there")
     branch = base if mode == "commit" else f"mason/defaults-{secrets.token_hex(3)}"
     if mode == "pr":
-        head = core.api("GET", f"/repos/{repo}/git/ref/heads/{base}")["object"]["sha"]
+        head = core.api("GET", f"/repos/{repo}/git/ref/heads/{core.quote_ref(base)}")["object"]["sha"]
         core.api("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": head})
     q = urllib.parse.quote(path)
     if delete:
