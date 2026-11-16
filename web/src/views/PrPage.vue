@@ -3,19 +3,23 @@
 // that printed, and its event log at the bottom. A change updates the page at once: the state flips right
 // away, then the detail and the events are asked again until GitHub or GitLab shows it.
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { usePage } from '../side.js'
 import { get, qs } from '../api.js'
-import { act, forget } from '../load.js'
+import { change, forget } from '../load.js'
 import { useKeys } from '../keys.js'
 import ActionList from '../components/ActionList.vue'
 import EventLog from '../components/EventLog.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import TextPane from '../components/TextPane.vue'
+import { openOut } from '../links.js'
+import { ask } from '../ui.js'
 
-const route = useRoute()
+// the route's query, or the side panel's when it shows in one (and then back closes the panel)
+const { query, back } = usePage('/prs')
 const router = useRouter()
-const repo = computed(() => String(route.query.repo || ''))
-const number = computed(() => Number(route.query.number) || 0)
+const repo = computed(() => String(query.value.repo || ''))
+const number = computed(() => Number(query.value.number) || 0)
 const gitlab = computed(() => repo.value.startsWith('gitlab:'))
 const ref_ = computed(() => `${repo.value}${gitlab.value ? '!' : '#'}${number.value}`)
 const target = computed(() => `${repo.value}#${number.value}`) // what /merge and the audit log call it
@@ -37,57 +41,74 @@ function parse(text) {
 async function load() {
   if (!repo.value || !number.value) return
   if (!detail.value) detail.value = '…'
+  // the panel can move on to another PR while this one is asked: its late answer is dropped
+  const asked = `${repo.value}#${number.value}:${diff.value}`
+  const still = () => asked === `${repo.value}#${number.value}:${diff.value}`
   try {
     const t = (await get(`/pr${qs({ repo: repo.value, number: number.value, diff: diff.value })}`)).text
+    if (!still()) return
     detail.value = t
     state.value = parse(t)
-  } catch (e) { detail.value = `error: ${e.message}` }
+  } catch (e) { if (still()) detail.value = `error: ${e.message}` }
 }
 // whether you may merge past the base branch's rules (GitHub's bypass), rule by rule
 const bypass = ref(null)
 async function loadBypass() {
   bypass.value = null
   if (gitlab.value || !repo.value || !number.value) return
-  try { bypass.value = await get(`/pr/bypass${qs({ repo: repo.value, number: number.value })}`, { quiet: true }) } catch { bypass.value = null }
+  const asked = `${repo.value}#${number.value}`
+  let got = null
+  try { got = await get(`/pr/bypass${qs({ repo: repo.value, number: number.value })}`, { quiet: true }) } catch { got = null }
+  if (asked === `${repo.value}#${number.value}`) bypass.value = got
 }
 watch([repo, number], () => { detail.value = ''; output.value = ''; load(); loadBypass() }, { immediate: true })
 watch(diff, load)
 
 // after a change: show it now, then ask again (GitHub takes a moment to show auto-merge and merges)
-function changed(text, flip) {
+function changed({ text, ok, dry }, flip) {
   output.value = text
-  if (text.startsWith('error')) return
-  if (flip && !/\[dry-run\]/.test(text)) state.value = { ...state.value, ...flip }
+  if (!ok) return
+  if (flip && !dry) state.value = { ...state.value, ...flip }
   forget('/prs'); forget('/repo'); forget('/status')
   load()
   setTimeout(load, 3000)
   setTimeout(load, 10000)
   log.value?.burst()
 }
-const open = computed(() => !state.value.merged && !state.value.closed)
+const open = computed(() => !state.value.merged && !state.value.closed && !failed.value) // failed: below
 async function merge_(now) {
   if (!open.value) return
-  const t = await act(`${now ? 'Merge' : 'Auto-merge'} ${ref_.value}?`, '/merge', { targets: [target.value], now, ready: state.value.draft })
-  if (t !== null) changed(t, now ? { merged: true, draft: false } : { auto: true, draft: false })
+  const got = await change(`${now ? 'Merge' : 'Auto-merge'} ${ref_.value}?`, '/merge', { targets: [target.value], now, ready: state.value.draft })
+  if (got) changed(got, now ? { merged: true, draft: false } : { auto: true, draft: false })
 }
 async function mergeBypass() {
   const b = bypass.value
   if (!open.value || !b?.can) return
-  const t = await act(`Merge ${ref_.value} now, bypassing the branch rules?`, '/merge', { targets: [target.value], bypass: true, ready: state.value.draft },
+  const got = await change(`Merge ${ref_.value} now, bypassing the branch rules?`, '/merge', { targets: [target.value], bypass: true, ready: state.value.draft },
     { detail: `Skips what ${b.base} asks for (reviews, checks): ${b.rules.map((r) => `${r.name} (${r.why})`).join(', ')}. The audit log keeps it.` })
-  if (t !== null) changed(t, { merged: true, draft: false })
+  if (got) changed(got, { merged: true, draft: false })
 }
 async function ready() {
   if (!state.value.draft) return
-  const t = await act(`Mark ${ref_.value} ready for review?`, '/ready', { repo: repo.value, number: number.value })
-  if (t !== null) changed(t, { draft: false })
+  const got = await change(`Mark ${ref_.value} ready for review?`, '/ready', { repo: repo.value, number: number.value })
+  if (got) changed(got, { draft: false })
 }
 const url = computed(() => detail.value.split('\n')[1])
+// a comment on a GitHub PR goes through its issue (GitLab MR notes would need their own call)
+async function comment() {
+  if (gitlab.value) return
+  const said = await ask(`Comment on ${ref_.value}`, { input: { placeholder: 'your comment' }, allowDry: false })
+  if (!said?.trim()) return
+  const got = await change(`Post the comment on ${ref_.value}?`, '/issue', { repo: repo.value, number: number.value, action: 'comment', text: said }, { detail: said })
+  if (got) changed(got)
+}
 
 // What the header shows, read from the detail (the same text the CLI prints): the fields, and the checks
 // with their states, so it can say why the PR can't merge yet.
 const field = (name) => (detail.value.split('\n').find((l) => new RegExp(`^\\s+${name}\\s`).test(l)) || '').trim().slice(name.length).trim()
-const titleLine = computed(() => (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, ''))
+// an answer that is an error (no such PR, no access) is no title, and says nothing about the PR's state
+const failed = computed(() => /^error/.test(detail.value))
+const titleLine = computed(() => (failed.value || detail.value === '…' ? '' : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))
 const checks = computed(() => {
   const lines = detail.value.split('\n')
   const at = lines.findIndex((l) => /^(Checks \(|Pipeline )/.test(l))
@@ -115,6 +136,7 @@ const blockers = computed(() => {
   return out
 })
 const badges = computed(() => {
+  if (!titleLine.value) return []
   const st = state.value
   const out = [{ label: 'state', value: st.merged ? 'merged' : st.closed ? 'closed' : st.draft ? 'draft' : 'open', cls: st.merged ? 'ok' : st.draft ? 'warn' : '' }]
   if (checks.value.length) {
@@ -140,13 +162,13 @@ const next = computed(() => {
   if (!blockers.value.length && /^(ready|mergeable)/.test(merge.value)) return { text: 'ready to merge.', label: 'merge now', key: 'M', fn: () => merge_(true) }
   return { text: running.value.length ? 'checks are still running.' : "it can't merge yet.", label: 'auto-merge when it can', key: 'm', fn: () => merge_(false) }
 })
-const visit = () => { if (url.value?.startsWith('http')) window.open(url.value, '_blank', 'noopener') }
-const back = () => (window.history.state?.back ? router.back() : router.push('/prs'))
+const visit = () => openOut(url.value)
 const actions = computed(() => [
   { k: 'm', group: 'merge', primary: true, label: state.value.auto ? 'auto-merge is on' : 'auto-merge when checks pass', fn: () => merge_(false), off: !open.value || state.value.auto },
   { k: 'M', group: 'merge', label: 'merge now', fn: () => merge_(true), off: !open.value },
   { k: 'B', group: 'merge', label: 'merge now, bypassing the rules', fn: mergeBypass, off: !open.value || !bypass.value?.can },
   { k: 'y', group: 'merge', label: 'mark ready for review', fn: ready, off: !state.value.draft || !open.value },
+  ...(gitlab.value ? [] : [{ k: 'c', group: 'discuss', label: 'comment', fn: comment }]),
   { k: 'd', group: 'look', label: diff.value ? 'hide the diff' : 'show the diff', fn: () => { diff.value = !diff.value } },
   { k: 'o', group: 'look', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: visit },
   { k: 'g', group: 'look', label: 'the repo page', fn: () => router.push({ path: '/repo', query: { repo: repo.value } }) },

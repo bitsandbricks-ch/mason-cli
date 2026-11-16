@@ -26,7 +26,7 @@ useKeys({ r: load })
 <template>
   <div class="view">
     <div class="toolbar">
-      <button @click="load"><span class="k">r</span> refresh</button>
+      <button @click="load"><span class="k">r</span> reload</button>
     </div>
     <div class="split ld">
       <div class="scroll"><DataTable v-model="sel" :columns="cols" :rows="rows" empty="nothing logged yet" /></div>

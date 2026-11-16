@@ -8,6 +8,7 @@ import ErrorNote from './ErrorNote.vue'
 import { detailName, glyph, openDetail, phone, stateClass } from '../ui.js'
 import { router, TABS } from '../router.js'
 import { csvName, toCsv } from '../csv.js'
+import { range, toggle, toggleAll } from '../pick.js'
 
 const props = defineProps({
   columns: { type: Array, required: true }, // [{key, label, cls?: (row) => str, fmt?: (v,row) => str, right?, mark?: false}]
@@ -17,8 +18,12 @@ const props = defineProps({
   name: { type: String, default: '' }, // what the list is, for the exported file's name (default: the view)
   error: { type: String, default: '' }, // the list couldn't load: said in plain words instead of "empty"
   modelValue: { default: null }, // the selected row's key
+  // several rows to act on at once: the keys of the picked rows (v-model:picked); null: no boxes
+  picked: { type: Array, default: null },
+  // the phone card's button: › stays in Mason, ↗ (outside: true) leaves for GitHub or GitLab like every ↗ link
+  outside: { type: Boolean, default: false },
 })
-const emit = defineEmits(['update:modelValue', 'activate'])
+const emit = defineEmits(['update:modelValue', 'activate', 'update:picked'])
 const filter = ref('')
 const sortKey = ref('')
 const sortDir = ref(1)
@@ -79,7 +84,21 @@ function key(e) {
   else if (k === 'End' || k === 'G') { select(shown.value.length - 1); e.preventDefault() }
   else if (k === 'Enter') { const r = shown.value[index.value]; if (r) emit('activate', r); e.preventDefault() }
   else if (k === '/') { filterInput.value?.focus(); e.preventDefault() }
+  else if (k === ' ' && picks.value) { const r = shown.value[index.value]; if (r) pick(r); e.preventDefault() }
 }
+// picking: space on the selected row, a click on a box, shift+click for a span, the header box for all shown
+const picks = computed(() => props.picked !== null)
+const isPicked = (r) => !!props.picked?.includes(props.rowKey(r))
+let lastPick = null
+function pick(r, e) {
+  const k = props.rowKey(r)
+  const order = shown.value.map(props.rowKey)
+  emit('update:picked', e?.shiftKey && lastPick ? range(props.picked, order, lastPick, k) : toggle(props.picked, k))
+  lastPick = k
+}
+const allShown = computed(() => shown.value.length > 0 && shown.value.every(isPicked))
+const pickAll = () => emit('update:picked', toggleAll(props.picked, shown.value.map(props.rowKey)))
+
 function sort(c) {
   if (sortKey.value === c.key) sortDir.value = -sortDir.value
   else { sortKey.value = c.key; sortDir.value = 1 }
@@ -98,6 +117,8 @@ function exportCsv() {
   a.remove()
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
+// a filter that hides the selected row selects the first one shown, so the preview and actions match the list
+watch(filter, () => { if (index.value < 0 && shown.value.length) select(0, false) })
 defineExpose({ focus: () => table.value?.focus(), shown })
 </script>
 
@@ -132,20 +153,24 @@ defineExpose({ focus: () => table.value?.focus(), shown })
               :class="cls(c, r)"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</span></span>
           </template>
         </div>
-        <button v-if="activates && !inSplit && rowKey(r) === modelValue" class="open" @click.stop="emit('activate', r)">open ↗</button>
+        <button v-if="activates && !inSplit && rowKey(r) === modelValue" class="open" @click.stop="emit('activate', r)">open {{ outside ? '↗' : '›' }}</button>
       </li>
     </ul>
-    <table v-else ref="table" class="table" tabindex="0" @keydown="key">
+    <table v-else ref="table" class="table" tabindex="0" aria-label="list: arrows move, enter opens" @keydown="key">
       <thead>
         <tr>
-          <th v-for="c in columns" :key="c.key" :class="{ right: c.right }" @click="sort(c)">
+          <th v-if="picks" class="pick" @mousedown.prevent @click="pickAll(); table?.focus({ preventScroll: true })"><input type="checkbox" :checked="allShown" tabindex="-1" aria-label="pick every row shown"></th>
+          <th v-for="c in columns" :key="c.key" :class="{ right: c.right }"
+              :aria-sort="sortKey === c.key ? (sortDir > 0 ? 'ascending' : 'descending') : undefined" @click="sort(c)">
             {{ c.label }}<span v-if="sortKey === c.key">{{ sortDir > 0 ? ' ↑' : ' ↓' }}</span>
           </th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="r in shown" :key="rowKey(r)" :class="{ sel: rowKey(r) === modelValue }"
+        <tr v-for="r in shown" :key="rowKey(r)" :class="{ sel: rowKey(r) === modelValue, picked: isPicked(r) }" :aria-selected="rowKey(r) === modelValue"
             @click="emit('update:modelValue', rowKey(r))" @dblclick="emit('activate', r)">
+          <td v-if="picks" class="pick" @mousedown.prevent @click.stop="pick(r, $event); emit('update:modelValue', rowKey(r)); table?.focus({ preventScroll: true })"><input type="checkbox" :checked="isPicked(r)" tabindex="-1"
+            :aria-label="`pick ${rowKey(r)}`"></td>
           <td v-for="c in columns" :key="c.key" :class="[cls(c, r), { right: c.right }]"
               :title="String(cell(c, r))"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</td>
         </tr>

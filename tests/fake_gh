@@ -200,6 +200,11 @@ def node(repo):
         "releases": {"nodes": [{"tagName": "v1.2.0"}, {"tagName": "v1.10.0"}] if repo == "acme/api" else []},
         "pullRequests": {"totalCount": len(prs), "nodes": [dict(p, reviewDecision=None, headRefName="feat",
                                                                 author={"login": "ann"},
+                                                                **({"reviewRequests": {"nodes": [
+                                                                    {"requestedReviewer": {"login": "mike"}},
+                                                                    {"requestedReviewer": {"slug": "ops"}}]}}
+                                                                   if repo == "acme/web" and p["number"] == 7
+                                                                   and "reviewRequests" in QUERY else {}),
                                                                 commits={"nodes": [{"commit": {"statusCheckRollup": {
                                                                     "state": "PENDING"}}}]}) for p in prs]},
         "merged": {"nodes": []},
@@ -502,6 +507,12 @@ if argv[0] == "api":
     if rest == "/actions/runs/7":
         out({"id": 7, "name": "Release", "head_branch": "v0.3.0", "conclusion": "failure",
              "created_at": "2026-11-05T09:00:00Z", "html_url": f"{WEB}/{repo}/actions/runs/7"})
+    if rest == "/actions/runs/5" and repo == "acme/api":  # waits for the production environment's review
+        out({"id": 5, "name": "Deploy", "run_number": 12, "event": "push", "head_branch": "main", "head_sha": "abc1230000",
+             "status": "waiting", "conclusion": None, "path": ".github/workflows/deploy.yml",
+             "actor": {"login": "ann"}, "head_commit": {"message": "Ship it"}, "created_at": "2026-11-05T09:00:00Z",
+             "run_started_at": "2026-11-05T09:00:00Z", "updated_at": "2026-11-05T09:01:00Z",
+             "html_url": f"{WEB}/{repo}/actions/runs/5"})
     if rest == "/actions/runs/5/pending_deployments":
         out([{"environment": {"id": 77, "name": "production"}, "current_user_can_approve": True}])
     if rest == "/dependabot/alerts":
