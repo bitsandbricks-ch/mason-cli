@@ -5,11 +5,16 @@ import { reactive } from 'vue'
 export const state = reactive({
   me: null,          // /api/v1/me
   loaded: false,
-  dryRun: false,     // every change is a dry run while this is on
+  dryRun: savedDry(), // every change is a dry run while this is on (kept for this tab: a reload doesn't turn it off)
+  unreachable: '', // why /me failed when the server couldn't answer it
   log: [],           // [{at, text, kind, detail, where}] the bottom log (click it for all of them)
   busy: 0,
   rate: null,
 })
+
+// dry run survives a reload of the tab: switched on as a safety, it mustn't go off without you noticing
+function savedDry() { try { return sessionStorage.getItem('mason-dry-run') === '1' } catch { return false } }
+export function keepDry(on) { try { if (on) sessionStorage.setItem('mason-dry-run', '1'); else sessionStorage.removeItem('mason-dry-run') } catch { /* private mode */ } }
 
 export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status }
@@ -23,17 +28,31 @@ export function log(text, kind = 'info', { detail = '', where = '' } = {}) {
 }
 
 // quiet: a background read (a follow-up, see useFollow) that doesn't light up "working…".
-export async function api(method, path, body, { quiet = false } = {}) {
+export async function api(method, path, body, { quiet = false, again = true } = {}) {
   const headers = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (method !== 'GET' && state.me?.csrf) headers['X-CSRF-Token'] = state.me.csrf
   if (!quiet) state.busy++
   try {
-    const res = await fetch(`/api/v1${path}`, {
-      method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    let res
+    try {
+      res = await fetch(`/api/v1${path}`, {
+        method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    } catch {
+      // the browser's own words ("Failed to fetch", "NetworkError…") say nothing about what to do
+      throw new ApiError(`can't reach Mason: check your connection${method === 'GET' ? '' : ' (the change may or may not have gone through)'}`, 0)
+    }
     const data = res.status === 204 ? {} : await res.json().catch(() => ({}))
     if (!res.ok) {
+      // signed in again in another tab: this tab's token is the old session's. The server refused the write
+      // before doing anything, so ask for the new token and send it once more, if it is still the same person.
+      if (res.status === 403 && again && /CSRF token/.test(data.error || '') && path !== '/me') {
+        const was = state.me?.user?.id
+        const now = await get('/me', { quiet: true }).catch(() => null)
+        if (now?.user && now.user.id === was) { state.me = now; return api(method, path, body, { quiet, again: false }) }
+        if (now) state.me = now // someone else, or signed out: the app shows that instead of acting for them
+      }
       if (res.status === 401 && path !== '/me') { state.me = { user: null, providers: state.me?.providers || [] } }
       throw new ApiError(data.error || `${res.status} ${res.statusText}`, res.status)
     }
@@ -49,7 +68,13 @@ export const put = (path, body = {}) => api('PUT', path, body)
 export const del = (path) => api('DELETE', path)
 
 export async function loadMe() {
-  try { state.me = await get('/me') } catch (e) { state.me = { user: null, providers: [] }; log(e.message, 'error') }
+  state.unreachable = ''
+  try { state.me = await get('/me') } catch (e) {
+    // down or unreachable isn't signed out: say so and offer a retry instead of a sign-in page with no way in
+    if (e.status === 0 || e.status >= 500) state.unreachable = e.status ? `Mason answered ${e.message}` : e.message
+    state.me = { user: null, providers: [] }
+    log(e.message, 'error')
+  }
   state.loaded = true
   return state.me
 }
