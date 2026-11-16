@@ -1,5 +1,4 @@
 <script setup>
-import { openLink } from '../links.js'
 // Each repo's latest release, its assets, missing assets and the last release run, and its version file against
 // that release: "0.4.0 unreleased" when the version changed but nothing is released yet (u lists only those).
 // Enter opens the repo's releases as a page; n creates a release; b bumps the selected repo in a PR, R releases it,
@@ -19,6 +18,8 @@ import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 import { openDetail } from '../ui.js'
+import { useSide, useTrack } from '../side.js'
+import { openOut } from '../links.js'
 
 const router = useRouter()
 const problems = ref(false)
@@ -44,9 +45,12 @@ const current = computed(() => rows.value.find((r) => r.repo === sel.value))
 const relTag = computed(() => { const m = String(current.value?.url || '').match(/\/releases\/tag\/([^/?#]+)$/); return m ? decodeURIComponent(m[1]) : '' })
 const toggle = () => { problems.value = !problems.value; load() }
 const toggleUnreleased = () => { unreleased.value = !unreleased.value; load() }
+useTrack(() => sel.value && { kind: 'release', repo: sel.value }, { sel, kind: 'release', key: (t) => (t.kind === 'release' ? t.repo : null) })
 const page = (r) => { const repo = r?.repo || sel.value; if (repo) router.push({ path: '/release', query: { repo } }) }
+const side = useSide()
 async function newRelease(mode = 'release') {
   form.value = mode
+  side.close() // the form shows where the panel would cover it
   openDetail()
   output.value = ''
   if (!repoNames.value.length) {
@@ -83,7 +87,7 @@ function done({ text, ok, repo }) {
   follow.now([repo || sel.value])
 }
 useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n: () => newRelease('release'), T: () => newRelease('tag'), Escape: () => { form.value = '' },
-  o: () => current.value?.url && openLink(current.value.url) })
+  o: () => openOut(current.value?.url) })
 </script>
 
 <template>
@@ -96,7 +100,7 @@ useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n:
       <span class="spacer" />
       <button class="primary any" @click="newRelease('release')"><span class="k">n</span> new release</button>
       <button class="any" @click="newRelease('tag')"><span class="k">T</span> new tag</button>
-      <button v-if="fresh.length" class="any list-only" @click="releaseAll"><span class="k">A</span> release all new ({{ fresh.length }})</button>
+      <button v-if="fresh.length" class="any" @click="releaseAll"><span class="k">A</span> release all new ({{ fresh.length }})</button>
       <button :disabled="!sel" @click="page()"><span class="k">⏎</span> releases of the repo</button>
     </div>
     <div class="split ld">

@@ -1,5 +1,4 @@
 <script setup>
-import { openLink } from '../links.js'
 // Workflow hardening: unpinned actions, write-all tokens, pull_request_target checkouts and script
 // injection in .github/workflows. p opens a PR that pins the selected repo's actions to commit SHAs.
 import { computed, ref } from 'vue'
@@ -9,6 +8,7 @@ import { loadGroups, scope } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
+import { openOut } from '../links.js'
 
 const KIND = { pinned: 'unpinned', permissions: 'token', pull_request_target: 'pr target', injection: 'injection' }
 const BAD = new Set(['pull_request_target', 'injection'])
@@ -36,7 +36,7 @@ async function pinRepos(repos) {
   if (text !== null) { output.value = text; load(true) }
 }
 const pinOne = () => current.value && pinRepos([current.value.repo])
-const open = (r) => r && openLink(`https://github.com/${r.repo}/blob/HEAD/${r.path}#L${r.line}`)
+const open = (r) => r && openOut(`https://github.com/${r.repo}/blob/HEAD/${encodeURI(r.path)}#L${Number(r.line) || 1}`)
 useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: () => open(current.value) })
 </script>
 
@@ -48,11 +48,11 @@ useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: 
       <span v-if="clean" class="chip ok">clean {{ clean }}</span>
       <span class="spacer" />
       <button class="primary" :disabled="!current || current.raw !== 'pinned'" @click="pinOne"><span class="k">p</span> pin repo</button>
-      <button class="any list-only" :disabled="!pinnable.length" @click="pinRepos(pinnable)"><span class="k">A</span> pin all</button>
+      <button class="any" :disabled="!pinnable.length" @click="pinRepos(pinnable)"><span class="k">A</span> pin all</button>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ every action is pinned to a commit'" @activate="open" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ every action is pinned to a commit'" outside @activate="open" /></div>
       <div class="pad"><TextPane :text="output || (current ? `${current.repo}\n${current.path}:${current.line}\n\n${current.text}${current.raw === 'pinned' ? '\n\np pins the repo\'s actions to commits' : '\n\nfixed by hand in the workflow file: o opens it'}` : '')"
         placeholder="p opens a PR that pins the selected repo's actions to commit SHAs; A does it for every repo listed" /></div>
     </div>

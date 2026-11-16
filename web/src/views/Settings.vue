@@ -1,13 +1,15 @@
 <script setup>
-import { forget } from '../load.js'
-import { safeUrl } from '../links.js'
 // Settings: logins, the defaults repo and which repos to manage, API keys, sessions and plugin secrets.
 // Everything a CLI user keeps in files lives here, per user: nobody else sees or changes yours.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { del, forgetLocal, get, loadMe, log, post, put, state } from '../api.js'
+import { del, get, loadMe, log, post, put, state } from '../api.js'
 import { deviceSignIn } from '../signin.js'
 import { ago, ask, tellRevoked } from '../ui.js'
+import { useUnsaved } from '../unsaved.js'
+import { safeHref } from '../links.js'
+import { forget } from '../load.js'
+import { clearRecent } from '../side.js'
 
 const router = useRouter()
 const s = ref(null)
@@ -33,10 +35,15 @@ function cancelLink() { stopLink?.(); stopLink = null; linking.value = null }
 onBeforeUnmount(() => stopLink?.())
 
 const asText = (v) => (v || []).join(', ')
+// leaving asks first while the form has changes, or a new key is still shown (it isn't shown again)
+const saved = ref('')
+useUnsaved(computed(() => !!s.value && JSON.stringify(s.value) !== saved.value), 'your settings')
+useUnsaved(computed(() => !!fresh.value), 'the new API key (it is not shown again)')
 async function load() {
   try {
     const got = await get('/settings')
     s.value = { ...got, ...Object.fromEntries(LISTS.map((k) => [k, asText(got[k])])) }
+    saved.value = JSON.stringify(s.value)
     ;[keys.value, sessions.value, secrets.value] = await Promise.all([get('/keys'), get('/sessions'), get('/secrets')])
   } catch (e) { log(e.message, 'error') }
 }
@@ -44,8 +51,8 @@ async function saveSettings() {
   try {
     const { theme, plugins_off, ...rest } = s.value // eslint-disable-line no-unused-vars
     await put('/settings', rest)
-    forget() // the lists remembered for the old orgs and repos: the next visit asks again
     log('settings saved', 'ok')
+    forget() // the lists remembered for the old orgs and repos: the next visit asks again
     await loadMe()
     load()
   } catch (e) { log(e.message, 'error') }
@@ -81,6 +88,8 @@ async function setSecret(x) {
   try { await put(`/secrets/${x.name}`, { value: v }); load() } catch (e) { log(e.message, 'error') }
 }
 async function dropSecret(x) {
+  // it can't be shown again, so removing it by a slip of the mouse means typing it in again
+  if (!(await ask(`Remove ${x.label}? Plugins that need it stop working until you set it again.`, { allowDry: false }))) return
   try { await del(`/secrets/${x.name}`); load() } catch (e) { log(e.message, 'error') }
 }
 async function deleteAccount() {
@@ -89,9 +98,9 @@ async function deleteAccount() {
   if (name !== state.me.user.name) { log(`that isn't your user name (${state.me.user.name}): nothing was deleted`, 'error'); return }
   try {
     const got = await del('/me')
-    state.me = { user: null, providers: state.me.providers }
-    forgetLocal()
     forget()
+    clearRecent()
+    state.me = { user: null, providers: state.me.providers }
     await tellRevoked(got)
     router.push('/login')
   } catch (e) { log(e.message, 'error') }
@@ -106,8 +115,10 @@ onMounted(load)
         <div class="accent">accounts</div>
         <div v-for="i in state.me.identities" :key="i.id" class="row">
           <span class="ok">●</span><span>{{ i.provider }}</span><span class="accent">{{ i.login }}</span>
-          <span class="dim">{{ i.host }} · scopes {{ i.scopes || '-' }}</span><span class="spacer" />
-          <button @click="unlink(i)">disconnect</button>
+          <span class="dim">{{ i.host }}{{ i.scopes ? ` · scopes ${i.scopes}` : '' }}</span><span class="spacer" />
+          <!-- the only login can't go (the server says so too): deleting the account is below -->
+          <button v-if="state.me.identities.length > 1" @click="unlink(i)">disconnect</button>
+          <span v-else class="dim" title="connect another account first, or delete your account below">your only login</span>
         </div>
         <div class="row" style="margin-top: 6px">
           <template v-for="p in state.me.providers" :key="p">
@@ -118,7 +129,7 @@ onMounted(load)
           </template>
         </div>
         <p v-if="linking">Enter <span class="accent">{{ linking.user_code }}</span> at
-          <a class="accent" :href="safeUrl(linking.verification_uri)" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
+          <a class="accent" :href="safeHref(linking.verification_uri) || undefined" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
           <span class="dim"> (waiting<span class="cursor" />)</span>
           <button @click="cancelLink">cancel</button></p>
       </div>
@@ -127,13 +138,13 @@ onMounted(load)
         <div class="accent">defaults and repos</div>
         <p class="dim">The defaults repo holds mason.toml, like <span class="accent">mason init</span> sets up. Lists take names separated by commas.</p>
         <div class="form">
-          <label>defaults repo</label><input aria-label="defaults repo" v-model="s.defaults" placeholder="acme/defaults or gitlab:grp/defaults">
-          <label>branch or tag</label><input aria-label="branch or tag" v-model="s.ref" placeholder="(default branch)">
-          <label>GitHub orgs</label><input aria-label="GitHub orgs" v-model="s.orgs" placeholder="acme, acme-labs">
-          <label>extra repos</label><input aria-label="extra repos" v-model="s.repos" placeholder="someone/tool">
-          <label>leave out</label><input aria-label="leave out" v-model="s.exclude" placeholder="acme/archive">
-          <label>GitLab groups</label><input aria-label="GitLab groups" v-model="s.gitlab_groups" placeholder="grp, grp/sub">
-          <label>GitLab projects</label><input aria-label="GitLab projects" v-model="s.gitlab_repos" placeholder="gitlab:grp/proj">
+          <label>defaults repo</label><input v-model="s.defaults" placeholder="acme/defaults or gitlab:grp/defaults">
+          <label>branch or tag</label><input v-model="s.ref" placeholder="(default branch)">
+          <label>GitHub orgs</label><input v-model="s.orgs" placeholder="acme, acme-labs">
+          <label>extra repos</label><input v-model="s.repos" placeholder="someone/tool">
+          <label>leave out</label><input v-model="s.exclude" placeholder="acme/archive">
+          <label>GitLab groups</label><input v-model="s.gitlab_groups" placeholder="grp, grp/sub">
+          <label>GitLab projects</label><input v-model="s.gitlab_repos" placeholder="gitlab:grp/proj">
           <label>org defaults</label>
           <label class="row"><input v-model="s.org_defaults" type="checkbox">
             <span class="dim">use each org's (or GitLab group's) <span class="accent">.mason</span> repo for its repos</span></label>
@@ -167,7 +178,7 @@ onMounted(load)
         <div class="accent">sessions</div>
         <table class="table">
           <tr v-for="x in sessions" :key="x.id">
-            <td :class="x.current ? 'ok' : ''">{{ x.current ? 'this browser' : `another browser · ${String(x.id).slice(0, 8)}` }}</td><td class="dim">{{ x.ip }}</td>
+            <td :class="x.current ? 'ok' : ''">{{ x.current ? 'this browser' : x.id }}</td><td class="dim">{{ x.ip }}</td>
             <td class="dim" :title="x.user_agent">{{ (x.user_agent || '').slice(0, 60) }}</td><td class="dim">seen {{ ago(x.seen_at) }}</td>
             <td class="right"><button v-if="!x.current" @click="endSession(x)">sign out</button></td>
           </tr>

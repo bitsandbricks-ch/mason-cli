@@ -61,95 +61,118 @@ NEVER = re.compile(r"/(collaborators|invitations|keys|hooks|transfer|"
                    r"teams|members|interaction-limits)(/|$)|/user/(emails|keys|gpg_keys|ssh_signing_keys)")
 MUTATIONS = {"markPullRequestReadyForReview", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge",
              "mergePullRequest", "convertPullRequestToDraft"}
-TOKEN = re.compile(r'''
-    (?P<skip>[\s,\ufeff]+|\#[^\n\r]*)
-  | (?P<string>"(?:\\.|[^"\\\n\r])*")
-  | (?P<spread>\.\.\.)
-  | (?P<name>[_A-Za-z][_0-9A-Za-z]*)
-  | (?P<number>-?[0-9][0-9.eE+-]*)
-  | (?P<punct>[!$&()\[\]{}:=@|])
-''', re.S | re.X)
+
+# GraphQL tokens. Commas and comments count as space, and a "#" or "(" inside a string is only text: a
+# regex over the raw query could be fooled by `deleteRef, (input: ...)` or a comment before the "(".
+TOKEN = re.compile(r"\.\.\.|[A-Za-z_]\w*|-?\d[\w.+-]*|[!$&()\[\]{}:=@|]")  # strings: see _string
+SPACE = re.compile(r"[\s,\ufeff]+|#[^\n\r]*")  # one run at a time: the loop in tokens() takes the next
 
 
-class BadQuery(ValueError):
-    pass
-
-
-def _tokens(query: str) -> list[str]:
-    out, pos = [], 0
-    while pos < len(query):
-        if query.startswith('"""', pos):  # a block string, found by hand: as a regex it was slow on many """
-            end = pos + 3
-            while True:
-                end = query.find('"""', end)
-                if end < 0:
-                    raise BadQuery("a \"\"\" string isn't closed")
-                if query[end - 1] != "\\":  # \""" is a quote inside the string
-                    break
-                end += 3
-            out.append("")
-            pos = end + 3
+def tokens(text: str) -> list[str] | None:
+    """The document's tokens, or None when something in it isn't GraphQL."""
+    out, i = [], 0
+    while i < len(text):
+        m = SPACE.match(text, i)
+        if m:
+            i = m.end()
             continue
-        m = TOKEN.match(query, pos)
+        if text[i] == '"':
+            end = _string(text, i)
+            if end < 0:
+                return None
+            out.append(text[i:end])
+            i = end
+            continue
+        m = TOKEN.match(text, i)
         if not m:
-            raise BadQuery(f"can't read the query at {query[pos:pos + 20]!r}")
-        pos = m.end()
-        if m.lastgroup == "skip":
-            continue
-        out.append("" if m.lastgroup == "string" else m.group())  # strings are never names
+            return None
+        out.append(m.group())
+        i = m.end()
     return out
 
 
-def _skip(tokens: list[str], i: int, open_: str, close: str) -> int:
-    """The index after the balanced group that starts at tokens[i] == open_."""
+def _string(text: str, i: int) -> int:
+    """Where the string starting at text[i] ends, or -1 when it doesn't. Scanned by hand, not by a regex: a
+    long run of escapes in a crafted query must not make the proxy slow."""
+    if text.startswith('"""', i):
+        end = i + 3
+        while True:
+            end = text.find('"""', end)
+            if end < 0:
+                return -1
+            if text[end - 1] != "\\":  # \""" is an escaped quote inside the block
+                return end + 3
+            end += 3
+    end = i + 1
+    while end < len(text):
+        c = text[end]
+        if c == "\\":
+            end += 2
+        elif c == '"':
+            return end + 1
+        elif c in "\n\r":
+            return -1
+        else:
+            end += 1
+    return -1
+
+
+def _skip(toks: list[str], i: int, open_: str, close: str) -> int:
+    """Past the bracket at toks[i] and everything up to its partner."""
     depth = 0
-    while i < len(tokens):
-        depth += (tokens[i] == open_) - (tokens[i] == close)
+    while i < len(toks):
+        depth += toks[i] == open_
+        depth -= toks[i] == close
         i += 1
         if depth == 0:
             return i
-    raise BadQuery(f"a {open_} isn't closed")
+    raise ValueError("unbalanced")
 
 
-def operations(query: str) -> list[tuple[str, list[str]]]:
-    """[(query|mutation|subscription, the fields it selects at the top)] of a GraphQL document, read
-    like GitHub reads it: comments, commas, aliases and strings can't hide a field. A fragment spread at
-    the top of a mutation counts as the field "...", which is never allowed."""
-    t, i, ops = _tokens(query), 0, []
-    while i < len(t):
-        if t[i] == "fragment":  # fragment Name on Type @dir { ... }
-            while i < len(t) and t[i] != "{":
-                i += 1
-            i = _skip(t, i, "{", "}")
-            continue
-        kind = "query"
-        if t[i] in ("query", "mutation", "subscription"):
-            kind = t[i]
+def operations(query: str) -> list[tuple[str, list[str] | None]]:
+    """Each operation of the document: its type and its top fields (None when they can't be told, such as
+    a fragment spread). Raises ValueError when it isn't a GraphQL document."""
+    toks = tokens(query)
+    if not toks:
+        raise ValueError("empty")
+    ops, i = [], 0
+    while i < len(toks):
+        kind = "query" if toks[i] == "{" else toks[i]
+        if kind not in ("query", "mutation", "subscription", "fragment"):
+            raise ValueError(kind)
+        if toks[i] != "{":
             i += 1
-            while i < len(t) and t[i] != "{":  # name, (variables = defaults), @directives(args)
-                i = _skip(t, i, "(", ")") if t[i] == "(" else i + 1
-        if i >= len(t) or t[i] != "{":
-            raise BadQuery("not a GraphQL query")
-        end = _skip(t, i, "{", "}")
-        fields, j = [], i + 1
+        while i < len(toks) and toks[i] != "{":  # name, variables, type condition, directives
+            i = _skip(toks, i, "(", ")") if toks[i] == "(" else i + 1
+        if i >= len(toks):
+            raise ValueError("no selection")
+        end = _skip(toks, i, "{", "}")
+        fields: list[str] | None = []
+        j = i + 1
         while j < end - 1:
-            if t[j] == "...":
-                fields.append("...")
+            t = toks[j]
+            if t == "...":
+                fields = None
                 j += 1
                 continue
-            if t[j] == "(":
-                j = _skip(t, j, "(", ")")
-            elif t[j] == "{":
-                j = _skip(t, j, "{", "}")
-            elif t[j] == "@":
-                j += 2  # the directive's name; its arguments are skipped as a group
-            elif t[j] == ":":
-                fields[-1:] = []  # what came before was an alias
-                j += 1
-            else:
-                fields.append(t[j])
-                j += 1
-        ops.append((kind, fields))
+            if t == "(":
+                j = _skip(toks, j, "(", ")")
+                continue
+            if t == "{":
+                j = _skip(toks, j, "{", "}")
+                continue
+            if t == "@":  # a directive: its name is not a field
+                j += 2
+                continue
+            if t[0].isalpha() or t[0] == "_":
+                if j + 1 < end and toks[j + 1] == ":":  # an alias: the field is the name after it
+                    j += 2
+                    t = toks[j] if j < end else ""
+                if fields is not None:
+                    fields.append(t)
+            j += 1
+        if kind != "fragment":
+            ops.append((kind, fields))
         i = end
     return ops
 
@@ -165,7 +188,14 @@ TEAM = re.compile(r"/orgs/[\w.-]+/teams/[\w.-]+$")  # an environment's reviewer 
 LISTED = re.compile(R + r"/(hooks|keys)$")  # doctor's webhooks and deploy_keys: the lists, read only
 
 
+# Flask has decoded the path once: an encoded dot or slash left in it would reach GitHub as one more level
+# to decode, and so could climb out of the repo the patterns checked (contents/%2e%2e/%2e%2e/user/keys).
+SNEAKY = re.compile(r"\.\.|//|\\|%(2e|2f|5c)", re.I)
+
+
 def allowed(method: str, path: str) -> bool:
+    if SNEAKY.search(path):
+        return False
     if method in ("GET", "HEAD") and (TEAM.match(path) or LISTED.match(path)):
         return True
     if NEVER.search(path):
@@ -179,7 +209,7 @@ def allowed(method: str, path: str) -> bool:
 @need("read")
 def rest(path: str):
     path = "/" + path
-    if ".." in path or "//" in path:
+    if SNEAKY.search(path):
         abort(400, "bad path")
     if request.method != "GET" and not can_write():
         abort(403, "this API key is read-only")
@@ -239,20 +269,21 @@ def graphql():
     query = str(payload.get("query") or "")
     try:
         ops = operations(query)
-    except BadQuery as err:
-        abort(400, str(err))
-    if len(ops) != 1:  # which one GitHub runs would depend on operationName, which isn't passed on
-        abort(400, "send one GraphQL operation" if ops else "not a GraphQL query")
-    kind, fields = ops[0]
-    if kind == "subscription":
+    except ValueError:
+        abort(400, "not a GraphQL query")
+    kinds = {k for k, _ in ops}
+    if "subscription" in kinds:
         abort(403, "no subscriptions")
+    if len(ops) != 1:  # GitHub would need an operation name, which isn't passed on: one operation only
+        abort(400, "one operation per call")
+    kind, fields = ops[0]
     if kind == "mutation":
         if not can_write():
             abort(403, "this API key is read-only")
-        names = set(fields) - {"__typename"}
-        if not names or names - MUTATIONS:
-            abort(403, f"the operator doesn't pass these mutations on: {', '.join(sorted(names - MUTATIONS)) or '?'}")
-        audit("proxy.graphql", ", ".join(sorted(names)))
+        if not fields or set(fields) - MUTATIONS:  # None: a fragment spread hides what it does
+            names = sorted(set(fields or []) - MUTATIONS)
+            abort(403, f"the operator doesn't pass these mutations on: {', '.join(names) or '?'}")
+        audit("proxy.graphql", ", ".join(sorted(set(fields))))
     variables = payload.get("variables") or {}
     if not isinstance(variables, dict):
         abort(400, "variables must be an object")

@@ -1,13 +1,14 @@
 <script setup>
-import { safeUrl } from '../links.js'
 // The event log at the bottom of a detail page: what happened to this repo, PR, issue, release or run on
 // GitHub or GitLab, and your own changes from Mason's audit log, newest first. It asks again every 30s
 // while the page is open, and every few seconds for a while after a change (burst), so a merge, a ready or
 // a release shows up without a reload. A row with more text opens on a click.
 // band: the full-width bar at the bottom of a view (lists and pages); it folds away, and stays folded.
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { sideOpen } from '../side.js'
 import { get, qs } from '../api.js'
 import { ago } from '../ui.js'
+import { safeHref } from '../links.js'
 import ErrorNote from './ErrorNote.vue'
 
 const props = defineProps({
@@ -46,13 +47,24 @@ async function load() {
     at.value = new Date()
   } catch (e) { if (asked === path.value) error.value = e.message } finally { loading.value = false }
 }
+// A list's band under the side panel is hidden (the panel has its own): it asks nothing until it shows again.
+const root = ref(null)
+let stale = false
+const hidden = () => !!root.value && root.value.offsetParent === null
+function maybeLoad() {
+  if (hidden()) { stale = true; return }
+  stale = false
+  load()
+}
+watch(sideOpen, (o) => { if (!o && stale && !folded.value) nextTick(maybeLoad) })
+
 // moving through a list asks once the selection rests (250ms), not for every row passed
 let pending = null
 watch(path, () => {
   events.value = []; seen.value = new Set(); fresh.value = new Set(); open.value = new Set()
   clearTimeout(pending)
   if (folded.value) return
-  pending = setTimeout(load, props.band ? 250 : 0)
+  pending = setTimeout(maybeLoad, props.band ? 250 : 0)
 })
 function stored() { try { return localStorage.getItem('mason-events') === 'folded' } catch { return false } }
 const folded = ref(props.band && stored())
@@ -62,7 +74,10 @@ if (!folded.value) load()
 // every 30s while the tab is visible; burst() asks again after 2, 5, 10, 20 and 40s
 let timer = null
 let bursts = []
-onMounted(() => { timer = setInterval(() => { if (!document.hidden && !folded.value) load() }, 30_000) })
+onMounted(() => {
+  if (!folded.value && hidden()) stale = true
+  timer = setInterval(() => { if (!document.hidden && !folded.value) maybeLoad() }, 30_000)
+})
 onBeforeUnmount(() => { clearInterval(timer); clearTimeout(pending); bursts.forEach(clearTimeout) })
 function burst() {
   bursts.forEach(clearTimeout)
@@ -86,7 +101,7 @@ const when = (s) => { try { return new Date(s).toLocaleString() } catch { return
 </script>
 
 <template>
-  <section class="events" :class="{ band, folded }" aria-label="event log">
+  <section ref="root" class="events" :class="{ band, folded }" aria-label="event log">
     <div class="events-head">
       <button v-if="band" class="fold" :aria-expanded="!folded" :title="folded ? 'show the events' : 'fold the events away'"
               @click="folded = !folded">{{ folded ? '▸' : '▾' }}</button>
@@ -103,7 +118,7 @@ const when = (s) => { try { return new Date(s).toLocaleString() } catch { return
     </div>
     <template v-if="!folded">
     <div v-if="!ready" class="empty">pick a row to see what happened to it</div>
-    <ErrorNote v-else-if="error" :error="error" what="the events" />
+    <ErrorNote v-else-if="error" :error="error" what="couldn't read the events" />
     <div v-else-if="!shown.length" class="empty">{{ loading ? 'loading…' : 'nothing yet' }}</div>
     <ol v-else class="event-list">
       <li v-for="e in shown" :key="keyOf(e)" :class="{ new: fresh.has(keyOf(e)), more: !!e.more }" @click="toggle(e)">
@@ -116,7 +131,7 @@ const when = (s) => { try { return new Date(s).toLocaleString() } catch { return
           <span v-if="e.detail" class="detail dim">{{ e.detail }}<template v-if="e.more && !open.has(keyOf(e))"> …</template></span>
           <pre v-if="open.has(keyOf(e))" class="text more">{{ e.more }}</pre>
         </span>
-        <a v-if="e.url" class="go" :href="safeUrl(e.url)" target="_blank" rel="noopener noreferrer" :title="e.url" @click.stop>↗</a>
+        <a v-if="safeHref(e.url)" class="go" :href="safeHref(e.url)" target="_blank" rel="noopener noreferrer" :title="e.url" @click.stop>↗</a>
       </li>
     </ol>
     </template>

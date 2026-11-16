@@ -1,18 +1,21 @@
 <script setup>
-import { forget } from './load.js'
-import { safeNext } from './links.js'
-import { computed, onMounted, ref, watch, watchEffect } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { forgetLocal, get, loadMe, log, post, put, state } from './api.js'
+import { get, loadMe, log, post, put, state } from './api.js'
 import { THEMES } from './themes.js'
 import { GROUPS, SECTIONS, TABS, sectionOf } from './router.js'
 import { typing } from './keys.js'
 import { arrowKey } from './arrows.js'
-import { closeDetail, detailName, keysHelp, phone, prompt } from './ui.js'
-import KeysHelp from './components/KeysHelp.vue'
-import SetupHint from './components/SetupHint.vue'
+import { closeDetail, detailName, phone, prompt } from './ui.js'
 import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
+import SidePanel from './components/SidePanel.vue'
+import Palette from './components/Palette.vue'
+import KeysSheet from './components/KeysSheet.vue'
+import SetupHint from './components/SetupHint.vue'
+import { clearRecent, sideOpen } from './side.js'
+import { confirmLeave } from './unsaved.js'
+import { forget } from './load.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -55,12 +58,10 @@ onMounted(async () => {
     try { plugins.value = (await get('/plugins')).plugins.filter((p) => p.on && p.tabs.length) } catch { /* none */ }
   }
 })
-const retry = () => window.location.reload()
-function guard() {
+async function guard() {
   if (!state.loaded || state.unreachable) return
+  await router.isReady() // before the first page is resolved the route is still "/", and the link was lost
   if (!signedIn.value && !route.meta.public) router.replace({ name: 'login', query: route.path !== '/' ? { next: route.fullPath } : {} })
-  // signed in already (a bookmark, the back button after signing in): the sign-in page has nothing to offer
-  else if (signedIn.value && route.name === 'login') router.replace(safeNext(route.query.next))
 }
 watch(() => route.fullPath, guard)
 watch(signedIn, guard)
@@ -102,14 +103,6 @@ const title = computed(() => {
   if (q.repo && route.name !== current.value) return `${label}/${q.repo}${which}`
   return detail.value && detailName.value ? `${label}/${detailName.value}` : label
 })
-// The browser tab's title: which page, and which repo, PR or run, so several Mason tabs can be told apart.
-watchEffect(() => {
-  const t = TABS.find((x) => x.name === (route.meta.tab || route.name))
-  const label = route.name === 'login' ? 'sign in' : route.name === 'plugin-tab' ? route.params.plugin : t?.label || route.name || ''
-  const q = route.query
-  const what = q.repo ? `${q.repo}${q.number ? `#${q.number}` : q.id ? ` run ${q.id}` : q.tag ? ` ${q.tag}` : ''}` : ''
-  document.title = [what, label, 'Mason'].filter(Boolean).join(' · ')
-})
 // ‹ in the title bar: closes a detail, or leaves a row's own page (a repo, its releases) for its list
 const canBack = computed(() => detail.value || (!!route.meta.tab && route.name !== route.meta.tab))
 function goBack() {
@@ -131,19 +124,30 @@ watch(() => state.log[0], (l) => {
   toastTimer = setTimeout(() => { toast.value = null }, l.kind === 'error' ? 10000 : 4000)
 })
 
+const retry = () => window.location.reload()
 async function logout() {
+  if (!(await confirmLeave())) return
+  forget() // what this account's lists said: not for whoever signs in next in this tab
+  clearRecent()
   try { await post('/auth/logout') } catch (e) { log(e.message, 'error') }
-  forgetLocal()
-  forget() // remembered answers belong to this account too
   state.me = { user: null, providers: state.me?.providers || [] }
   router.replace('/login')
 }
 
-const showHelp = (on) => { keysHelp.value = on }
 let pointerAt = null // arrows scroll the pane the pointer is in
 window.addEventListener('pointerover', (e) => { pointerAt = e.target }, { passive: true })
+// ctrl+k / ⌘k: the jump box, from anywhere (even a text field)
+const jump = ref(false)
+const help = ref(false) // the keys sheet (?)
 window.addEventListener('keydown', (e) => {
-  if (prompt.open || keysHelp.value || typing(e) || e.ctrlKey || e.metaKey || e.altKey || !signedIn.value) return
+  if (e.key.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey) && !e.altKey && signedIn.value && !prompt.open) {
+    jump.value = !jump.value
+    e.preventDefault()
+  }
+})
+window.addEventListener('keydown', (e) => {
+  if (jump.value || help.value) return
+  if (prompt.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey || !signedIn.value) return
   const tab = TABS.find((t) => t.key === e.key)
   if (tab) { router.push(tab.path); e.preventDefault(); return }
   if (arrowKey(e, document, pointerAt)) return
@@ -153,7 +157,7 @@ window.addEventListener('keydown', (e) => {
     // only from a tab itself: on a repo's (or a PR's) page ←→ threw you out to the next tab
     const i = TABS.findIndex((t) => t.name === route.name)
     if (i >= 0) { router.push(TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length].path); e.preventDefault() }
-  } else if (e.key === '?') { keysHelp.value = true; e.preventDefault() }
+  } else if (e.key === '?') { help.value = true; e.preventDefault() }
 })
 </script>
 
@@ -168,6 +172,7 @@ window.addEventListener('keydown', (e) => {
       <button v-if="canBack" class="back" aria-label="back" @click="goBack">‹</button>
       <Logo :size="20" /><span class="title"><span class="prompt accent">mason</span><span class="dim">:~/</span>{{ title }}</span>
       <span class="spacer" />
+      <button class="jump-btn" aria-label="jump to a repo, PR, issue or view" @click="jump = true">⌕</button>
       <span v-if="state.busy" class="warn cursor" aria-label="working" />
       <button v-if="state.dryRun" class="chip on" title="dry run is on: changes only show what they would do" @click="state.dryRun = false">dry run ✕</button>
     </header>
@@ -229,12 +234,13 @@ window.addEventListener('keydown', (e) => {
       <Logo :size="18" /><span class="prompt accent">{{ state.me.user.name.toLowerCase().replace(/\s+/g, '') }}@mason</span><span class="dim hide-xs">:~$</span>
       <span class="dim hide-sm">{{ who }}</span>
       <span class="spacer" />
+      <button class="jump-btn" title="jump to a repo, PR, issue or view (ctrl+k)" @click="jump = true">⌕ <span class="hide-sm">jump</span> <span class="k hide-sm">^k</span></button>
       <span v-if="state.busy" class="warn">working…</span>
       <span class="dim hide-sm" :title="'API calls left at GitHub'">{{ rate }}</span>
       <label class="check" title="every change only shows what it would do">
         <input v-model="state.dryRun" type="checkbox"> <span :class="state.dryRun ? 'warn' : 'dim'">dry<span class="hide-xs"> run</span></span>
       </label>
-      <button title="t switches the theme" aria-label="switch the theme" @click="theme = themes[(themes.indexOf(theme) + 1) % themes.length]"><span aria-hidden="true">◐</span><span class="hide-xs" style="margin-left: 0.4em">{{ theme }}</span></button>
+      <button title="t switches the theme" aria-label="switch the theme" @click="theme = themes[(themes.indexOf(theme) + 1) % themes.length]"><span class="hide-xs">{{ theme }}</span><span class="show-xs">◐</span></button>
       <button @click="logout"><span class="hide-xs">logout</span><span class="show-xs">exit</span></button>
     </header>
     <div class="navs">
@@ -250,13 +256,16 @@ window.addEventListener('keydown', (e) => {
         </router-link>
       </nav>
     </div>
-    <main><SetupHint /><router-view @rate="refreshRate" /></main>
+    <div class="body" :class="{ 'side-open': sideOpen }">
+      <main><SetupHint /><router-view @rate="refreshRate" /></main>
+      <SidePanel />
+    </div>
     <footer class="foot">
       <span v-if="last" class="last" :class="last.kind === 'error' ? 'bad' : last.kind === 'ok' ? 'ok' : 'dim'"
             :title="'the session log (`)'" role="button" :aria-expanded="logOpen" @click="logOpen = !logOpen">
         {{ logOpen ? '▾' : '▸' }} [{{ last.at }}] {{ last.text }}<span v-if="state.log.length > 1" class="dim"> (+{{ state.log.length - 1 }})</span></span>
       <span v-else class="last dim">ready</span>
-      <span class="keys"><b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <button class="link" @click="showHelp(true)"><b>?</b> help</button></span>
+      <span class="keys"><template v-if="sideOpen"><b>esc</b> close panel </template><b>^k</b> jump <b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b role="button" class="help-key" @click="help = true">?</b> keys</span>
     </footer>
     <section v-if="logOpen" class="session-log" aria-label="the session log">
       <div class="row"><h2 style="margin: 0">log <span class="dim">({{ state.log.length }}, this session)</span></h2><span class="spacer" />
@@ -273,6 +282,7 @@ window.addEventListener('keydown', (e) => {
       </ol>
     </section>
   </div>
+  <Palette v-if="signedIn" v-model="jump" />
+  <KeysSheet v-if="signedIn" v-model="help" />
   <PromptDialog />
-  <KeysHelp :open="keysHelp" @close="showHelp(false)" />
 </template>

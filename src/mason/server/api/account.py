@@ -54,14 +54,6 @@ def body() -> dict:
     return data
 
 
-def whole(data: dict, key: str, what: str = "a number") -> int:
-    """A positive whole number from a JSON body, or a 400 (not a 500) when it is something else."""
-    v = data.get(key)
-    if isinstance(v, bool) or not isinstance(v, (int, str)) or not str(v).strip().isdigit() or int(v) <= 0:
-        abort(400, f"{key}: {what}")
-    return int(v)
-
-
 def iso(dt) -> str | None:
     return dt.isoformat() + "Z" if dt else None
 
@@ -82,14 +74,12 @@ def providers():
                     for p in (op.github, op.gitlab)])
 
 
-SAFE_NEXT = re.compile(r"/(?![/\\])[A-Za-z0-9/._~%!$&'()*+,;=:@?#-]*")
-
-
 def safe_next(value: str | None) -> str:
-    """A path on this site to go back to after signing in, else "/". Browsers drop tabs and newlines
-    from URLs ("/\t/evil.example" is "//evil.example"), so only plain URL characters pass."""
-    v = str(value or "/")
-    return v if len(v) < 200 and SAFE_NEXT.fullmatch(v) and "\\" not in v else "/"
+    v = value or "/"
+    # browsers drop tabs and newlines from a URL, so "/\t/example.com" would become "//example.com": another site
+    if any(ord(c) < 0x21 or ord(c) == 0x7F for c in v):
+        return "/"
+    return v if v.startswith("/") and not v.startswith("//") and "\\" not in v and len(v) < 200 else "/"
 
 
 @bp.get("/auth/<name>/login")
@@ -133,7 +123,10 @@ def callback(name: str):
     if oauth.redirect_provider(name) is None:
         abort(404)
     if request.args.get("error"):
-        return _fail(request.args.get("error_description") or request.args["error"])
+        # only the provider's error code, not its description: anyone can send a link to this callback, and its
+        # text would show on our sign-in page as if Mason said it
+        code = re.sub(r"[^a-z_]", "", request.args["error"].lower())[:40] or "error"
+        return _fail(f"{name} didn't sign you in ({code}); try again")
     state, code = request.args.get("state", ""), request.args.get("code", "")
     row = db.get(OAuthState, security.sha256(state)) if state else None
     binding = request.cookies.get(STATE_COOKIE, "")
@@ -607,7 +600,7 @@ def secret_of(user: User, name: str) -> str:
 @need("read")
 def audit_log():
     q = db.query(Audit).filter(Audit.user_id == g.user.id)  # only your own: nobody reads another user's
-    rows = q.order_by(Audit.id.desc()).limit(max(1, min(request.args.get("limit", 200, type=int), 1000))).all()
+    rows = q.order_by(Audit.id.desc()).limit(min(request.args.get("limit", 200, type=int) or 200, 1000)).all()
     names = {u.id: u.name for u in db.query(User).filter(User.id.in_({r.user_id for r in rows if r.user_id}))}
     return jsonify([{"at": iso(r.at), "user": names.get(r.user_id, ""), "via": r.via, "ip": r.ip, "action": r.action,
                      "target": r.target, "dry_run": r.dry_run, "ok": r.ok, "detail": r.detail} for r in rows])

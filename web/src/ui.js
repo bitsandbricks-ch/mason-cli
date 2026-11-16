@@ -6,8 +6,6 @@ import { shortLink } from './text.js'
 export const prompt = reactive({ open: false, question: '', detail: '', resolve: null, allowDry: true, input: null,
   links: [], notice: false, choices: null })
 
-// the ? key help (KeysHelp.vue): while it is open, no view acts on keys
-export const keysHelp = ref(false)
 
 // ask('Merge acme/web#7 now?') -> 'yes' | 'dry' | null
 export function ask(question, { detail = '', allowDry = true, input = null } = {}) {

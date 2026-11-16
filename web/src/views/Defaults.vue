@@ -1,9 +1,9 @@
 <script setup>
 // The defaults editor: the defaults repo's files, a text editor with validation, templates to start
 // from, and rulesets imported from a live repo. Saving opens a PR (or commits, for those who may).
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ApiError, get, log, post, put, state } from '../api.js'
+import { ApiError, get, log, post, put } from '../api.js'
 import { useKeys } from '../keys.js'
 import { ask } from '../ui.js'
 import TextPane from '../components/TextPane.vue'
@@ -22,7 +22,7 @@ const templates = ref([])
 const showTemplates = ref(false)
 const editor = ref(null)
 const dirty = computed(() => text.value !== original.value)
-useUnsaved(() => dirty.value, 'your changes to the file', () => forgetDraft(path.value))
+useUnsaved(() => dirty.value, () => `your changes to ${path.value}`)
 
 async function load() {
   missing.value = ''
@@ -34,34 +34,15 @@ async function load() {
     else log(e.message, 'error')
   }
 }
-// Unsaved text outlives a sign-in that ran out mid-edit (the app goes to the sign-in page and back):
-// kept for this tab only, and offered again when the same file opens.
-const draftKey = (p) => `mason.defaults.draft:${info.value?.repo}:${p}`
-function forgetDraft(p) { try { sessionStorage.removeItem(draftKey(p)) } catch { /* private mode */ } }
-function draftOf(p) {
-  try { return sessionStorage.getItem(draftKey(p)) } catch { return null }
-}
-watch([text, path], () => {
-  if (!path.value) return
-  try {
-    if (dirty.value) sessionStorage.setItem(draftKey(path.value), text.value)
-    else sessionStorage.removeItem(draftKey(path.value))
-  } catch { /* private mode */ }
-})
 function open(p, t, probs = []) {
-  const draft = draftOf(p)
   path.value = p
-  text.value = draft !== null && draft !== t ? draft : t
-  if (text.value !== t) log(`brought back your unsaved changes to ${p}`, 'warn')
+  text.value = t
   original.value = info.value?.files?.includes(p) ? t : ''
   problems.value = probs
   result.value = ''
 }
 async function pick(p) {
-  if (dirty.value) {
-    if (!(await ask(`Drop your changes to ${path.value}?`, { allowDry: false }))) return
-    forgetDraft(path.value)
-  }
+  if (dirty.value && !(await ask(`Drop your changes to ${path.value}?`, { allowDry: false }))) return
   try {
     const f = await get(`/defaults/file?path=${encodeURIComponent(p)}`)
     open(f.path, f.text, f.problems)
@@ -75,10 +56,15 @@ async function save(remove = false) {
   if (!path.value) return
   if (!remove && (await check()).length && !(await ask(`${path.value} has problems. Save it anyway?`, { allowDry: false, detail: problems.value.join('\n') }))) return
   const how = mode.value === 'pr' ? 'in a pull request' : 'straight to the branch'
-  if (!(await ask(`${remove ? 'Remove' : 'Save'} ${path.value} ${how}?`,
-    { allowDry: false, detail: state.dryRun ? "Dry run doesn't cover the defaults editor: this saves for real." : '' }))) return
-  const body = { path: path.value, text: text.value, mode: mode.value, delete: remove, force: true, base: original.value }
+  const a = await ask(`${remove ? 'Remove' : 'Save'} ${path.value} ${how}?`)
+  if (!a) return
+  if (a === 'dry') { // the server has no dry run for this: nothing is sent
+    result.value = `[dry-run] would ${remove ? 'remove' : 'save'} ${path.value} ${how}`
+    log(result.value, 'ok')
+    return
+  }
   try {
+    const body = { path: path.value, text: text.value, mode: mode.value, delete: remove, force: true, base: original.value }
     let got
     try { got = await put('/defaults/file', body) } catch (e) {
       // someone changed the file since it opened here: theirs is lost if this goes on, so ask

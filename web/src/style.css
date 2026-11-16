@@ -10,9 +10,10 @@
   --glow: none; --link: #f27a4f;
 }
 [data-theme="mortar"] {
-  --bg: #f7f7f4; --bg2: #efefea; --bg3: #e6e6df; --line: #cbcbc2; --fg: #151515; --dim: #686862;
-  --accent: #b23b14; --accent2: #15803d; --ok: #136f35; --warn: #8a5700; --bad: #c62828; --sel: #f6e4dc;
-  --glow: none; --link: #b23b14;
+  /* every text colour reads at 4.5:1 or more on each background, the selected row's too (WCAG AA) */
+  --bg: #f7f7f4; --bg2: #efefea; --bg3: #e6e6df; --line: #cbcbc2; --fg: #151515; --dim: #5f5f59;
+  --accent: #a83612; --accent2: #116b32; --ok: #116b32; --warn: #8a5700; --bad: #b42323; --sel: #f6e4dc;
+  --glow: none; --link: #a83612;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
@@ -28,7 +29,7 @@ a:hover { text-decoration: underline; }
 .warn { color: var(--warn); }
 .bad { color: var(--bad); }
 .accent { color: var(--accent); text-shadow: var(--glow); }
-.right { text-align: right; }
+.right, .table th.right { text-align: right; } /* a number column's header sits over its numbers */
 .nowrap { white-space: nowrap; }
 .grow { flex: 1; min-width: 0; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -207,6 +208,7 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
   .toolbar input { min-width: 0; flex: 1 1 14ch; }
   .toolbar select { max-width: 100%; }
   .toolbar > .row { flex-wrap: wrap; }
+  .toolbar > button, .toolbar > .btn { white-space: nowrap; } /* "new repo" on one line, not squeezed into two */
   .toolbar.quick { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   .toolbar.quick::-webkit-scrollbar { display: none; }
   .toolbar.quick > * { flex-shrink: 0; }
@@ -226,8 +228,6 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
   main.detail .view:has(> .split.ld) > .toolbar > .spacer ~ * { display: inline-flex; align-items: center; justify-content: center; }
   main.detail .view:has(> .split.ld) > .toolbar > button { flex: 1 1 auto; }
   main.detail .view:has(> .split.ld) > .toolbar:not(:has(.spacer)) { display: none; }
-  /* a detail is about one row: actions on the whole list (auto-merge all, release all) stay with the list */
-  main.detail .view:has(> .split.ld) > .toolbar > .list-only { display: none; }
   main.detail .split.ld { flex: 1; }
 
   /* other splits (the defaults editor, plugins, a repo's page) stack and scroll as one */
@@ -403,12 +403,98 @@ button.wide { width: 100%; text-align: left; }
   .view:has(> .split.page) > .events.band .events-head { position: static; }
 }
 
-/* ? key help */
-.keys-help { max-width: min(900px, 96vw); max-height: 90vh; overflow: auto; }
-.keys-help .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; margin-top: 8px; }
-.keys-help .line { display: grid; grid-template-columns: 5.5em 9em 1fr; gap: 8px; padding: 2px 0; }
-.keys-help section:last-child .line { grid-template-columns: 5.5em 1fr; }
-.keys-help .k { color: var(--accent); }
+/* the side panel (wide screens): a repo, PR, issue, run or release next to the list it came from */
+.screen > .body { display: flex; min-height: 0; min-width: 0; }
+.screen > .body > main { flex: 1; min-width: 0; }
+.side-panel { position: relative; flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  border-left: 1px solid var(--accent); background: var(--bg); box-shadow: -8px 0 18px -14px var(--accent);
+  animation: side-in .14s ease-out; }
+@keyframes side-in { from { transform: translateX(24px); opacity: .4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .side-panel { animation: none; } }
+.side-grip { position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 5; touch-action: none; }
+.side-grip:hover, .side-grip:focus-visible, .side-panel.dragging .side-grip { background: var(--accent); opacity: .35; outline: none; }
+.side-panel.dragging { user-select: none; animation: none; }
+.side-head { display: flex; align-items: center; gap: 8px; padding: 5px 10px 5px 12px; border-bottom: 1px solid var(--line);
+  background: var(--bg2); white-space: nowrap; }
+.side-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--accent); font-weight: 700; }
+.side-body { flex: 1; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; }
+.side-body > .view { flex: 1; }
+/* the panel has its own close and title: the page's back button and breadcrumbs would say it twice */
+.side-body .toolbar > .hide-xs { display: none; }
+/* narrow: the page's two columns one under the other, scrolling as one */
+.side-body .split.page { display: block; overflow: auto; }
+.side-body .split.page > * { overflow: visible; border-right: 0; }
+.side-body .split.page > :first-child { border-bottom: 1px dashed var(--line); }
+@container (min-width: 880px) {
+  .side-body .split.page { display: grid; overflow: hidden; }
+  .side-body .split.page > * { overflow: auto; }
+  .side-body .split.page > :first-child { border-right: 1px solid var(--line); border-bottom: 0; }
+}
+/* a narrow panel scrolls as one column: the page, then its events (a band of its own left the page a sliver) */
+@container (max-width: 879px) {
+  .side-body > .view { display: block; overflow: auto; }
+  .side-body .events.band { height: auto; min-height: 0; overflow: visible; }
+}
+@container (min-width: 880px) { .side-body .events.band { height: 28vh; } }
+/* with the panel open the list takes the rest: its own preview and event log move into the panel */
+.side-open main .split.ld { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.side-open main .split.ld > :nth-child(2) { display: none; }
+.side-open main .split.ld > :first-child { border-right: 0; }
+.side-open main .view > .events.band { display: none; }
+
+/* the jump box (ctrl+k) */
+.modal.palette-wrap { place-items: start center; padding-top: 12vh; }
+.palette { width: min(640px, calc(100vw - 32px)); background: var(--bg); border: 1px solid var(--accent); box-shadow: var(--glow); }
+.palette > .row { padding: 8px 10px; border-bottom: 1px solid var(--line); gap: 8px; }
+.palette input { border: 0; outline: none; font-size: 14px; background: transparent; }
+.palette ul { list-style: none; margin: 0; padding: 4px 0; max-height: 52vh; overflow: auto; }
+.palette li { display: flex; gap: 10px; align-items: baseline; padding: 4px 12px; cursor: pointer; white-space: nowrap; }
+.palette li.sel { background: var(--sel); }
+.palette li.sel .label::before { content: "▸ "; color: var(--accent); }
+.palette li.static { cursor: default; }
+.palette .kind { flex: 0 0 6ch; }
+.palette .label { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.palette .hint { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; text-align: right; }
+.palette .foot-keys { border-top: 1px solid var(--line); padding: 4px 12px; }
+.palette .foot-keys b { color: var(--accent); font-weight: 400; }
+@media (max-width: 700px) {
+  .modal.palette-wrap { padding-top: 8px; }
+  .palette li { padding: 10px 12px; }
+  .palette .hint, .palette .foot-keys { display: none; }
+}
+
+/* the keys sheet (?) */
+.keys-wrap { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .35); display: flex; justify-content: flex-end; }
+.keys-sheet { width: min(440px, 100vw); height: 100%; overflow: auto; background: var(--bg); border-left: 1px solid var(--accent);
+  animation: side-in .14s ease-out; outline: none; }
+.keys-sheet dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0 0 16px; }
+.keys-sheet dt { color: var(--accent); white-space: nowrap; }
+.keys-sheet dd { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .keys-sheet { animation: none; } }
+
+/* a list of actions to pick from (the "actions" button, a bump): a sheet on the right on a wide screen, like
+   the side panel, instead of a box in the middle; on a phone it stays the sheet at the bottom */
+@media (min-width: 701px) {
+  .modal.choices-sheet { place-items: stretch end; background: rgba(0, 0, 0, .35); }
+  .modal.choices-sheet .dialog { width: min(440px, 100vw); min-width: 0; max-width: none; height: 100%; overflow: auto; box-sizing: border-box;
+    border-width: 0 0 0 1px; animation: side-in .14s ease-out; }
+  .modal.choices-sheet .choices button { padding: 6px 10px; }
+}
+.choices .choice-group { margin: 6px 0 0; font-weight: 400; color: var(--dim); text-shadow: none; }
+.choices .choice-group::before { content: none; }
+.todo-counts { gap: 12px; } .todo-counts b { color: var(--accent); font-weight: 400; }
+
+/* rows picked to act on several at once */
+.table th.pick, .table td.pick { width: 1px; padding-right: 0; cursor: pointer; }
+.table tr.sel td.pick::before { content: none; }
+.table tr.sel td.pick + td::before { content: "▸ "; color: var(--accent); }
+.table tr.picked { background: color-mix(in srgb, var(--sel) 60%, transparent); }
+.table tr.picked.sel { background: var(--sel); }
+.picked-bar { display: flex; gap: 8px; align-items: center; padding: 5px 12px; border-bottom: 1px dashed var(--accent);
+  background: var(--bg2); flex-wrap: wrap; }
+.picked-bar b { color: var(--accent); font-weight: 400; }
+/* the box only shows the pick: the cell takes the click (a box that handled it reverted its own tick) */
+.table .pick input { pointer-events: none; }
 
 /* a new account: no repos named yet */
 .setup-hint { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 8px 12px;
