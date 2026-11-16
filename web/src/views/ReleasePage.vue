@@ -30,6 +30,7 @@ const form = ref('') // '', 'release' or 'tag'
 const loading = ref(false)
 let waitFor = '' // a tag just made: picked once its release shows (see refresh)
 const log = ref(null)
+const formEl = ref(null)
 
 async function load(tag = '', fresh = false) {
   if (!repo.value) return
@@ -87,7 +88,7 @@ function done({ text: t, tag, ok }) {
   follow.now([repo.value])
   log.value?.burst()
 }
-useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, n: () => { form.value = 'release' }, T: () => { form.value = 'tag' },
+useKeys({ Escape: async () => { if (!form.value) back(); else if (await formEl.value?.leave() !== false) form.value = '' }, Backspace: back, n: () => { form.value = 'release' }, T: () => { form.value = 'tag' },
   o: open, r: () => { load(sel.value || '', true); log.value?.refresh() } })
 </script>
 
@@ -109,7 +110,7 @@ useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: ba
                       :empty="loading ? 'loading…' : 'no releases yet: n creates the first'" outside @activate="open" /></div>
       <div class="pad">
         <VersionBar v-if="page?.version" :repo="repo" :version="page.version" @done="done" />
-        <ReleaseForm v-if="form" :key="form" :mode="form" :repo="repo" :suggest="page?.suggest" :publishes="page?.publishes"
+        <ReleaseForm v-if="form" ref="formEl" :key="form" :mode="form" :repo="repo" :suggest="page?.suggest" :publishes="page?.publishes"
                      @done="done" @cancel="form = ''" />
         <template v-if="output"><h2>output</h2><TextPane :text="output" /></template>
         <TextPane v-if="!form" :text="text" :skip="text.split('\n')[0] === repo ? 1 : 0" :placeholder="loading ? 'loading…' : 'pick a release'" />

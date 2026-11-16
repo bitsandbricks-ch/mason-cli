@@ -31,6 +31,7 @@ const { data, error, loading, load, keep } = useLoad((q) => {
 loadGroups()
 const sel = ref(null)
 const form = ref('') // '', 'release' or 'tag'
+const formEl = ref(null) // the release form: asks before its notes go
 const output = ref('')
 const repoNames = ref([]) // the picker's repos: those of the filter, read again when it changes
 watch(() => [scope.provider, scope.group], () => { repoNames.value = [] })
@@ -86,7 +87,7 @@ function done({ text, ok, repo }) {
   form.value = ''
   follow.now([repo || sel.value])
 }
-useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n: () => newRelease('release'), T: () => newRelease('tag'), Escape: () => { form.value = '' },
+useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n: () => newRelease('release'), T: () => newRelease('tag'), Escape: async () => { if (form.value && await formEl.value?.leave() !== false) form.value = '' },
   o: () => openOut(current.value?.url) })
 </script>
 
@@ -107,7 +108,7 @@ useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n:
       <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : 'no releases yet: pick a repo page and press n to create one'" @activate="page" /></div>
       <div class="pad">
         <VersionBar v-if="current?.version && !form" :key="current.repo" :repo="current.repo" :version="current.version" @done="done" />
-        <ReleaseForm v-if="form" :key="form" :mode="form" :repo="sel || ''" :repos="repoNames" @done="done" @cancel="form = ''" />
+        <ReleaseForm v-if="form" ref="formEl" :key="form" :mode="form" :repo="sel || ''" :repos="repoNames" @done="done" @cancel="form = ''" />
         <template v-if="output"><h2>output</h2><TextPane :text="output" /></template>
         <TextPane v-if="!form" :text="current?.text" placeholder="pick a repo; Enter shows all its releases" />
       </div>

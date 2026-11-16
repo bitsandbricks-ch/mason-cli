@@ -4,6 +4,7 @@
 import { reactive, watch } from 'vue'
 import { log } from '../api.js'
 import { change } from '../load.js'
+import { ask } from '../ui.js'
 import { useUnsaved } from '../unsaved.js'
 
 const props = defineProps({
@@ -18,7 +19,14 @@ const f = reactive({ repo: props.repo, tag: props.suggest, title: '', notes: '',
 watch(() => props.suggest, (t) => { if (!f.tag) f.tag = t })
 watch(() => props.repo, (r) => { if (r) f.repo = r })
 const gitlab = () => f.repo.startsWith('gitlab:')
-useUnsaved(() => !!(f.title.trim() || f.notes.trim()), () => `the notes for ${f.tag || 'the new release'}`)
+const dirty = () => !!(f.title.trim() || f.notes.trim())
+useUnsaved(dirty, () => `the notes for ${f.tag || 'the new release'}`)
+// true when the form may go: nothing typed, or you said to drop it (Esc, cancel, the page's Esc)
+async function leave() {
+  return !dirty() || !!(await ask(`Drop the notes for ${f.tag || 'the new release'}?`, { allowDry: false }))
+}
+async function cancel() { if (await leave()) emit('cancel') }
+defineExpose({ leave })
 
 async function submit() {
   if (!f.repo || !f.tag.trim()) { log('a repo and a tag, please', 'warn'); return }
@@ -40,7 +48,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="box" @keydown.esc.stop="emit('cancel')">
+  <div class="box" @keydown.esc.stop="cancel">
     <h2>{{ mode === 'tag' ? 'new tag' : 'new release' }}</h2>
     <p v-if="mode === 'tag'" class="dim">Only the tag is pushed.{{ publishes ? ` ${publishes} creates the release from it.` : ' A workflow that publishes on tag pushes makes the release.' }}</p>
     <p v-else-if="publishes" class="warn">{{ publishes }} creates releases when a tag is pushed: a new tag (T) fits this repo better, a release made here first would collide with it.</p>
@@ -64,7 +72,7 @@ async function submit() {
     <textarea v-if="mode !== 'tag'" v-model="f.notes" rows="10" placeholder="release notes (Markdown)" style="margin-top: 8px" />
     <div class="row" style="margin-top: 8px">
       <button class="primary" @click="submit">{{ mode === 'tag' ? 'push tag' : 'create release' }}</button>
-      <button @click="emit('cancel')">cancel <span class="dim">(esc)</span></button>
+      <button @click="cancel">cancel <span class="dim">(esc)</span></button>
     </div>
   </div>
 </template>

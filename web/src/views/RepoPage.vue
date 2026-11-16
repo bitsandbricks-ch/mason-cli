@@ -33,6 +33,7 @@ const needs = computed(() => (/^error: connect (GitLab|GitHub)\b/i.exec(detail.v
 const detail = ref('')
 const output = ref('')
 const form = ref('') // '', 'release' or 'tag'
+const formEl = ref(null) // the release form: asks before its notes go
 const suggest = ref('')
 const publishes = ref('')
 const version = ref(null)
@@ -141,7 +142,7 @@ const masonPanel = ref(null)
 const settingsPanel = ref(null)
 const branchesPanel = ref(null)
 const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true); masonPanel.value?.load(); settingsPanel.value?.load(); branchesPanel.value?.load() }
-const keys = { '.': () => sheet.value?.pick(), Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => reload() }
+const keys = { '.': () => sheet.value?.pick(), Escape: async () => { if (!form.value) back(); else if (await formEl.value?.leave() !== false) form.value = '' }, Backspace: back, r: () => reload() }
 watch(actions, (list) => list.forEach((a) => { keys[a.k] = () => !a.off && a.fn() }), { immediate: true })
 useKeys(keys)
 // last: the immediate watch uses everything above
@@ -175,7 +176,7 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
       </div>
       <div class="pad">
         <VersionBar v-if="version" ref="vbar" :repo="repo" :version="version" @done="done" />
-        <ReleaseForm v-if="form" :key="form" :mode="form" :repo="repo" :suggest="suggest" :publishes="publishes"
+        <ReleaseForm v-if="form" ref="formEl" :key="form" :mode="form" :repo="repo" :suggest="suggest" :publishes="publishes"
                      @done="done" @cancel="form = ''" />
         <h2>{{ gitlab ? 'merge requests' : 'pull requests' }} <span class="dim">({{ pulls.length }})</span></h2>
         <ul v-if="pulls.length" class="pull-list">
