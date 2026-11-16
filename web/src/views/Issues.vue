@@ -6,8 +6,9 @@ import { useRouter } from 'vue-router'
 import { get, log, qs } from '../api.js'
 import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { emptyText } from '../empty.js'
 import { useLinkFilters } from '../useLink.js'
-import { loadGroups, scope, scopedRepos } from '../scope.js'
+import { loadGroups, narrowed, scope, scopedRepos } from '../scope.js'
 import { ago, ask, openDetail } from '../ui.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
@@ -113,7 +114,7 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
       <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : emptyText('no open issues', [f.state !== 'open' && `${f.state} issues`, f.mine && 'mine', f.label && `label ${f.label}`, f.stale && `untouched ${f.stale}d`], narrowed())" @activate="page" /></div>
       <div class="pad">
         <div v-if="form.open" class="box">
           <div class="form">

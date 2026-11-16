@@ -3,7 +3,8 @@
 import { computed, ref } from 'vue'
 import { useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
-import { loadGroups, scope } from '../scope.js'
+import { emptyText } from '../empty.js'
+import { loadGroups, narrowed, scope } from '../scope.js'
 import ErrorNote from '../components/ErrorNote.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
@@ -28,7 +29,7 @@ useKeys({ r: () => load(true) })
   <div class="view">
     <div class="toolbar"><Scope :groups="scope.groups" /><ErrorNote v-if="data?.error" :error="data.error" what="couldn't read the packages" /></div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no container images'" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('no container images', [], narrowed())" /></div>
       <div class="pad"><TextPane :text="current?.text" placeholder="pick an image" /></div>
     </div>
   </div>

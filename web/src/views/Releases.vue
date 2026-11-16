@@ -10,8 +10,9 @@ import { useRouter } from 'vue-router'
 import { get, log, qs } from '../api.js'
 import { change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { emptyText } from '../empty.js'
 import { useLinkFilters } from '../useLink.js'
-import { loadGroups, scope, scopedRepos } from '../scope.js'
+import { loadGroups, narrowed, scope, scopedRepos } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
@@ -102,7 +103,7 @@ useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n:
       <button :disabled="!sel" @click="page()"><span class="k">⏎</span> releases of the repo</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : 'no releases yet: pick a repo page and press n to create one'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : emptyText('no releases yet: pick a repo page and press n to create one', [f.problems && 'only problems', f.unreleased && 'only unreleased'], narrowed())" @activate="page" /></div>
       <div class="pad">
         <VersionBar v-if="current?.version && !form" :key="current.repo" :repo="current.repo" :version="current.version" @done="done" />
         <ReleaseForm v-if="form" :key="form" :mode="form" :repo="sel || ''" :repos="repoNames" @done="done" @cancel="form = ''" />
