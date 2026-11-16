@@ -3,6 +3,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { answer, prompt } from '../ui.js'
 import { state } from '../api.js'
+import { safeHref } from '../links.js'
 
 const box = ref(null)
 const field = ref(null)
@@ -56,7 +57,7 @@ const yes = computed(() => (state.dryRun && prompt.allowDry ? 'dry' : 'yes'))
       <div id="prompt-q" class="q">{{ prompt.question }}</div>
       <pre v-if="prompt.detail" id="prompt-detail" class="text dim" style="margin-top: 8px">{{ prompt.detail }}</pre>
       <div v-for="l in prompt.links" :key="l.href" style="margin-top: 6px">
-        <a class="accent" :href="l.href" target="_blank" rel="noopener">{{ l.label }}</a>
+        <a class="accent" :href="safeHref(l.href) || undefined" target="_blank" rel="noopener noreferrer">{{ l.label }}</a>
       </div>
       <div v-if="prompt.input" style="margin-top: 10px">
         <input ref="field" v-model="text" :type="prompt.input.password ? 'password' : 'text'" :placeholder="prompt.input.placeholder"

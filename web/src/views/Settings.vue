@@ -7,6 +7,7 @@ import { del, get, loadMe, log, post, put, state } from '../api.js'
 import { deviceSignIn } from '../signin.js'
 import { ago, ask, tellRevoked } from '../ui.js'
 import { useUnsaved } from '../unsaved.js'
+import { safeHref } from '../links.js'
 
 const router = useRouter()
 const s = ref(null)
@@ -119,7 +120,7 @@ onMounted(load)
           </template>
         </div>
         <p v-if="linking">Enter <span class="accent">{{ linking.user_code }}</span> at
-          <a class="accent" :href="linking.verification_uri" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
+          <a class="accent" :href="safeHref(linking.verification_uri) || undefined" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
           <span class="dim"> (waiting<span class="cursor" />)</span>
           <button @click="cancelLink">cancel</button></p>
       </div>
