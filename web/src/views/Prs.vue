@@ -94,6 +94,7 @@ async function mergePicked(now) {
 }
 
 async function doMerge(now) {
+  if (filter.value === 'merged') return // like the buttons: nothing left to merge there
   if (picked.value.length) return mergePicked(now)
   const p = current.value
   if (!p) return

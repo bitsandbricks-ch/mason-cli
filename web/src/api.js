@@ -1,16 +1,20 @@
 // Every call to the operator's /api/v1. Writes carry the session's CSRF token; errors become exceptions
 // with the operator's message, which the views show in the log line.
-import { reactive, watch } from 'vue'
+import { reactive } from 'vue'
 
 export const state = reactive({
   me: null,          // /api/v1/me
   loaded: false,
-  dryRun: dryAtStart(), // every change is a dry run while this is on
+  dryRun: savedDry(), // every change is a dry run while this is on (kept for this tab: a reload doesn't turn it off)
   unreachable: '', // why /me failed when the server couldn't answer it
   log: [],           // [{at, text, kind, detail, where}] the bottom log (click it for all of them)
   busy: 0,
   rate: null,
 })
+
+// dry run survives a reload of the tab: switched on as a safety, it mustn't go off without you noticing
+function savedDry() { try { return sessionStorage.getItem('mason-dry-run') === '1' } catch { return false } }
+export function keepDry(on) { try { if (on) sessionStorage.setItem('mason-dry-run', '1'); else sessionStorage.removeItem('mason-dry-run') } catch { /* private mode */ } }
 
 export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status }
@@ -58,14 +62,6 @@ export async function api(method, path, body, { quiet = false, again = true } = 
   }
 }
 
-// Dry run outlives a reload of the tab: turned on to try things out, a reload must not quietly make the next
-// change a real one. Per tab (sessionStorage), so a new tab starts with real changes, as the header shows.
-function dryAtStart() {
-  try { return sessionStorage.getItem('mason-dry-run') === '1' } catch { return false }
-}
-watch(() => state.dryRun, (on) => {
-  try { if (on) sessionStorage.setItem('mason-dry-run', '1'); else sessionStorage.removeItem('mason-dry-run') } catch { /* private mode */ }
-})
 export const get = (path, opts) => api('GET', path, undefined, opts)
 export const post = (path, body = {}) => api('POST', path, body)
 export const put = (path, body = {}) => api('PUT', path, body)

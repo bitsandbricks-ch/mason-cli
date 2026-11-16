@@ -1,14 +1,16 @@
 import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/jetbrains-mono/700.css'
 import './style.css'
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import App from './App.vue'
-import { log } from './api.js'
+import { keepDry, log, state } from './api.js'
 import { TABS, router } from './router.js'
 import { titleFor } from './panel.js'
 import { installSide } from './side.js'
 import { installUnsaved } from './unsaved.js'
 import { staleChunk } from './links.js'
+
+watch(() => state.dryRun, keepDry)
 
 installUnsaved(router) // first: a page you won't leave doesn't turn into a panel either
 installSide(router)

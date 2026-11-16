@@ -1,7 +1,7 @@
 <script setup>
 // What waits for you: environments you review, outside contributors' runs, GitLab deployments and manual jobs.
 // Enter opens the run (beside the list on a wide screen) like the other lists do; a approves.
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
@@ -26,14 +26,23 @@ function short(why) {
 }
 const columns = [
   { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
+  { key: 'name', label: 'run', cls: () => '', card: 'main' },
   { key: 'waits_for', label: 'waits for', cls: (r) => (r.blocked ? 'dim' : 'warn') },
   { key: 'blocked', label: 'you can approve', fmt: (v) => (v ? `no: ${short(v)}` : 'yes'), cls: (r) => (r.blocked ? 'bad' : 'ok') },
-  { key: 'name', label: 'run', cls: () => '', card: 'main' },
   { key: 'branch', label: 'branch', cls: () => '' },
   { key: 'when', label: 'since', cls: () => 'dim' },
 ]
 const current = computed(() => rows.value.find((r) => r.key === sel.value))
-const why = computed(() => (current.value?.blocked ? `you can't approve this run: ${current.value.blocked}` : ''))
+// the selected one in full (the table cuts long reasons short); an approval's output until you move on
+watch(sel, (_, before) => { if (rows.value.some((r) => r.key === before)) output.value = '' }) // an approved run that left the list keeps its output
+const summary = computed(() => {
+  const r = current.value
+  if (!r) return ''
+  const line = (k, v) => (v ? `  ${k.padEnd(16)}${v}\n` : '')
+  return `${r.repo}\n${line('run', r.name)}${line('branch', r.branch)}${line('waits for', r.waits_for)}` +
+    `${line('you can approve', r.blocked ? `no: ${r.blocked}` : 'yes')}${line('since', r.when)}${line('link', r.url)}` +
+    `\n${r.blocked ? 'Enter opens the run' : 'a approves it; Enter opens the run'}`
+})
 async function approve(r = current.value) {
   if (!r) return
   if (r.blocked) { output.value = `you can't approve it: ${r.blocked}`; return }
@@ -55,13 +64,13 @@ useKeys({ r: () => load(true), a: () => approve(), o: () => open(current.value),
     <div class="toolbar">
       <Scope :groups="scope.groups" />
       <span class="spacer" />
-      <button class="primary" :disabled="!current || !!current.blocked" :title="current?.blocked ? why : ''" @click="approve()"><span class="k">a</span> approve</button>
+      <button class="primary" :disabled="!current || !!current.blocked" @click="approve()"><span class="k">a</span> approve</button>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
       <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
     </div>
     <div class="split ld">
       <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ no run waits for your approval'" @activate="page" /></div>
-      <div class="pad"><TextPane :text="output || why" placeholder="a approves the selected run; Enter opens it" /></div>
+      <div class="pad"><TextPane :text="output || summary" placeholder="a approves the selected run; Enter opens it" /></div>
     </div>
   </div>
 </template>

@@ -35,7 +35,7 @@ async function pinRepos(repos) {
     '/workflows/pin', { repos })
   if (text !== null) { output.value = text; load(true) }
 }
-const pinOne = () => current.value && pinRepos([current.value.repo])
+const pinOne = () => current.value?.raw === 'pinned' && pinRepos([current.value.repo]) // like the button: only on an unpinned action
 const open = (r) => r && openOut(`https://github.com/${r.repo}/blob/HEAD/${encodeURI(r.path)}#L${Number(r.line) || 1}`)
 useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: () => open(current.value) })
 </script>
