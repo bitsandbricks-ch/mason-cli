@@ -235,6 +235,18 @@ def test_console(op):
     assert "usage" in c.post("/api/v1/console", json={"line": "mason status --nope"}, headers=H).json["text"]
 
 
+
+def test_console_asks_the_parser_what_writes():
+    from mason.server.api.console import is_write
+    w = lambda line: is_write(line.split())  # noqa: E731
+    assert not w("merge --dry-run web#8") and w("merge web#8")
+    assert w("merge web#8 -- --dry-run")  # after --, --dry-run is a target, and web#8 would merge
+    assert w("doctor --fi web") and w("doctor --fix web") and not w("doctor web")  # --fi is --fix to argparse
+    assert not w("doctor --dry --fix web")  # and --dry is --dry-run
+    assert not w("release") and not w("release --list web") and w("release web") and w("release -- --list")
+    assert not w("issue view web#1") and w("issue close web#1") and w("issue")
+    assert not w("status")
+
 def test_api_keys_and_device_login(op):
     app, c = op
     r = c.post("/api/v1/keys", json={"name": "laptop", "scope": "read"}, headers=H)

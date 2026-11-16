@@ -32,16 +32,29 @@ def web_commands() -> set[str]:
     return out
 
 
+def parsed(argv: list[str]):
+    """What the CLI itself will read from argv, or None when it won't read it. Asking its parser, not the
+    words: `--fi` is --fix to argparse, and after `--` a --dry-run is only a name."""
+    parser, _ = cli.build_parser()
+    try:
+        return parser.parse_known_args(argv)[0]
+    except SystemExit:
+        return None
+
+
 def is_write(argv: list[str]) -> bool:
     cmd = argv[0]
-    if "--dry-run" in argv:
+    ns = parsed(argv)
+    if ns is None:  # it will only print its usage; counted as a write all the same, to be safe
+        return cmd in WRITES or cmd in web_commands()
+    if getattr(ns, "dry_run", False):
         return False
     if cmd in ("doctor", "workflows"):
-        return "--fix" in argv
+        return bool(getattr(ns, "fix", False))
     if cmd == "issue":
-        return len(argv) < 2 or argv[1] != "view"
+        return getattr(ns, "action", None) != "view"
     if cmd == "release":
-        return "--list" not in argv and any(not a.startswith("-") for a in argv[1:])
+        return not getattr(ns, "list", False) and bool(getattr(ns, "repos", None))
     return cmd in WRITES or cmd in web_commands()
 
 
@@ -76,7 +89,7 @@ def run():
     write = is_write(argv)
     if write and not can_write():
         abort(403, "this API key is read-only: add --dry-run")
-    if cmd == "doctor" and not write and "--dry-run" not in argv and not can_write():
+    if cmd == "doctor" and not write and not getattr(parsed(argv), "dry_run", False) and not can_write():
         argv.append("--no-auto")  # a repo's auto_fix doesn't turn a read-only key into a write
     if cmd in ("approve", "rerun", "release") and write and "--yes" not in argv:
         argv.append("--yes")  # nobody can answer y/N here; the console asked before sending
