@@ -12,8 +12,8 @@ const props = defineProps({
   rows: { type: Array, default: () => [] },
   rowKey: { type: Function, default: (r) => r.key ?? r.repo ?? JSON.stringify(r) },
   empty: { type: String, default: 'nothing here' },
-  error: { type: String, default: '' },
-  isNew: { type: Function, default: null }, // (row key) => true marks a row "new since your last visit" (seen.js) // the list couldn't load: said in plain words instead of "empty"
+  error: { type: String, default: '' }, // the list couldn't load: said in plain words instead of "empty"
+  isNew: { type: Function, default: null }, // (row key) => true marks a row "new since your last visit" (seen.js)
   modelValue: { default: null }, // the selected row's key
 })
 const emit = defineEmits(['update:modelValue', 'activate'])
