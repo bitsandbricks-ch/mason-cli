@@ -8,6 +8,7 @@ import { safeUrl } from '../links.js'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { get, qs } from '../api.js'
 import { ago } from '../ui.js'
+import ErrorNote from './ErrorNote.vue'
 
 const props = defineProps({
   repo: { type: String, required: true },
@@ -102,7 +103,7 @@ const when = (s) => { try { return new Date(s).toLocaleString() } catch { return
     </div>
     <template v-if="!folded">
     <div v-if="!ready" class="empty">pick a row to see what happened to it</div>
-    <div v-else-if="error" class="bad">error: {{ error }}</div>
+    <ErrorNote v-else-if="error" :error="error" what="the events" />
     <div v-else-if="!shown.length" class="empty">{{ loading ? 'loading…' : 'nothing yet' }}</div>
     <ol v-else class="event-list">
       <li v-for="e in shown" :key="keyOf(e)" :class="{ new: fresh.has(keyOf(e)), more: !!e.more }" @click="toggle(e)">

@@ -88,7 +88,8 @@ const url = computed(() => detail.value.split('\n')[1])
 // What the header shows, read from the detail (the same text the CLI prints): the fields, and the checks
 // with their states, so it can say why the PR can't merge yet.
 const field = (name) => (detail.value.split('\n').find((l) => new RegExp(`^\\s+${name}\\s`).test(l)) || '').trim().slice(name.length).trim()
-const titleLine = computed(() => (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, ''))
+const titleLine = computed(() => (detail.value === '…' || /^error:/i.test(detail.value) ? ''
+  : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))
 const checks = computed(() => {
   const lines = detail.value.split('\n')
   const at = lines.findIndex((l) => /^(Checks \(|Pipeline )/.test(l))
@@ -149,7 +150,7 @@ const actions = computed(() => [
   { k: 'B', group: 'merge', label: 'merge now, bypassing the rules', fn: mergeBypass, off: !open.value || !bypass.value?.can },
   { k: 'y', group: 'merge', label: 'mark ready for review', fn: ready, off: !state.value.draft || !open.value },
   { k: 'd', group: 'look', label: diff.value ? 'hide the diff' : 'show the diff', fn: () => { diff.value = !diff.value } },
-  { k: 'o', group: 'look', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: visit },
+  { k: 'o', group: 'look', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: visit, off: !url.value?.startsWith('http') },
   { k: 'g', group: 'look', label: 'the repo page', fn: () => router.push({ path: '/repo', query: { repo: repo.value } }) },
 ])
 const keys = { '.': () => sheet.value?.pick(), Escape: back, Backspace: back, r: () => { load(); log.value?.refresh() } }

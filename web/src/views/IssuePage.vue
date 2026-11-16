@@ -59,7 +59,7 @@ async function comment() {
 const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) openLink(url) }
 const back = () => (window.history.state?.back ? router.back() : router.push('/issues'))
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })
-const titleLine = computed(() => (detail.value === '…' ? '' : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))
+const titleLine = computed(() => (detail.value === '…' || /^error:/i.test(detail.value) ? '' : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))
 const badges = computed(() => {
   if (!titleLine.value) return []
   const out = [{ label: 'state', value: isOpen.value ? 'open' : 'closed', cls: isOpen.value ? '' : 'ok' }]
@@ -73,7 +73,7 @@ const actions = computed(() => [
   { k: 'm', primary: true, label: 'comment', fn: comment },
   { k: 'c', label: 'close', fn: () => setState(true), off: !isOpen.value },
   { k: 'u', label: 'reopen', fn: () => setState(false), off: isOpen.value },
-  { k: 'o', label: `open on ${repo.value.startsWith('gitlab:') ? 'GitLab' : 'GitHub'}`, fn: visit },
+  { k: 'o', label: `open on ${repo.value.startsWith('gitlab:') ? 'GitLab' : 'GitHub'}`, fn: visit, off: !url.value },
   { k: 'g', label: 'the repo page', fn: () => router.push({ path: '/repo', query: { repo: repo.value } }) },
 ])
 const keys = { '.': () => sheet.value?.pick(), Escape: back, Backspace: back, r: () => { load(); log.value?.refresh() } }

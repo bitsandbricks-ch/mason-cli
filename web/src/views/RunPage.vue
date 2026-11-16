@@ -44,6 +44,8 @@ async function rerun() {
 }
 const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) openLink(url) }
 const back = () => (window.history.state?.back ? router.back() : router.push('/runs'))
+// an answer that is an error has no title line: the pane below explains it
+const titleLine = computed(() => (detail.value === '…' || /^error:/i.test(detail.value) ? '' : (detail.value.split('\n')[0] || '').trim()))
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })
 // the header: what ran, how it ended, and which jobs failed
 const failedJobs = computed(() => detail.value.split('\n').map((l) => l.match(/^\s{2}(failure|failed|timed_out|cancelled|canceled|startup_failure)\s+(.+?)(\s{2}\(.*\))?$/))
@@ -65,7 +67,7 @@ const next = computed(() => {
 })
 const actions = computed(() => [
   { k: 'R', primary: true, label: 'run the failed jobs again', fn: rerun, off: !failed.value },
-  { k: 'o', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: visit },
+  { k: 'o', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: visit, off: !url.value },
   { k: 'g', label: 'the repo page', fn: () => router.push({ path: '/repo', query: { repo: repo.value } }) },
 ])
 const keys = { '.': () => sheet.value?.pick(), Escape: back, Backspace: back, r: () => { load(); log.value?.refresh() } }
@@ -84,7 +86,7 @@ useKeys(keys)
       <ActionList ref="sheet" class="show-compact" :actions="actions" :title="`${gitlab ? 'pipeline' : 'run'} ${id}`" compact />
       <button class="any" @click="load(); log?.refresh()"><span class="k">r</span> reload</button>
     </div>
-    <StatusHeader :title="(detail.split('\n')[0] || '').trim() && detail !== '…' ? detail.split('\n')[0] : `${gitlab ? 'pipeline' : 'run'} ${id}`"
+    <StatusHeader :title="titleLine || `${gitlab ? 'pipeline' : 'run'} ${id}`"
                   :sub="repo" :url="url" :badges="badges" :blockers="failedJobs" :next="next" />
     <div class="split page">
       <div class="pad">
