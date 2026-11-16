@@ -112,7 +112,7 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
 .modal .q::before { content: "? "; color: var(--accent); }
 
 /* stats */
-.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
 .kpi { border: 1px solid var(--line); padding: 8px 10px; background: var(--bg2); }
 .kpi .v { font-size: 22px; color: var(--accent); text-shadow: var(--glow); }
 .kpi .l { color: var(--dim); }
