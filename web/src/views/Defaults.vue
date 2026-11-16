@@ -3,7 +3,7 @@
 // from, and rulesets imported from a live repo. Saving opens a PR (or commits, for those who may).
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ApiError, get, log, post, put } from '../api.js'
+import { ApiError, get, log, post, put, state } from '../api.js'
 import { useKeys } from '../keys.js'
 import { ask } from '../ui.js'
 import TextPane from '../components/TextPane.vue'
@@ -56,7 +56,8 @@ async function save(remove = false) {
   if (!path.value) return
   if (!remove && (await check()).length && !(await ask(`${path.value} has problems. Save it anyway?`, { allowDry: false, detail: problems.value.join('\n') }))) return
   const how = mode.value === 'pr' ? 'in a pull request' : 'straight to the branch'
-  if (!(await ask(`${remove ? 'Remove' : 'Save'} ${path.value} ${how}?`, { allowDry: false }))) return
+  if (!(await ask(`${remove ? 'Remove' : 'Save'} ${path.value} ${how}?`,
+    { allowDry: false, detail: state.dryRun ? "Dry run doesn't cover the defaults editor: this saves for real." : '' }))) return
   try {
     const got = await put('/defaults/file', { path: path.value, text: text.value, mode: mode.value, delete: remove, force: true })
     result.value = `${remove ? 'removed' : 'saved'} ${path.value}: ${got.url}`
