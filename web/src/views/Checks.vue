@@ -40,12 +40,14 @@ const where = computed(() => (repos.value.length ? repos.value.join(', ') : scop
 // The last check of each repo in the filter, kept by the server (it checks nothing): the page opens with
 // what is known instead of empty. Results of another scope would read as this one's, so a new filter reads again.
 const fromKept = ref(false)
+const unchecked = ref(0) // repos in the filter that were never checked
 async function kept() {
   const asked = `${scope.provider}|${scope.group}`
   try {
     const [all, names] = await Promise.all([get('/doctor', { quiet: true }), scopedRepos()])
     if (asked !== `${scope.provider}|${scope.group}` || running.value) return
     found.value = names.map((n) => all.repos?.[n]).filter(Boolean)
+    unchecked.value = names.length - found.value.length
     fromKept.value = found.value.length > 0
   } catch { /* the button still checks */ }
 }
@@ -94,7 +96,8 @@ useKeys({ c: doctor, f: fix, s: sync })
     </div>
     <div class="scroll pad">
       <div v-if="running" class="warn cursor">running {{ running }} </div>
-      <p v-if="fromKept && !running" class="dim">the last check of each repo; <span class="accent">c</span> checks them again</p>
+      <p v-if="fromKept && !running" class="dim">the last check of each repo{{ unchecked ? `, ${unchecked} not checked yet` : '' }};
+        <span class="accent">c</span> checks them{{ unchecked ? '' : ' again' }}</p>
       <DataTable v-if="found.length" v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.repo" style="margin-bottom: 16px" @activate="page" />
       <TextPane :text="output" placeholder="c checks the repos against the defaults: settings, security, release immutability, rulesets (GitHub), protected branches (GitLab) and files. f fixes what it can, s opens PRs with the files." />
     </div>
