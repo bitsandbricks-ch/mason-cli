@@ -7,7 +7,8 @@ import { THEMES } from './themes.js'
 import { GROUPS, SECTIONS, TABS, sectionOf } from './router.js'
 import { typing } from './keys.js'
 import { arrowKey } from './arrows.js'
-import { closeDetail, detailName, phone, prompt } from './ui.js'
+import { closeDetail, detailName, keysHelp, phone, prompt } from './ui.js'
+import KeysHelp from './components/KeysHelp.vue'
 import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
 
@@ -126,10 +127,11 @@ async function logout() {
   router.replace('/login')
 }
 
+const showHelp = (on) => { keysHelp.value = on }
 let pointerAt = null // arrows scroll the pane the pointer is in
 window.addEventListener('pointerover', (e) => { pointerAt = e.target }, { passive: true })
 window.addEventListener('keydown', (e) => {
-  if (prompt.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey || !signedIn.value) return
+  if (prompt.open || keysHelp.value || typing(e) || e.ctrlKey || e.metaKey || e.altKey || !signedIn.value) return
   const tab = TABS.find((t) => t.key === e.key)
   if (tab) { router.push(tab.path); e.preventDefault(); return }
   if (arrowKey(e, document, pointerAt)) return
@@ -139,7 +141,7 @@ window.addEventListener('keydown', (e) => {
     // only from a tab itself: on a repo's (or a PR's) page ←→ threw you out to the next tab
     const i = TABS.findIndex((t) => t.name === route.name)
     if (i >= 0) { router.push(TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length].path); e.preventDefault() }
-  } else if (e.key === '?') { router.push('/console'); log('keys: 1-9 tabs · ←→ next tab · ↑↓/jk move · Enter act · / filter · r reload · t theme · : console · ` log') }
+  } else if (e.key === '?') { keysHelp.value = true; e.preventDefault() }
 })
 </script>
 
@@ -238,7 +240,7 @@ window.addEventListener('keydown', (e) => {
             :title="'the session log (`)'" role="button" :aria-expanded="logOpen" @click="logOpen = !logOpen">
         {{ logOpen ? '▾' : '▸' }} [{{ last.at }}] {{ last.text }}<span v-if="state.log.length > 1" class="dim"> (+{{ state.log.length - 1 }})</span></span>
       <span v-else class="last dim">ready</span>
-      <span class="keys"><b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b>?</b> help</span>
+      <span class="keys"><b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <button class="link" @click="showHelp(true)"><b>?</b> help</button></span>
     </footer>
     <section v-if="logOpen" class="session-log" aria-label="the session log">
       <div class="row"><h2 style="margin: 0">log <span class="dim">({{ state.log.length }}, this session)</span></h2><span class="spacer" />
@@ -256,4 +258,5 @@ window.addEventListener('keydown', (e) => {
     </section>
   </div>
   <PromptDialog />
+  <KeysHelp :open="keysHelp" @close="showHelp(false)" />
 </template>

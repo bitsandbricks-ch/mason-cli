@@ -400,3 +400,10 @@ button.wide { width: 100%; text-align: left; }
   .view:has(> .split.page) > .events.band { height: auto; min-height: 0; overflow: visible; }
   .view:has(> .split.page) > .events.band .events-head { position: static; }
 }
+
+/* ? key help */
+.keys-help { max-width: min(900px, 96vw); max-height: 90vh; overflow: auto; }
+.keys-help .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; margin-top: 8px; }
+.keys-help .line { display: grid; grid-template-columns: 5.5em 9em 1fr; gap: 8px; padding: 2px 0; }
+.keys-help section:last-child .line { grid-template-columns: 5.5em 1fr; }
+.keys-help .k { color: var(--accent); }
