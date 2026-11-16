@@ -6,6 +6,8 @@
 import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
 import ErrorNote from './ErrorNote.vue'
 import { detailName, glyph, openDetail, phone, stateClass } from '../ui.js'
+import { router, TABS } from '../router.js'
+import { csvName, toCsv } from '../csv.js'
 import { range, toggle, toggleAll } from '../pick.js'
 
 const props = defineProps({
@@ -13,6 +15,7 @@ const props = defineProps({
   rows: { type: Array, default: () => [] },
   rowKey: { type: Function, default: (r) => r.key ?? r.repo ?? JSON.stringify(r) },
   empty: { type: String, default: 'nothing here' },
+  name: { type: String, default: '' }, // what the list is, for the exported file's name (default: the view)
   error: { type: String, default: '' }, // the list couldn't load: said in plain words instead of "empty"
   modelValue: { default: null }, // the selected row's key
   // several rows to act on at once: the keys of the picked rows (v-model:picked); null: no boxes
@@ -107,6 +110,19 @@ function sort(c) {
   else { sortKey.value = c.key; sortDir.value = 1 }
 }
 watch(() => props.rows, () => { if (index.value < 0 && shown.value.length && props.modelValue == null) select(0, false) })
+// ⤓: the list as a CSV file, as shown (filter and sort applied, cells in words), made in the browser
+function exportCsv() {
+  const view = router.currentRoute.value.name
+  const what = props.name || TABS.find((t) => t.name === view)?.label || view
+  const blob = new Blob([toCsv(props.columns, shown.value, cell)], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = csvName(what)
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
 // a filter that hides the selected row selects the first one shown, so the preview and actions match the list
 watch(filter, () => { if (index.value < 0 && shown.value.length) select(0, false) })
 defineExpose({ focus: () => table.value?.focus(), shown })
@@ -119,6 +135,8 @@ defineExpose({ focus: () => table.value?.focus(), shown })
       <input ref="filterInput" v-model="filter" class="grow" placeholder="filter" aria-label="filter the list"
              @keydown.esc="filter = ''; table?.focus()" @keydown.enter="table?.focus()">
       <span class="dim nowrap">{{ shown.length }}<template v-if="shown.length !== rows.length">/{{ rows.length }}</template></span>
+      <button v-if="shown.length" class="export" title="download the list as shown, as a CSV file" aria-label="download as CSV"
+              @click="exportCsv">⤓<span class="hide-xs"> csv</span></button>
       <select v-if="phone && rows.length > 1" v-model="sortChoice" class="sort" aria-label="sort by">
         <option value="">sort</option>
         <template v-for="c in columns" :key="c.key">
