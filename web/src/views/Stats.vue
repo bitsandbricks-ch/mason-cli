@@ -43,7 +43,7 @@ useKeys({ r: () => load(true) })
       <label class="row">last <select v-model.number="days" @change="load()"><option v-for="d in [7, 14, 30, 90, 180, 365]" :key="d" :value="d">{{ d }} days</option></select></label>
       <span v-if="loading" class="warn cursor">counting </span>
       <span class="spacer" />
-      <span v-if="data" class="dim" title="answers from the cache and 304s cost no rate limit">cache: {{ data.cache.github.cache_hits || 0 }} hits, {{ data.cache.github.not_modified || 0 }} not modified, {{ data.cache.github.requests || 0 }} requests</span>
+      <span v-if="data" class="dim hide-xs" title="Mason answered some lookups itself, and GitHub said others hadn't changed: neither costs rate limit">asked GitHub {{ data.cache.github.requests || 0 }} times ({{ data.cache.github.not_modified || 0 }} unchanged) · answered {{ data.cache.github.cache_hits || 0 }} itself</span>
     </div>
     <div class="scroll pad">
       <div class="kpis"><div v-for="[l, v] in kpis" :key="l" class="kpi"><div class="v">{{ v }}</div><div class="l">{{ l }}</div></div></div>
