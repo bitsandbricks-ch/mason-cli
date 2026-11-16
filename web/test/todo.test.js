@@ -36,6 +36,7 @@ test('approvals first, then what is broken, then what is ready, then drift and r
 test('each kind of item, with where it opens', () => {
   assert.deepEqual(find((i) => i.why === 'waits for your approval').target, { kind: 'run', repo: 'acme/api', id: 5 })
   assert.equal(find((i) => i.target.repo === 'acme/x').cls, 'bad')
+  assert.equal(find((i) => i.target.repo === 'acme/x').rank, 2) // it can't wait for you: stuck
   assert.deepEqual(find((i) => i.why === 'CI fails on the default branch').target, { kind: 'repo', repo: 'acme/api' })
   assert.deepEqual(find((i) => i.why === 'has merge conflicts').target, { kind: 'pr', repo: 'acme/web', number: 9 })
   assert.ok(find((i) => i.why === 'checks fail' && i.target.number === 10))

@@ -16,7 +16,8 @@ export function todoItems({ status = null, prs = [], approvals = [], releases = 
     if (!a?.repo || !a.id) continue
     // a GitLab deployment or manual job has no page of its own: its repo's
     const target = !a.kind || a.kind === 'run' ? { kind: 'run', repo: a.repo, id: a.id } : { kind: 'repo', repo: a.repo }
-    add(1, a.blocked ? 'waits, but you can\'t approve it' : 'waits for your approval', `${a.name || 'run'} → ${a.waits_for || 'an environment'}`,
+    // one you can't approve doesn't wait for you: it is stuck, so it goes with what is broken
+    add(a.blocked ? 2 : 1, a.blocked ? 'waits, but you can\'t approve it' : 'waits for your approval', `${a.name || 'run'} → ${a.waits_for || 'an environment'}`,
       target, a.blocked ? 'bad' : 'warn')
   }
 

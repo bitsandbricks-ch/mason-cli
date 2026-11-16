@@ -73,7 +73,7 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   picks a span, the header box every row shown). With rows picked, the actions act on all of them: c, f, s, m
   on repos, m and M on pull requests, c and u (close, reopen) on issues, from the keys or the bar above the list, with one question for the lot.
 - **to do (`0`) lists what waits for you**, most urgent first: runs to approve and PRs that ask you for a review, what is broken (CI on the
-  default branch, merge conflicts, failing checks, a failed release run), PRs ready to merge, drift against the
+  default branch, merge conflicts, failing checks, a failed release run, a run waiting for an approval you can't give), PRs ready to merge, drift against the
   defaults, versions not released yet and your open issues (assigned to you; marked after 30 days untouched). Enter opens one in the side panel, and ↑↓ walk through them.
 - **ctrl+k (⌘k, or ⌕ jump in the top bar) jumps anywhere:** type a few letters of a repo, a PR or MR, an
   issue or a view; ↑↓ pick, Enter goes there (a repo, PR or issue opens in the side panel on a wide screen).
