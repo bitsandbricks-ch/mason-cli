@@ -121,6 +121,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` lists the keys. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **After an update.** A tab left open while Mason was updated loads the new version by itself when you
+  switch views (the old version's files are gone). A bug in a view says so in the log line instead of
+  failing quietly.
 
 ## Run it
 
