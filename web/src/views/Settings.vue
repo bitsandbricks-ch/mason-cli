@@ -53,13 +53,16 @@ async function unlink(i) {
   if (!(await ask(`Disconnect ${i.provider} (${i.login})? Mason deletes its token and revokes it where ${i.provider} lets it.`, { allowDry: false }))) return
   try { const got = await del(`/me/identities/${i.id}`); await loadMe(); await tellRevoked(got) } catch (e) { log(e.message, 'error') }
 }
+const making = ref(false) // a double click made two keys
 async function makeKey() {
+  if (making.value) return
+  making.value = true
   try {
     const body = { name: newKey.value.name, scope: newKey.value.scope }
     if (newKey.value.days) body.days = Number(newKey.value.days)
     fresh.value = await post('/keys', body)
     load()
-  } catch (e) { log(e.message, 'error') }
+  } catch (e) { log(e.message, 'error') } finally { making.value = false }
 }
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); log('copied', 'ok') } catch { log('select the key and copy it', 'warn') }
@@ -148,7 +151,7 @@ onMounted(load)
           <input v-model="newKey.name" placeholder="name" aria-label="key name">
           <select v-model="newKey.scope" aria-label="scope"><option value="read">read</option><option value="write">write</option></select>
           <select v-model="newKey.days" aria-label="expires"><option :value="30">30 days</option><option :value="90">90 days</option><option :value="365">a year</option><option :value="null">never expires</option></select>
-          <button class="primary" @click="makeKey">new key</button>
+          <button class="primary" :disabled="making" @click="makeKey">new key</button>
         </div>
         <table class="table" style="margin-top: 8px">
           <tr v-for="k in keys.filter((x) => !x.revoked)" :key="k.id">
