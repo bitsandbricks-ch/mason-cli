@@ -437,6 +437,11 @@ signed commits ...) or as JSON. A `.github/rulesets` file can be removed or move
 validated and written to the repo: a pull request, or straight onto the default branch when the repo has
 `auto_push` (refused pushes become a PR), or as you pick. An org's `.mason` repo has the same panel for its
 `mason.toml` and `rulesets/` folder, always through a pull request unless you pick "commit directly".
+When the default branch isn't protected, **protect main** (in the panel, and beside that issue under
+defaults) opens the protect form with `reviews = 1`. It keeps `protect` in the repo's own file or in the
+org's `.mason` group the repo is in (for every repo of that group), and "protect main on GitHub now too"
+makes the `protect` ruleset right away, so the branch doesn't wait for the pull request to merge. An org's
+`.mason` page lists its groups, each with its own "edit protection".
 
 mason reads the `.mason` repo with your own login (gh, your token, or your Mason account), so a private
 `.mason` only counts for people who can read it, and each user's answer is cached in their own cache
