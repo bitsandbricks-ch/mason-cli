@@ -7,6 +7,7 @@ export const MAX_VIEWS = 30
 // live in this browser only), without #detail.
 export function viewPath(route, scope = {}) {
   const q = { ...(route.query || {}) }
+  delete q.side // the side panel's item is what you looked at, not part of the view
   if (scope.group) q.group = scope.group
   else delete q.group
   if (scope.provider && scope.provider !== 'all') q.provider = scope.provider

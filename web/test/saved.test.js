@@ -32,3 +32,7 @@ test('a link may set the group and provider', () => {
 test('a suggested name says what the view shows', () => {
   assert.equal(suggestName('pull requests', { query: { show: 'mine' } }, { group: 'acme/' }), 'pull requests · mine · acme/')
 })
+
+test('the side panel is not part of a saved view', () => {
+  assert.equal(viewPath({ path: '/prs', query: { show: 'mine', side: 'pr:acme/web#7' } }, {}), '/prs?show=mine')
+})
