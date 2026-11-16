@@ -121,6 +121,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` lists the keys. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Filters in the link.** The Issues and Runs filters (state, mine, label, age; only failed, per repo) are
+  in the page's link, such as `/issues?state=closed&mine=1` or `/runs?failed=1`, so a bookmark, a shared link
+  or a saved view opens the same list. A value the menus don't offer falls back to the default.
 
 ## Run it
 

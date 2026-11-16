@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 import { get, log, qs } from '../api.js'
 import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { useLinkFilters } from '../useLink.js'
 import { loadGroups, scope, scopedRepos } from '../scope.js'
 import { ago, ask, openDetail } from '../ui.js'
 import EventLog from '../components/EventLog.vue'
@@ -15,6 +16,10 @@ import TextPane from '../components/TextPane.vue'
 
 const STATES = { open: 'open', closed: 'closed', all: 'all' }
 const f = reactive({ state: 'open', mine: false, label: '', stale: 0 })
+// the filters are in the link (?state=closed&mine=1), so a bookmark or a saved view opens the same list
+useLinkFilters(f, {
+  state: { def: 'open', ok: (v) => v in STATES }, mine: { def: false }, label: { def: '' }, stale: { def: 0, ok: (v) => [0, 30, 90].includes(v) },
+})
 function issuesUrl(q) {
   const extra = qs({ state: f.state, mine: f.mine, label: f.label, stale: f.stale || '' }).slice(1)
   return `/issues${q || (extra ? '?' : '')}${q && extra ? '&' : ''}${extra}`
@@ -97,7 +102,7 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
       <Scope :groups="scope.groups" />
       <span class="row"><button v-for="(l, k) in STATES" :key="k" class="chip" :class="{ on: f.state === k }" @click="f.state = k">{{ l }}</button></span>
       <button class="chip" :class="{ on: f.mine }" @click="f.mine = !f.mine"><span class="k">i</span> mine</button>
-      <select v-model="f.label" aria-label="label"><option value="">any label</option><option v-for="l in data?.labels || []" :key="l" :value="l">{{ l }}</option></select>
+      <select v-model="f.label" aria-label="label"><option value="">any label</option><option v-if="f.label && !(data?.labels || []).includes(f.label)" :value="f.label">{{ f.label }}</option><option v-for="l in data?.labels || []" :key="l" :value="l">{{ l }}</option></select>
       <select v-model.number="f.stale" aria-label="age"><option :value="0">any age</option><option :value="30">untouched 30d</option><option :value="90">untouched 90d</option></select>
       <span class="spacer" />
       <button class="primary any" @click="newIssue"><span class="k">n</span> new</button>
