@@ -113,7 +113,11 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
       <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" /></div>
+      <div>
+        <details v-if="data?.failed?.length" class="pad warn"><summary>{{ data.failed.length }} repo{{ data.failed.length === 1 ? '' : 's' }} couldn't be read</summary>
+          <div v-for="x in data.failed" :key="x" class="dim">{{ x }}</div></details>
+        <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" />
+      </div>
       <div class="pad">
         <div v-if="form.open" class="box">
           <div class="form">

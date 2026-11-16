@@ -27,7 +27,7 @@ from mason.config import group_label, orgs_of
 from mason.server import gitlab as GL
 from mason.server.api.account import body, whole
 from mason.server.auth import audit, can_write, need
-from mason.server.context import as_user, gitlab_projects, load_config, valid_repo
+from mason.server.context import NAME, as_user, gitlab_projects, load_config, valid_repo
 
 bp = Blueprint("repos", __name__, url_prefix="/api/v1")
 
@@ -61,6 +61,8 @@ def all_repos(cfg, gh, gl, names: list[str] | None = None, group: str | None = N
                 if num.isdigit():
                     pick.setdefault(repo, []).append(int(num))
             else:
+                if not NAME.match(n):
+                    abort(400, f"not a repo name: {n[:80]!r}")
                 gh_names.append(n)
         found: list[str] = []
         if gh_names and github_ok(gh):
@@ -763,11 +765,23 @@ def issues():
         if request.args.get("mine") == "1":
             gh_who = I.me() if gh_r else None
             gl_who = (gl.api("GET", "/user") or {}).get("username") if gl and gl_r else None
+        failed: list[str] = []
+
+        def each(fetch):  # one repo that can't be read (gone, no access) doesn't sink the whole list
+            def run(r):
+                try:
+                    return fetch(r)
+                except core.RateLimited:
+                    raise
+                except RuntimeError as err:
+                    failed.append(f"{r}: {str(err)[:200]}")
+                    return []
+            return run
         try:
-            out = [r for rows in core.pmap(lambda r: I.repo_issues(r, state, labels, gh_who, limit), gh_r)
+            out = [r for rows in core.pmap(each(lambda r: I.repo_issues(r, state, labels, gh_who, limit)), gh_r)
                    for r in rows]
             if gl and gl_r:
-                out += [r for rows in core.pmap(lambda r: GL.issues(gl, r, state, labels, gl_who, limit), gl_r)
+                out += [r for rows in core.pmap(each(lambda r: GL.issues(gl, r, state, labels, gl_who, limit)), gl_r)
                         for r in rows]
         except core.RateLimited as err:
             abort(429, str(err))
@@ -775,7 +789,8 @@ def issues():
     if stale:
         out = I.stale(out, stale)
     out.sort(key=lambda r: r.get("updated") or "", reverse=True)
-    return jsonify({"issues": out, "labels": sorted({lab for r in out for lab in r["labels"]})})
+    return jsonify({"issues": out, "labels": sorted({lab for r in out for lab in r["labels"]}),
+                    "failed": sorted(failed)})
 
 
 @bp.get("/issue")

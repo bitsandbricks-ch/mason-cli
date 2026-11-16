@@ -1371,3 +1371,12 @@ def test_broken_plugin_reason_only_for_operators(op, monkeypatch):
     with app.app_context():
         operators.add("github:mike")
     assert mike.get("/api/v1/plugins").json["broken"] == ["bad: No module named '/srv/secret/path'"]
+
+
+def test_list_names_are_checked_and_one_bad_repo_doesnt_sink_issues(op):
+    _, c = op
+    for bad in ("../../x", "a/b/c", "x/..", "./x"):
+        assert c.get(f"/api/v1/issues?repo={bad}").status_code == 400, bad
+    assert c.get("/api/v1/repo?repo=../x").status_code == 400
+    got = c.get("/api/v1/issues?repo=acme/web&repo=acme/nope").json
+    assert got["failed"] and got["failed"][0].startswith("acme/nope: ")

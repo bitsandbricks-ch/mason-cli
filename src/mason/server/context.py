@@ -16,9 +16,13 @@ from mason.cache import Spaces
 from mason.server import oauth
 from mason.transport import HttpTransport
 
-REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-ORG = re.compile(r"^[A-Za-z0-9_.-]+$")
-GITLAB_REPO = re.compile(r"^gitlab:[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+$")
+# A name part is never "." or "..": those would be path steps in the API URL a name goes into
+_PART = r"(?!\.\.?(?:/|$|#))[A-Za-z0-9_.-]+"
+REPO = re.compile(rf"^{_PART}/{_PART}$")
+ORG = re.compile(rf"^{_PART}$")
+GITLAB_REPO = re.compile(rf"^gitlab:{_PART}(/{_PART})+$")
+# what a list request may name: a repo, or a name mason finds in the orgs, either with #number
+NAME = re.compile(rf"^({_PART}/)?{_PART}(#\d+)?$")
 SETTING_KEYS = {"defaults": str, "ref": str, "orgs": list, "repos": list, "exclude": list,
                 "gitlab_groups": list, "gitlab_repos": list, "theme": str, "plugins_off": list,
                 "org_defaults": bool}
