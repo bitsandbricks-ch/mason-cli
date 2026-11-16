@@ -1,6 +1,6 @@
 // Keys like the TUI's: a view registers its own with useKeys while it is shown.
 import { onBeforeUnmount, onMounted } from 'vue'
-import { prompt } from './ui.js'
+import { finder, prompt } from './ui.js'
 
 export function typing(e) {
   const t = e.target
@@ -9,7 +9,7 @@ export function typing(e) {
 
 export function useKeys(map) {
   function on(e) {
-    if (prompt.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey) return
+    if (prompt.open || finder.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey) return
     const fn = map[e.key]
     if (fn) { e.preventDefault(); fn(e) }
   }

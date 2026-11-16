@@ -54,7 +54,6 @@ move it to "Done" when it ships.
 
 - Teams and shared workspaces: a team's defaults, repo lists and saved views, with roles.
 - A daily digest (email or chat): PRs waiting for you, failed runs, new alerts, new drift.
-- A command palette (Ctrl+K) in the web UI that searches repos, PRs and commands at once.
 - Repo ownership: an owner per repo (from CODEOWNERS or a topic), last activity, and archive candidates.
 - Saved views and filters (e.g. "my PRs needing review across both providers").
 - Bulk actions with a preview: rerun failed runs, update a file in N repos, archive stale repos.
@@ -92,6 +91,7 @@ move it to "Done" when it ships.
 
 ## Done
 
+- The finder (Ctrl+K, ⌕ on phones): views, repos, pull requests and commands in one box, with your last picks.
 - TUI keyboard: Tab / Shift+Tab through every panel and dialog, F1-F10 for help, search, filter and sort.
 
 - Workflow hardening: `mason workflows [--fix]`, doctor's `workflows` check and the web app's Workflows tab.

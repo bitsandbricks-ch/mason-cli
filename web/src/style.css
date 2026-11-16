@@ -40,6 +40,7 @@ a:hover { text-decoration: underline; }
 .top { display: flex; align-items: center; gap: 14px; padding: 6px 12px; border-bottom: 1px solid var(--line);
   background: var(--bg2); white-space: nowrap; overflow-x: auto; }
 .top .prompt { font-weight: 700; }
+.top .find .k { color: var(--accent); }
 .tabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); overflow-x: auto;
   background: var(--bg2); }
 .tabs a { padding: 6px 10px; color: var(--dim); border-bottom: 2px solid transparent; white-space: nowrap; }
@@ -171,6 +172,7 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
   .phone .top .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
   .phone .top .back { border: 0; font-size: 30px; line-height: 1; padding: 0 0 4px; min-width: 44px; min-height: 44px;
     margin-left: -10px; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); } /* a thumb-sized target */
+  .phone .top .find { border: 0; font-size: 22px; line-height: 1; min-width: 44px; min-height: 44px; padding: 0; }
   .phone .top .chip { color: var(--warn); border-color: var(--warn); min-height: 30px; }
   .phone main { position: relative; }
   .dock { display: flex; border-top: 1px solid var(--line); background: var(--bg2);

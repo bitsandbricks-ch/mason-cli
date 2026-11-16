@@ -2,6 +2,9 @@
 import { reactive, ref } from 'vue'
 import { router } from './router.js'
 
+// the finder (Ctrl+K, components/Finder.vue): open, and the text it opens with
+export const finder = reactive({ open: false, query: '' })
+
 export const prompt = reactive({ open: false, question: '', detail: '', resolve: null, allowDry: true, input: null,
   links: [], notice: false, choices: null })
 

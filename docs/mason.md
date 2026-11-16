@@ -121,6 +121,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` lists the keys. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Finder:** Ctrl+K (⌘K on a Mac), the **find** button, or ⌕ on a phone opens one box that finds views,
+  repos, pull requests and commands (theme, dry run, the session log, sign out). Every word you type has
+  to fit; Enter opens the first fit. Before you type it lists your last picks (kept in the browser).
 
 ## Run it
 

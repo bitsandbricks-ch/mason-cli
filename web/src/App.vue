@@ -6,9 +6,10 @@ import { THEMES } from './themes.js'
 import { GROUPS, SECTIONS, TABS, sectionOf } from './router.js'
 import { typing } from './keys.js'
 import { arrowKey } from './arrows.js'
-import { closeDetail, detailName, phone, prompt } from './ui.js'
+import { closeDetail, detailName, finder, phone, prompt } from './ui.js'
 import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
+import Finder from './components/Finder.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -122,10 +123,26 @@ async function logout() {
   router.replace('/login')
 }
 
+// What the finder can do besides opening a view, a repo or a pull request.
+const commands = computed(() => [
+  { label: 'switch the theme', hint: `now ${theme.value}`, key: 't', run: () => { theme.value = themes[(themes.indexOf(theme.value) + 1) % themes.length] } },
+  { label: state.dryRun ? 'turn dry run off' : 'turn dry run on', hint: 'changes only show what they would do', run: () => { state.dryRun = !state.dryRun } },
+  ...(phone.value ? [] : [{ label: 'the session log', hint: 'every line of this session', key: '`', run: () => { logOpen.value = true } }]),
+  { label: 'sign out', hint: state.me?.user?.name || '', run: logout },
+])
+// Ctrl+K (⌘K) opens the finder from anywhere, also while typing in a field; the browser's own Ctrl+K is the
+// search bar, which a web app may take over.
+window.addEventListener('keydown', (e) => {
+  if (!signedIn.value || prompt.open || !(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'k') return
+  e.preventDefault()
+  e.stopImmediatePropagation()
+  finder.open = !finder.open
+}, { capture: true })
+
 let pointerAt = null // arrows scroll the pane the pointer is in
 window.addEventListener('pointerover', (e) => { pointerAt = e.target }, { passive: true })
 window.addEventListener('keydown', (e) => {
-  if (prompt.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey || !signedIn.value) return
+  if (prompt.open || finder.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey || !signedIn.value) return
   const tab = TABS.find((t) => t.key === e.key)
   if (tab) { router.push(tab.path); e.preventDefault(); return }
   if (arrowKey(e, document, pointerAt)) return
@@ -135,7 +152,7 @@ window.addEventListener('keydown', (e) => {
     // only from a tab itself: on a repo's (or a PR's) page ←→ threw you out to the next tab
     const i = TABS.findIndex((t) => t.name === route.name)
     if (i >= 0) { router.push(TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length].path); e.preventDefault() }
-  } else if (e.key === '?') { router.push('/console'); log('keys: 1-9 tabs · ←→ next tab · ↑↓/jk move · Enter act · / filter · r reload · t theme · : console · ` log') }
+  } else if (e.key === '?') { router.push('/console'); log('keys: 1-9 tabs · ←→ next tab · ↑↓/jk move · Enter act · / filter · r reload · t theme · : console · ` log · Ctrl+K find') }
 })
 </script>
 
@@ -148,6 +165,7 @@ window.addEventListener('keydown', (e) => {
       <Logo :size="20" /><span class="title"><span class="prompt accent">mason</span><span class="dim">:~/</span>{{ title }}</span>
       <span class="spacer" />
       <span v-if="state.busy" class="warn cursor" aria-label="working" />
+      <button class="find" aria-label="find a view, repo or pull request" @click="finder.open = true">⌕</button>
       <button v-if="state.dryRun" class="chip on" title="dry run is on: changes only show what they would do" @click="state.dryRun = false">dry run ✕</button>
     </header>
     <main :class="{ detail }">
@@ -207,6 +225,7 @@ window.addEventListener('keydown', (e) => {
       <Logo :size="18" /><span class="prompt accent">{{ state.me.user.name.toLowerCase().replace(/\s+/g, '') }}@mason</span><span class="dim hide-xs">:~$</span>
       <span class="dim hide-sm">{{ who }}</span>
       <span class="spacer" />
+      <button class="find" title="find a view, repo, pull request or command (Ctrl+K)" @click="finder.open = true">⌕ <span class="hide-sm">find</span> <span class="k hide-xs">^K</span></button>
       <span v-if="state.busy" class="warn">working…</span>
       <span class="dim hide-sm" :title="'API calls left at GitHub'">{{ rate }}</span>
       <label class="check" title="every change only shows what it would do">
@@ -234,7 +253,7 @@ window.addEventListener('keydown', (e) => {
             :title="'the session log (`)'" role="button" :aria-expanded="logOpen" @click="logOpen = !logOpen">
         {{ logOpen ? '▾' : '▸' }} [{{ last.at }}] {{ last.text }}<span v-if="state.log.length > 1" class="dim"> (+{{ state.log.length - 1 }})</span></span>
       <span v-else class="last dim">ready</span>
-      <span class="keys"><b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b>?</b> help</span>
+      <span class="keys"><b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b>^K</b> find <b>?</b> help</span>
     </footer>
     <section v-if="logOpen" class="session-log" aria-label="the session log">
       <div class="row"><h2 style="margin: 0">log <span class="dim">({{ state.log.length }}, this session)</span></h2><span class="spacer" />
@@ -251,5 +270,6 @@ window.addEventListener('keydown', (e) => {
       </ol>
     </section>
   </div>
+  <Finder v-if="signedIn" :commands="commands" />
   <PromptDialog />
 </template>
