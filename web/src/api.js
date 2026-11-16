@@ -29,9 +29,15 @@ export async function api(method, path, body, { quiet = false } = {}) {
   if (method !== 'GET' && state.me?.csrf) headers['X-CSRF-Token'] = state.me.csrf
   if (!quiet) state.busy++
   try {
-    const res = await fetch(`/api/v1${path}`, {
-      method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    let res
+    try {
+      res = await fetch(`/api/v1${path}`, {
+        method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    } catch {
+      // the browser's own words ("Failed to fetch", "NetworkError…") say nothing about what to do
+      throw new ApiError(`can't reach Mason: check your connection${method === 'GET' ? '' : ' (the change may or may not have gone through)'}`, 0)
+    }
     const data = res.status === 204 ? {} : await res.json().catch(() => ({}))
     if (!res.ok) {
       if (res.status === 401 && path !== '/me') { state.me = { user: null, providers: state.me?.providers || [] } }
