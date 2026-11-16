@@ -99,6 +99,8 @@ function sort(c) {
   else { sortKey.value = c.key; sortDir.value = 1 }
 }
 watch(() => props.rows, () => { if (index.value < 0 && shown.value.length && props.modelValue == null) select(0, false) })
+// a filter that hides the selected row selects the first one shown, so the preview and actions match the list
+watch(filter, () => { if (index.value < 0 && shown.value.length) select(0, false) })
 defineExpose({ focus: () => table.value?.focus(), shown })
 </script>
 

@@ -8,6 +8,7 @@ import { loadGroups, scope } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
+import { openOut } from '../links.js'
 
 const KIND = { pinned: 'unpinned', permissions: 'token', pull_request_target: 'pr target', injection: 'injection' }
 const BAD = new Set(['pull_request_target', 'injection'])
@@ -35,7 +36,7 @@ async function pinRepos(repos) {
   if (text !== null) { output.value = text; load(true) }
 }
 const pinOne = () => current.value && pinRepos([current.value.repo])
-const open = (r) => r && window.open(`https://github.com/${r.repo}/blob/HEAD/${r.path}#L${r.line}`, '_blank', 'noopener')
+const open = (r) => r && openOut(`https://github.com/${r.repo}/blob/HEAD/${encodeURI(r.path)}#L${Number(r.line) || 1}`)
 useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: () => open(current.value) })
 </script>
 
