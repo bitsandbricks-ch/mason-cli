@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 import { del, get, loadMe, log, post, put, state } from '../api.js'
 import { deviceSignIn } from '../signin.js'
 import { ago, ask, tellRevoked } from '../ui.js'
+import { notifyOn, notifySupported, setNotify } from '../notify.js'
 
 const router = useRouter()
 const s = ref(null)
@@ -112,6 +113,13 @@ onMounted(load)
           <a class="accent" :href="linking.verification_uri" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
           <span class="dim"> (waiting<span class="cursor" />)</span>
           <button @click="cancelLink">cancel</button></p>
+      </div>
+
+      <div class="box">
+        <div class="accent">this browser</div>
+        <label v-if="notifySupported()" class="check"><input :checked="notifyOn" type="checkbox" @change="setNotify($event.target.checked)">
+          <span>notify me when a change finishes while Mason's tab is in the background <span class="dim">(merge, release, rerun: ✓ or ✗)</span></span></label>
+        <p v-else class="dim">This browser can't show notifications here.</p>
       </div>
 
       <div v-if="s" class="box">
