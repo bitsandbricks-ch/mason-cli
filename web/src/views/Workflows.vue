@@ -47,14 +47,13 @@ useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: 
       <span v-for="(n, k) in counts" :key="k" class="chip">{{ k }} {{ n }}</span>
       <span v-if="clean" class="chip ok">clean {{ clean }}</span>
       <span class="spacer" />
-      <button class="primary" :disabled="!current || current.raw !== 'pinned'"
-              :title="current && current.raw !== 'pinned' ? 'Mason pins actions to commits; this finding is fixed by hand in the workflow file (o opens it)' : ''" @click="pinOne"><span class="k">p</span> pin repo</button>
+      <button class="primary" :disabled="!current || current.raw !== 'pinned'" @click="pinOne"><span class="k">p</span> pin repo</button>
       <button class="any list-only" :disabled="!pinnable.length" @click="pinRepos(pinnable)"><span class="k">A</span> pin all</button>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
     <div class="split ld">
       <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ every action is pinned to a commit'" @activate="open" /></div>
-      <div class="pad"><TextPane :text="output || (current ? `${current.repo}\n${current.path}:${current.line}\n\n${current.text}` : '')"
+      <div class="pad"><TextPane :text="output || (current ? `${current.repo}\n${current.path}:${current.line}\n\n${current.text}${current.raw === 'pinned' ? '\n\np pins the repo\'s actions to commits' : '\n\nfixed by hand in the workflow file: o opens it'}` : '')"
         placeholder="p opens a PR that pins the selected repo's actions to commit SHAs; A does it for every repo listed" /></div>
     </div>
   </div>
