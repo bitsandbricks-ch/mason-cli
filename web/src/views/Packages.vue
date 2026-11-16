@@ -1,6 +1,8 @@
 <script setup>
 // Container images (GHCR and the GitLab registry): newest tags, the release's image, image builds.
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useTrack } from '../side.js'
 import { useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { emptyText } from '../empty.js'
@@ -22,14 +24,19 @@ const columns = [
   { key: 'release', label: 'release image' }, { key: 'issues', label: 'problems' },
 ]
 const current = computed(() => rows.value.find((r) => r.key === sel.value))
-useKeys({ r: () => load(true) })
+const router = useRouter()
+const repoPage = () => current.value?.repo && router.push({ path: '/repo', query: { repo: current.value.repo } })
+// an open repo panel follows the selected row
+useTrack(() => current.value?.repo && { kind: 'repo', repo: current.value.repo }, { kind: '*' })
+useKeys({ r: () => load(true), p: repoPage })
 </script>
 
 <template>
   <div class="view">
-    <div class="toolbar"><Scope :groups="scope.groups" /><ErrorNote v-if="data?.error" :error="data.error" what="couldn't read the packages" /></div>
+    <div class="toolbar"><Scope :groups="scope.groups" /><ErrorNote v-if="data?.error" :error="data.error" what="couldn't read the packages" />
+      <span class="spacer" /><button class="any" :disabled="!current?.repo" @click="repoPage"><span class="k">p</span> repo page</button></div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('no container images', [], narrowed())" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('no container images', [], narrowed())" @activate="repoPage" /></div>
       <div class="pad"><TextPane :text="current?.text" placeholder="pick an image" /></div>
     </div>
   </div>

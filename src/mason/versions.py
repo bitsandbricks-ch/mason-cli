@@ -384,7 +384,7 @@ def release(cfg: Config, repo: str, yes: bool = True) -> None:
         if answer.strip().lower() not in ("y", "yes"):
             say("   left as it is")
             return
-    head = api("GET", f"/repos/{repo}/git/ref/heads/{st['base']}")["object"]["sha"]
+    head = api("GET", f"/repos/{repo}/git/ref/heads/{core.quote_ref(st['base'])}")["object"]["sha"]
     api("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/tags/{tag}", "sha": head})
     say(f"   tagged {tag} on {st['base']} at {head[:7]} (was {st['released'] or 'none'})")
     run = release_run(repo, tag, wait=20)

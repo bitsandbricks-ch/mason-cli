@@ -132,7 +132,8 @@ def delete_branches(cfg, repo: str, days) -> None:
         if dt.datetime.fromisoformat(merged.replace("Z", "+00:00")) > cutoff:
             continue
         try:
-            api("DELETE", f"/repos/{repo}/git/refs/heads/{head['ref']}")
+            # encoded: a branch "fix#1" sent raw would delete "fix" (# starts the URL's fragment)
+            api("DELETE", f"/repos/{repo}/git/refs/heads/{urllib.parse.quote(head['ref'], safe='/')}")
             gone.append(head["ref"])
         except RuntimeError:  # deleted already, or protected
             pass

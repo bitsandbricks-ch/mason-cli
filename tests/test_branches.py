@@ -79,6 +79,14 @@ def test_delete_in_the_web_app(op, monkeypatch, tmp_path):  # noqa: F811
     assert r["text"] == "acme/web: [dry-run] delete spike" and "-X DELETE" not in log.read_text()
     audit = c.get("/api/v1/audit").json
     assert "branches.delete" in str(audit)
+    # a read key: a dry run like everywhere else, never a delete
+    key = c.post("/api/v1/keys", json={"name": "ci", "scope": "read"}, headers=H).json["key"]
+    k = {"Authorization": f"Bearer {key}"}
+    assert c.post("/api/v1/repo/branches/delete", json={"repo": "acme/web", "branches": ["spike"]}, headers=k) \
+        .status_code == 403
+    r = c.post("/api/v1/repo/branches/delete", json={"repo": "acme/web", "branches": ["spike"], "dry_run": True},
+               headers=k)
+    assert r.status_code == 200 and "[dry-run]" in r.json["text"]
 
 
 class FakeGitLab:

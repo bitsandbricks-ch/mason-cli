@@ -69,6 +69,23 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   too (Enter, or **p** on the list): a PR's page merges, auto-merges, marks ready and shows the diff; an
   issue's page comments, closes and reopens; a run's page lists every job and step with its time and runs
   the failed jobs again (**R**). `Esc` goes back.
+- **Several at once:** on repos, pull requests and issues, space picks the selected row (or click its box; shift+click
+  picks a span, the header box every row shown). With rows picked, the actions act on all of them: c, f, s, m
+  on repos, m and M on pull requests, c and u (close, reopen) on issues, from the keys or the bar above the list, with one question for the lot.
+- **to do (`0`) lists what waits for you**, most urgent first: runs to approve and PRs that ask you for a review, what is broken (CI on the
+  default branch, merge conflicts, failing checks, a failed release run, a run waiting for an approval you can't give), PRs ready to merge, drift against the
+  defaults, versions not released yet and your open issues (assigned to you; marked after 30 days untouched). What appeared since your last look in this browser is marked "new". **z** puts an item off for a week (it comes back by itself; **Z** shows those too). Enter opens one in the side panel, and ↑↓ walk through them.
+- **ctrl+k (⌘k, or ⌕ jump in the top bar) jumps anywhere:** type a few letters of a repo, a PR or MR, an
+  issue or a view; ↑↓ pick, Enter goes there (a repo, PR or issue opens in the side panel on a wide screen).
+  Before you type it offers what you opened last (kept in this browser). It also runs a few commands: switch
+  the theme, turn dry run on or off, open the session log, sign out.
+- **On a wide screen the page opens in a side panel** on the right, and the list stays where it was. Moving
+  in the list (↑↓, j/k, a click, or ↑ ↓ in the panel's header) shows the new row in the panel, and the list selects the row the panel shows; `Esc` or ✕ closes it; **⤢ page** opens it as
+  its own page; its left edge drags it wider or narrower (←→ on the edge too), kept on that device. A link in
+  the panel (a repo's PR, a run's repo) opens in the panel too. The URL holds it as `?side=` (`pr:acme/web#7`,
+  `run:acme/web@123`, `release:acme/web@v1.2.0`, `repo:acme/web`, `issue:acme/web#3`), so a reload or a
+  shared link shows the same; a link straight to a page (`/pr?repo=…`) still opens the page, and on a phone a
+  `?side=` link opens the page full screen.
 - **Every repo setting is on the repo page** (the **settings** panel): all that GitHub's or GitLab's API reads,
   by area (general, features, pull or merge requests, security, Actions or CI/CD, Pages, approvals, push
   rules, ...), with collaborators, teams, members, webhooks, deploy keys, environments and variables as lists.
@@ -101,7 +118,8 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   checks, fix the drift, sync) and the repo pickers of new releases and issues follow it too.
 - **Approvals** leave out runs nobody needs any more: a run of a PR that was closed or got newer commits, a run
   a newer one of the same workflow and branch replaced, and on GitLab manual jobs of older pipelines and older
-  blocked deployments of an environment.
+  blocked deployments of an environment. Enter opens the run (beside the list on a wide screen), and a run
+  page that waits for your review has **a** approve on it too.
 - **Caching:** a tab you go back to shows its last answer at once and asks again after a minute; `r` and
   every change ask again right away.
 - **Follow-ups:** a change shows without `r`. Marking a PR ready or turning on auto-merge changes its row at
@@ -118,12 +136,15 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   connected accounts, API keys, sessions and plugin secrets.
 - **Keys:** arrows or `j`/`k` move, Enter acts, `/` filters, `r` reloads, `t` switches the theme
   (bricks, dark, or mortar, light) and saves your choice to your account, so every browser you sign in
-  with uses it; `?` lists the keys. A list takes the keys as soon as it opens. On a detail page (a repo,
+  with uses it; `?` opens a sheet with the keys of what is on screen (read from its buttons) and those that work everywhere. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
 - **Filters in the link.** The filters of Issues (state, mine, label, age), Runs (only failed, per repo),
   Releases (only problems, only unreleased) and Stats (days) are in the page's link, such as
   `/issues?state=closed&mine=1` or `/runs?failed=1`, so a bookmark, a shared link or a saved view opens the same list. A value the menus don't offer falls back to the default.
+- **Export:** **⤓ csv** next to a list's filter downloads the list as shown (filter and sort applied, cells
+  in words) as a CSV file. It is made in the browser; cells that a spreadsheet would run as a formula
+  start with `'`.
 
 ## Run it
 

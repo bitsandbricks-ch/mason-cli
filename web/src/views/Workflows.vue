@@ -9,6 +9,7 @@ import { loadGroups, narrowed, scope } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
+import { openOut } from '../links.js'
 
 const KIND = { pinned: 'unpinned', permissions: 'token', pull_request_target: 'pr target', injection: 'injection' }
 const BAD = new Set(['pull_request_target', 'injection'])
@@ -35,8 +36,8 @@ async function pinRepos(repos) {
     '/workflows/pin', { repos })
   if (text !== null) { output.value = text; load(true) }
 }
-const pinOne = () => current.value && pinRepos([current.value.repo])
-const open = (r) => r && window.open(`https://github.com/${r.repo}/blob/HEAD/${r.path}#L${r.line}`, '_blank', 'noopener')
+const pinOne = () => current.value?.raw === 'pinned' && pinRepos([current.value.repo]) // like the button: only on an unpinned action
+const open = (r) => r && openOut(`https://github.com/${r.repo}/blob/HEAD/${encodeURI(r.path)}#L${Number(r.line) || 1}`)
 useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: () => open(current.value) })
 </script>
 
@@ -52,8 +53,8 @@ useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: 
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('✓ every action is pinned to a commit', [], narrowed())" @activate="open" /></div>
-      <div class="pad"><TextPane :text="output || (current ? `${current.repo}\n${current.path}:${current.line}\n\n${current.text}` : '')"
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('✓ every action is pinned to a commit', [], narrowed())" outside @activate="open" /></div>
+      <div class="pad"><TextPane :text="output || (current ? `${current.repo}\n${current.path}:${current.line}\n\n${current.text}${current.raw === 'pinned' ? '\n\np pins the repo\'s actions to commits' : '\n\nfixed by hand in the workflow file: o opens it'}` : '')"
         placeholder="p opens a PR that pins the selected repo's actions to commit SHAs; A does it for every repo listed" /></div>
     </div>
   </div>
