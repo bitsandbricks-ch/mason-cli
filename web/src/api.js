@@ -5,11 +5,15 @@ import { reactive } from 'vue'
 export const state = reactive({
   me: null,          // /api/v1/me
   loaded: false,
-  dryRun: false,     // every change is a dry run while this is on
+  dryRun: savedDry(), // every change is a dry run while this is on (kept for this tab: a reload doesn't turn it off)
   log: [],           // [{at, text, kind, detail, where}] the bottom log (click it for all of them)
   busy: 0,
   rate: null,
 })
+
+// dry run survives a reload of the tab: switched on as a safety, it mustn't go off without you noticing
+function savedDry() { try { return sessionStorage.getItem('mason-dry-run') === '1' } catch { return false } }
+export function keepDry(on) { try { if (on) sessionStorage.setItem('mason-dry-run', '1'); else sessionStorage.removeItem('mason-dry-run') } catch { /* private mode */ } }
 
 export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status }
