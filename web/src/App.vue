@@ -1,4 +1,5 @@
 <script setup>
+import { forget } from './load.js'
 import { safeNext } from './links.js'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -124,6 +125,7 @@ watch(() => state.log[0], (l) => {
 async function logout() {
   try { await post('/auth/logout') } catch (e) { log(e.message, 'error') }
   forgetLocal()
+  forget() // remembered answers belong to this account too
   state.me = { user: null, providers: state.me?.providers || [] }
   router.replace('/login')
 }

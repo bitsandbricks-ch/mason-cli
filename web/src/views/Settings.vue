@@ -1,4 +1,5 @@
 <script setup>
+import { forget } from '../load.js'
 import { safeUrl } from '../links.js'
 // Settings: logins, the defaults repo and which repos to manage, API keys, sessions and plugin secrets.
 // Everything a CLI user keeps in files lives here, per user: nobody else sees or changes yours.
@@ -86,6 +87,7 @@ async function deleteAccount() {
     const got = await del('/me')
     state.me = { user: null, providers: state.me.providers }
     forgetLocal()
+    forget()
     await tellRevoked(got)
     router.push('/login')
   } catch (e) { log(e.message, 'error') }
