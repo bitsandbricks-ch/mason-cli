@@ -11,7 +11,7 @@ import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import { pageRoute, encodeSide } from '../panel.js'
 import { useTrack } from '../side.js'
-import { RANKS, sinceLastLook, todoItems } from '../todo.js'
+import { RANKS, laterOf, sinceLastLook, todoItems } from '../todo.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 
@@ -43,10 +43,39 @@ watch(data, (items) => {
   fresh.value = got.fresh
   try { localStorage.setItem(SEEN, JSON.stringify(got.seen)) } catch { /* private mode */ }
 })
-const rows = computed(() => (data.value || []).map((i) => {
+// put off for later (z, a week; in this browser): hidden until then, Z shows them again
+const LATER = 'mason.todo.later'
+const later = ref(readLater())
+const showLater = ref(false)
+function readLater() {
+  let saved = null
+  try { saved = JSON.parse(localStorage.getItem(LATER) || 'null') } catch { /* private mode */ }
+  return laterOf(saved).later
+}
+function saveLater(next) {
+  later.value = next
+  try { localStorage.setItem(LATER, JSON.stringify(next)) } catch { /* private mode */ }
+}
+const all = computed(() => (data.value || []).map((i) => {
   const key = keyOf(i)
-  return { ...i, key, group: fresh.value.includes(key) ? `${RANKS[i.rank]} · new` : RANKS[i.rank] }
+  const off = key in later.value
+  return { ...i, key, off, group: `${RANKS[i.rank]}${fresh.value.includes(key) ? ' · new' : ''}${off ? ' · later' : ''}` }
 }))
+const rows = computed(() => (showLater.value ? all.value : all.value.filter((r) => !r.off)))
+const putOff = computed(() => all.value.filter((r) => r.off).length)
+function toggleLater() {
+  const r = current.value
+  if (!r) return
+  const next = { ...later.value }
+  if (r.off) delete next[r.key]
+  else next[r.key] = Date.now() + 7 * 86_400_000
+  // the row leaves the list: the one below it (or above) takes the selection
+  const list = rows.value
+  const i = list.indexOf(r)
+  const after = !r.off && !showLater.value ? (list[i + 1] || list[i - 1])?.key ?? null : sel.value
+  saveLater(next)
+  sel.value = after
+}
 const columns = [
   { key: 'group', label: 'what', cls: (r) => r.cls, mark: false, card: 'head' },
   { key: 'repo', label: 'repo', cls: () => '' },
@@ -59,7 +88,7 @@ const page = (r) => { const x = r || current.value; if (x) router.push(pageRoute
 // any kind: the list mixes runs, repos, PRs and releases, and the panel shows whichever row you are on
 useTrack(() => current.value?.target, { sel, kind: '*', key: (t) => rows.value.find((r) => encodeSide(r.target) === encodeSide(t))?.key ?? null })
 const counts = computed(() => Object.entries(RANKS).map(([k, label]) => ({ label, n: rows.value.filter((r) => r.rank === Number(k)).length })))
-useKeys({ r: () => load(true), p: () => page() })
+useKeys({ r: () => load(true), p: () => page(), z: toggleLater, Z: () => { showLater.value = !showLater.value } })
 </script>
 
 <template>
@@ -71,7 +100,9 @@ useKeys({ r: () => load(true), p: () => page() })
         <span v-for="c in counts" :key="c.label" :class="c.n ? '' : 'dim'"><b>{{ c.n }}</b> {{ c.label }}</span>
         <span v-if="fresh.length" class="accent"><b>{{ fresh.length }}</b> new since your last look</span>
       </span>
+      <button v-if="putOff" class="hide-xs" :class="{ on: showLater }" @click="showLater = !showLater"><span class="k">Z</span> {{ showLater ? 'hide' : 'show' }} {{ putOff }} for later</button>
       <span class="spacer" />
+      <button class="hide-xs" :disabled="!current" @click="toggleLater"><span class="k">z</span> {{ current?.off ? 'back to the list' : 'later (a week)' }}</button>
       <button class="primary hide-xs" :disabled="!current" @click="page()"><span class="k">⏎</span> open</button>
     </div>
     <div v-if="missing.length" class="pad warn">couldn't read {{ missing.join(', ') }}: their items may be missing (r tries again)</div>
@@ -87,7 +118,7 @@ useKeys({ r: () => load(true), p: () => page() })
     </div>
     <div v-else class="scroll">
       <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.key"
-                 :empty="loading ? 'loading…' : '✓ nothing waits for you: no approvals, nothing broken, no drift'" @activate="page" />
+                 :empty="loading ? 'loading…' : putOff ? `✓ nothing else: ${putOff} put off for later (Z shows them)` : '✓ nothing waits for you: no approvals, nothing broken, no drift'" @activate="page" />
     </div>
   </div>
 </template>

@@ -80,3 +80,11 @@ export function sinceLastLook(keys, seen, { now = Date.now(), keepDays = 30, bef
   for (const k of keys) next[k] = now
   return { fresh, seen: next }
 }
+
+// Items you put off ("later", z): {key: until}. Returns the keys still put off and the map to keep, without the
+// ones whose time is up, so an item comes back by itself.
+export function laterOf(later, now = Date.now()) {
+  const keep = {}
+  for (const [k, until] of Object.entries(later || {})) if (until > now) keep[k] = until
+  return { hidden: new Set(Object.keys(keep)), later: keep }
+}

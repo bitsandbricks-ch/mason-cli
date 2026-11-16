@@ -1,7 +1,7 @@
 // node --test (npm test): what the "to do" view lists, and in which order.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { sinceLastLook, todoItems } from '../src/todo.js'
+import { laterOf, sinceLastLook, todoItems } from '../src/todo.js'
 
 const status = {
   head: ['group', 'released', 'PRs ready/draft', 'CI'],
@@ -88,4 +88,11 @@ test('new since the last look: nothing on the first one, then what appeared', ()
   assert.deepEqual(sinceLastLook(['a', 'c'], second.seen, { now: 3000, before: second.fresh }).fresh, ['c'])
   // what wasn't listed for a month is forgotten
   assert.deepEqual(Object.keys(sinceLastLook([], { old: 0, b: 40 * 86_400_000 }, { now: 41 * 86_400_000 }).seen), ['b'])
+})
+
+test('put off for later: hidden until its day, then back by itself', () => {
+  const got = laterOf({ a: 2000, b: 500 }, 1000)
+  assert.deepEqual([...got.hidden], ['a'])
+  assert.deepEqual(got.later, { a: 2000 })
+  assert.equal(laterOf(null).hidden.size, 0)
 })
