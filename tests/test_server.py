@@ -284,7 +284,32 @@ def test_proxy_allowlist():
     assert allowed("GET", "/repos/acme/web/hooks") and allowed("GET", "/repos/acme/web/keys")  # doctor reads the lists
     assert not allowed("GET", "/repos/acme/web/hooks/1") and not allowed("POST", "/repos/acme/web/hooks")
     assert not allowed("POST", "/repos/acme/web/keys") and allowed("PATCH", "/repos/acme/web/properties/values")
+    # a dot or slash still encoded would be decoded once more on GitHub's side and leave the repo
+    for sneaky in ("/repos/acme/web/contents/%2e%2e/%2E%2E/%2e%2e/user/keys", "/repos/acme/web/contents/a%2Fb",
+                   "/repos/acme/web/contents/../../user", "/repos/acme/web/contents/a\\b"):
+        assert not allowed("PUT", sneaky) and not allowed("GET", sneaky)
+    assert allowed("PUT", "/repos/acme/web/contents/docs/a b.md")
 
+
+
+def test_proxy_graphql_reads_the_document_not_its_text():
+    from mason.server.api.proxy import operations
+    assert operations("# hi\n{ viewer { login } }") == [("query", ["viewer"])]
+    assert operations('query { a: repository(owner: "a", name: "b") { ...R } }\nfragment R on Repository { id }') == \
+        [("query", ["repository"])]
+    ok = 'mutation($i: MergePullRequestInput!) { m: mergePullRequest(input: $i) { clientMutationId } }'
+    assert operations(ok) == [("mutation", ["mergePullRequest"])]
+    # what a regex over the text missed: commas and comments are space, and a string is only text
+    assert operations('mutation { mergePullRequest(input: {}) { a } deleteRef , (input: {}) { a } }')[0][1] == \
+        ["mergePullRequest", "deleteRef"]
+    hidden = 'mutation { mergePullRequest(input: {commitHeadline: "#(input:"}) { a } deleteRef #c\n(input: {}) { a } }'
+    assert operations(hidden)[0][1] == ["mergePullRequest", "deleteRef"]
+    assert operations('mutation { ...F } fragment F on Mutation { deleteRef(input: {}) { a } }') == [("mutation", None)]
+    assert [k for k, _ in operations(",mutation { deleteRef(input: {}) { a } }")] == ["mutation"]
+    assert len(operations("query { a } mutation { deleteRef(input: {}) { a } }")) == 2
+    for bad in ("", "nonsense { a }", "{ a", 'query { a(b: "open) }'):
+        with pytest.raises(ValueError):
+            operations(bad)
 
 def test_defaults_editor(op):
     _, c = op
