@@ -2,7 +2,7 @@
 // The side panel (wide screens): a repo, PR, issue, run or release on the right, next to the list you
 // opened it from, so the list stays where it was. ?side= in the URL holds it (see panel.js); Esc or ✕ closes
 // it, "page" opens it as its own page, and the left edge drags it wider or narrower (kept on this device).
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { clampWidth, encodeSide, pageRoute } from '../panel.js'
 import { log } from '../api.js'
@@ -27,7 +27,17 @@ const label = computed(() => {
   const s = encodeSide(t).replace(/^\w+:/, '')
   return t.kind === 'pr' && t.repo.startsWith('gitlab:') ? s.replace(/#(\d+)$/, '!$1') : s // GitLab calls them !2
 })
-watch(target, (t) => { sideOpen.value = !!t }, { immediate: true })
+watch(target, (t, before) => {
+  sideOpen.value = !!t
+  // closed while focus was in it (or nowhere): give the list the keys again, so ↑↓ and Enter go on from the row
+  if (!t && before) {
+    nextTick(() => {
+      const a = document.activeElement
+      if (a && a !== document.body && document.contains(a)) return
+      document.querySelector('main table.table[tabindex]')?.focus({ preventScroll: true })
+    })
+  }
+}, { immediate: true })
 onBeforeUnmount(() => { sideOpen.value = false })
 
 // ‹ › step through the list beside the panel, as ↑↓ in it would (its order, filter and sort)
