@@ -278,10 +278,12 @@ def exists(repo: str) -> bool:
 def get_file(repo: str, path: str, ref: str | None = None) -> tuple[str, str] | None:
     """(text, blob sha) of a file, or None when it doesn't exist."""
     import base64
+    from urllib.parse import quote
 
-    q = f"?ref={ref}" if ref else ""
+    # encoded: a path may hold a space, a ref a "#" (the web app sends these over HTTP, not through gh)
+    q = f"?ref={quote(ref, safe='')}" if ref else ""
     try:
-        data = api("GET", f"/repos/{repo}/contents/{path}{q}")
+        data = api("GET", f"/repos/{repo}/contents/{quote(path)}{q}")
     except RuntimeError as err:
         if "404" in str(err) or "Not Found" in str(err):
             return None
@@ -304,7 +306,9 @@ def put_file(repo: str, branch: str, path: str, text: str, sha: str | None, mess
     body = {"message": message, "branch": branch, "content": base64.b64encode(text.encode()).decode()}
     if sha:
         body["sha"] = sha
-    api("PUT", f"/repos/{repo}/contents/{path}", body)
+    from urllib.parse import quote
+
+    api("PUT", f"/repos/{repo}/contents/{quote(path)}", body)
 
 
 def open_pr(repo: str, base: str, branch: str, files: dict[str, tuple[str, str | None]],
