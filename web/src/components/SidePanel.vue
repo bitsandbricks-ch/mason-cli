@@ -4,7 +4,8 @@
 // it, "page" opens it as its own page, and the left edge drags it wider or narrower (kept on this device).
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { clampWidth, encodeSide } from '../panel.js'
+import { clampWidth, encodeSide, pageRoute } from '../panel.js'
+import { log } from '../api.js'
 import { SIDE, listKind, openAsPage, sideOpen, useSide } from '../side.js'
 
 const PAGES = {
@@ -35,6 +36,14 @@ function step(key) {
   const list = document.querySelector('main table.table[tabindex]')
   list?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
 }
+
+// a link to it as its own page, to paste in a chat or an issue (the panel's own URL depends on the list)
+const copied = ref(false)
+async function copyLink() {
+  const url = window.location.origin + router.resolve(pageRoute(target.value)).href
+  try { await navigator.clipboard.writeText(url); copied.value = true; setTimeout(() => { copied.value = false }, 1500) } catch { log(url, 'info') }
+}
+watch(target, () => { copied.value = false })
 
 const KEY = 'mason-side-width'
 function saved() { try { return Number(localStorage.getItem(KEY)) || NaN } catch { return NaN } }
@@ -82,6 +91,7 @@ function nudge(e) {
         <button title="the one above in the list (↑)" aria-label="previous in the list" @click="step('ArrowUp')">↑</button>
         <button title="the one below in the list (↓)" aria-label="next in the list" @click="step('ArrowDown')">↓</button>
       </template>
+      <button title="copy a link to its page" @click="copyLink">{{ copied ? '✓ copied' : 'link' }}</button>
       <button title="open as its own page" @click="openAsPage(router, target)">⤢ page</button>
       <button title="close (esc)" aria-label="close the panel" @click="side.close()"><span class="k">esc</span> ✕</button>
     </div>
