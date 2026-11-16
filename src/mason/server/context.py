@@ -48,6 +48,17 @@ def valid_repo(value: str) -> str:
     return value
 
 
+def number(value, what: str = "number") -> int:
+    """A whole number from a request (a PR, issue or run), or 400: "abc" used to end as a 500."""
+    try:
+        n = int(value or 0)
+    except (TypeError, ValueError):
+        abort(400, f"{what}: a whole number, not {str(value)[:20]!r}")
+    if n < 0:
+        abort(400, f"{what}: a whole number, not {n}")
+    return n
+
+
 def user_settings(user) -> dict:
     s = user.settings
     blank = {list: [], str: "", bool: True}  # org_defaults: on unless turned off

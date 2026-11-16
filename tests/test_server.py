@@ -257,6 +257,21 @@ def test_sign_in_returns_only_to_this_site():
                 "\t//example.com", "/ /x", "/" + "a" * 300):
         assert safe_next(bad) == "/", bad
 
+
+def test_bad_numbers_are_400_and_a_bug_is_json(op, monkeypatch):
+    _, c = op
+    r = c.post("/api/v1/ready", json={"repo": "acme/web", "number": "x"}, headers=H)
+    assert r.status_code == 400 and "whole number" in r.json["error"]
+    assert c.post("/api/v1/run/rerun", json={"repo": "acme/web", "id": -3}, headers=H).status_code == 400
+    assert c.get("/api/v1/audit?limit=lots").status_code == 200
+    from mason.server.api import repos
+
+    def boom(*a, **k):
+        raise ZeroDivisionError("secret detail")
+    monkeypatch.setattr(repos, "capture_rate", boom)
+    r = c.post("/api/v1/ready", json={"repo": "acme/web", "number": 7}, headers=H)
+    assert r.status_code == 500 and "ZeroDivisionError" in r.json["error"] and "secret" not in r.json["error"]
+
 def test_api_keys_and_device_login(op):
     app, c = op
     r = c.post("/api/v1/keys", json={"name": "laptop", "scope": "read"}, headers=H)

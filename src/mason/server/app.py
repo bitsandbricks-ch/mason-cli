@@ -75,6 +75,17 @@ def create_app(op: S.Settings | None = None) -> Flask:
             return auth.error_json(err)
         return err
 
+    @app.errorhandler(Exception)
+    def _crash(err):
+        # a bug: the web app gets JSON it can show ("500 INTERNAL SERVER ERROR" in HTML said nothing), the details
+        # go to the server's log only
+        if isinstance(err, HTTPException):
+            return _http_error(err)
+        app.logger.exception("unhandled error on %s %s", request.method, request.path)
+        if request.path.startswith("/api/"):
+            return jsonify({"error": f"the server hit a bug ({type(err).__name__}); it is in the server's log"}), 500
+        return "the server hit a bug; it is in the server's log", 500
+
     @app.errorhandler(limits.Limited)
     def _limited(err):
         return jsonify({"error": str(err), "retry": err.retry}), 429, {"Retry-After": str(err.retry)}
