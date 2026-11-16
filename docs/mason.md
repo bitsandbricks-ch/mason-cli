@@ -139,6 +139,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` opens a sheet with the keys of what is on screen (read from its buttons) and those that work everywhere. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Pinned repos:** `*` on a repo (in the repo list or on its page, also under **actions**) pins it: it
+  comes first, marked ★, in the repo and pull request lists. `*` again unpins it. Pins are part of your
+  settings (`pinned`), so they follow you to every browser.
 - **Export:** **⤓ csv** next to a list's filter downloads the list as shown (filter and sort applied, cells
   in words) as a CSV file. It is made in the browser; cells that a spreadsheet would run as a formula
   start with `'`.
