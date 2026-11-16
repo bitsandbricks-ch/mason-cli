@@ -13,6 +13,7 @@ const writes = ref(new Set())
 const plugins = ref(new Set())
 const history = ref(load())
 const at = ref(-1)
+let draft = '' // the typed line while ↑ walks the history
 const input = ref(null)
 const screen = ref(null)
 const running = ref(false)
@@ -44,7 +45,7 @@ async function run() {
   let { line: l, ask: asks } = prepare(typed, { writes: writes.value, plugins: plugins.value, dryRun: state.dryRun })
   if (asks) {
     const a = await ask(`Run "${l}"? It can change repos.`)
-    if (!a) { out.value.push({ line: l, text: 'cancelled' }); return }
+    if (!a) { out.value.push({ line: l, text: 'cancelled' }); await settle(); return }
     if (a === 'dry') l = prepare(l, { writes: writes.value, plugins: plugins.value, dryRun: true }).line
   }
   running.value = true
@@ -54,14 +55,21 @@ async function run() {
     out.value.push({ line: l, text: `error: ${e.message}` })
   } finally {
     running.value = false
-    await nextTick()
-    screen.value?.scrollTo({ top: screen.value.scrollHeight })
-    input.value?.focus()
+    await settle()
   }
 }
+// the newest answer in view and the keys back in the line, also after a cancelled ask
+async function settle() {
+  await nextTick()
+  screen.value?.scrollTo({ top: screen.value.scrollHeight })
+  input.value?.focus()
+}
 function key(e) {
-  if (e.key === 'ArrowUp' && at.value < history.value.length - 1) { at.value++; line.value = history.value[at.value]; e.preventDefault() }
-  else if (e.key === 'ArrowDown') { at.value = Math.max(-1, at.value - 1); line.value = at.value < 0 ? '' : history.value[at.value]; e.preventDefault() }
+  // ↓ past the newest line gives back what was being typed, as a shell does
+  if (e.key === 'ArrowUp' && at.value < history.value.length - 1) {
+    if (at.value < 0) draft = line.value
+    at.value++; line.value = history.value[at.value]; e.preventDefault()
+  } else if (e.key === 'ArrowDown' && at.value >= 0) { at.value--; line.value = at.value < 0 ? draft : history.value[at.value]; e.preventDefault() }
   else if (e.key === 'l' && e.ctrlKey) { out.value = []; e.preventDefault() }
 }
 </script>
