@@ -4,7 +4,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { get, log, post, qs, state } from '../api.js'
-import { act, forget, useLoad } from '../load.js'
+import { act, change, forget, useLoad } from '../load.js'
 import { alive } from '../pick.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope, scopedRepos } from '../scope.js'
@@ -110,12 +110,13 @@ async function newIssue() {
 const split = (s) => s.split(',').map((x) => x.trim()).filter(Boolean)
 async function submit() {
   if (!form.repo || !form.title.trim()) { log('a repo and a title, please', 'warn'); return }
-  const text = await act(`Open an issue in ${form.repo}: ${form.title}?`, '/issues', {
+  const got = await change(`Open an issue in ${form.repo}: ${form.title}?`, '/issues', {
     repo: form.repo, title: form.title, body: form.body, labels: split(form.labels), assignees: split(form.assignees),
   })
-  if (text === null) return
-  detail.value = text
-  if (!text.startsWith('error')) { Object.assign(form, { open: false, title: '', body: '', labels: '', assignees: '' }); load(true) }
+  if (!got) return
+  detail.value = got.text
+  // a dry run keeps what was typed
+  if (got.ok && !got.dry) { Object.assign(form, { open: false, title: '', body: '', labels: '', assignees: '' }); load(true) }
 }
 const open = () => openOut(current.value?.url)
 const router = useRouter()

@@ -5,7 +5,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePage } from '../side.js'
 import { get, qs } from '../api.js'
-import { act, cached, forget } from '../load.js'
+import { act, cached, change, forget } from '../load.js'
 import { useKeys } from '../keys.js'
 import ActionList from '../components/ActionList.vue'
 import EventLog from '../components/EventLog.vue'
@@ -49,10 +49,10 @@ watch(word, async (w) => {
 async function approve() {
   const w = waits.value
   if (!w || w.blocked) return
-  const t = await act(`Approve ${w.waits_for} for ${repo.value} ${w.branch || ''}?`, '/approve', { repo: repo.value, id: id.value, kind: w.kind })
-  if (t === null) return
-  output.value = t
-  if (!t.startsWith('error')) { forget('/approvals'); waits.value = null; setTimeout(load, 2000); log.value?.burst() }
+  const got = await change(`Approve ${w.waits_for} for ${repo.value} ${w.branch || ''}?`, '/approve', { repo: repo.value, id: id.value, kind: w.kind })
+  if (!got) return
+  output.value = got.text
+  if (got.ok && !got.dry) { forget('/approvals'); waits.value = null; setTimeout(load, 2000); log.value?.burst() }
 }
 const timer = setInterval(() => { if (running.value && !document.hidden) { load(); log.value?.refresh() } }, 10_000)
 onBeforeUnmount(() => clearInterval(timer))

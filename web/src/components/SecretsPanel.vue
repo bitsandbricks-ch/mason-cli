@@ -5,7 +5,7 @@
 // more repos (a token every plugin needs).
 import { ref, watch } from 'vue'
 import { get, qs } from '../api.js'
-import { act } from '../load.js'
+import { change } from '../load.js'
 import ErrorNote from './ErrorNote.vue'
 
 const props = defineProps({ repo: { type: String, required: true } })
@@ -29,11 +29,11 @@ async function save(r) {
   const more = (also.value[id(r)] || '').split(/[\s,]+/).filter(Boolean)
   const repos = [props.repo, ...more]
   const where = r.env ? `${r.name} (environment ${r.env})` : r.name
-  const text = await act(`Set the secret ${where} in ${repos.join(', ')}?`, '/repo/secrets', { repos, name: r.name, env: r.env || undefined, value },
+  const got = await change(`Set the secret ${where} in ${repos.join(', ')}?`, '/repo/secrets', { repos, name: r.name, env: r.env || undefined, value },
     { detail: 'Encrypted for GitHub with each repo\'s public key. Mason doesn\'t keep it; the audit log names the secret, never its value.' })
-  if (text === null) return
-  values.value[id(r)] = ''
-  emit('done', { text, ok: !text.startsWith('error') })
+  if (!got) return
+  if (!got.dry) values.value[id(r)] = '' // a dry run keeps the value for the real one
+  emit('done', { text: got.text, ok: got.ok })
   load()
 }
 </script>
