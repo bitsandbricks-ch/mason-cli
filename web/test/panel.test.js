@@ -105,3 +105,13 @@ test('what counts as leaving the page (for unsaved changes)', async () => {
 test('a list of mixed kinds (to do) makes the panel follow any kind', () => {
   assert.deepEqual(follow({ kind: 'pr', repo: 'a/b', number: 1 }, { kind: 'repo', repo: 'a/b' }, true), { kind: 'repo', repo: 'a/b' })
 })
+
+test('the tab title names what is open', async () => {
+  const { titleFor } = await import('../src/panel.js')
+  const labels = { '/prs': 'pull requests', '/': 'repos' }
+  assert.equal(titleFor({ path: '/prs', query: {} }, labels), 'pull requests · Mason')
+  assert.equal(titleFor({ path: '/prs', query: { side: 'pr:acme/web#7' } }, labels), 'acme/web#7 · pull requests · Mason')
+  assert.equal(titleFor({ path: '/pr', query: { repo: 'acme/web', number: '7' } }, labels), 'acme/web#7 · Mason')
+  assert.equal(titleFor({ path: '/run', query: { repo: 'gitlab:g/app', id: '5' } }, labels), 'g/app@5 · Mason')
+  assert.equal(titleFor({ path: '/nowhere', query: {} }, labels), 'Mason')
+})

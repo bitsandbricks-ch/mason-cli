@@ -4,7 +4,8 @@ import './style.css'
 import { createApp } from 'vue'
 import App from './App.vue'
 import { log } from './api.js'
-import { router } from './router.js'
+import { TABS, router } from './router.js'
+import { titleFor } from './panel.js'
 import { installSide } from './side.js'
 import { installUnsaved } from './unsaved.js'
 import { staleChunk } from './links.js'
@@ -23,6 +24,9 @@ router.onError((err, to) => {
   window.location.assign(to.fullPath)
 })
 router.afterEach(() => { try { sessionStorage.removeItem('mason-reloaded') } catch { /* private mode */ } })
+// each tab and history entry says what it shows: "acme/web#7 · pull requests · Mason"
+const LABELS = Object.fromEntries(TABS.map((t) => [t.path, t.label]))
+router.afterEach((to) => { document.title = titleFor(to, LABELS) })
 
 const app = createApp(App)
 // a bug in a view shows in the log line instead of only in the browser console, and the rest keeps working

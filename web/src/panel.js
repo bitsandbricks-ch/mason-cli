@@ -111,3 +111,14 @@ export function leaves(to, from) {
   return to.path !== from.path || (to.query?.side || '') !== (from.query?.side || '') ||
     (!!targetOf(to) && encodeSide(targetOf(to)) !== encodeSide(targetOf(from) || {}))
 }
+
+// The browser tab's title: what is open first (the panel's item, a detail page's item, or the view), so tabs
+// and history entries tell apart. labels: path -> the view's name (router.js TABS).
+export function titleFor(route, labels = {}, app = 'Mason') {
+  const name = (t) => encodeSide(t).replace(/^\w+:/, '').replace(/^gitlab:/, '')
+  const side = decodeSide(route?.query?.side)
+  const page = targetOf(route)
+  const view = labels[route?.path]
+  const parts = side ? [name(side), view] : page ? [name(page)] : [view]
+  return [...parts.filter(Boolean), app].join(' · ')
+}
