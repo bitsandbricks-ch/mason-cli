@@ -42,7 +42,11 @@ const vbar = ref(null)
 async function load(fresh = false) {
   if (!repo.value) return
   if (!detail.value) detail.value = '…'
-  try { const got = await cached(`/repo${qs({ repo: repo.value, fresh })}`, fresh); detail.value = got.text; info.value = got.info || null } catch (e) { detail.value = `error: ${e.message}` }
+  const asked = repo.value // the page can move to another repo before the answer comes
+  try {
+    const got = await cached(`/repo${qs({ repo: asked, fresh })}`, fresh)
+    if (asked === repo.value) { detail.value = got.text; info.value = got.info || null }
+  } catch (e) { if (asked === repo.value) detail.value = `error: ${e.message}` }
 }
 
 // the open PRs (and MRs), as links to their pages
