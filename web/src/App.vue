@@ -222,7 +222,7 @@ window.addEventListener('keydown', (e) => {
       <label class="check" title="every change only shows what it would do">
         <input v-model="state.dryRun" type="checkbox"> <span :class="state.dryRun ? 'warn' : 'dim'">dry<span class="hide-xs"> run</span></span>
       </label>
-      <button title="t switches the theme" aria-label="switch the theme" @click="theme = themes[(themes.indexOf(theme) + 1) % themes.length]"><span aria-hidden="true">◐</span><span class="hide-xs"> {{ theme }}</span></button>
+      <button title="t switches the theme" aria-label="switch the theme" @click="theme = themes[(themes.indexOf(theme) + 1) % themes.length]"><span aria-hidden="true">◐</span><span class="hide-xs" style="margin-left: 0.4em">{{ theme }}</span></button>
       <button @click="logout"><span class="hide-xs">logout</span><span class="show-xs">exit</span></button>
     </header>
     <div class="navs">
