@@ -20,7 +20,8 @@ async function startDevice(p) {
   stop?.()
   stop = deviceSignIn(p, { next: String(route.query.next || '/') }, {
     code: (d) => { device.value = d },
-    done: (to) => { window.location.assign(to) },
+    // only a path of this site (the server checks it too): never another site's URL
+    done: (to) => { window.location.assign(/^\/(?![/\\])[^\s\\]*$/.test(to) ? to : '/') },
     fail: (msg) => { device.value = null; error.value = msg },
   })
 }

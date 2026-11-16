@@ -76,6 +76,9 @@ def providers():
 
 def safe_next(value: str | None) -> str:
     v = value or "/"
+    # browsers drop tabs and newlines from a URL, so "/\t/example.com" would become "//example.com": another site
+    if any(ord(c) < 0x21 or ord(c) == 0x7F for c in v):
+        return "/"
     return v if v.startswith("/") and not v.startswith("//") and "\\" not in v and len(v) < 200 else "/"
 
 

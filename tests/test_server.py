@@ -247,6 +247,14 @@ def test_console_asks_the_parser_what_writes():
     assert not w("issue view web#1") and w("issue close web#1") and w("issue")
     assert not w("status")
 
+
+def test_sign_in_returns_only_to_this_site():
+    from mason.server.api.account import safe_next
+    assert safe_next("/runs?repo=acme/web") == "/runs?repo=acme/web" and safe_next(None) == "/"
+    for bad in ("//example.com", "https://example.com", "/\\example.com", "/\t/example.com", "/\n/example.com",
+                "\t//example.com", "/ /x", "/" + "a" * 300):
+        assert safe_next(bad) == "/", bad
+
 def test_api_keys_and_device_login(op):
     app, c = op
     r = c.post("/api/v1/keys", json={"name": "laptop", "scope": "read"}, headers=H)
