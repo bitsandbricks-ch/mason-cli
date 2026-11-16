@@ -34,12 +34,14 @@ const log = ref(null)
 async function load(tag = '', fresh = false) {
   if (!repo.value) return
   loading.value = true
+  const name = repo.value
   try {
-    const got = await cached(`/release${qs({ repo: repo.value, tag, fresh })}`, fresh)
+    const got = await cached(`/release${qs({ repo: name, tag, fresh })}`, fresh)
+    if (name !== repo.value) return // the panel moved on to another repo
     if (!tag || !page.value) page.value = got // a link to a tag still needs the list
     text.value = got.text
     sel.value = got.selected || null
-  } catch (e) { text.value = `error: ${e.message}` } finally { loading.value = false }
+  } catch (e) { if (name === repo.value) text.value = `error: ${e.message}` } finally { if (name === repo.value) loading.value = false }
 }
 watch(repo, () => { page.value = null; form.value = ''; output.value = ''; waitFor = ''; load(String(query.value.tag || '')) }, { immediate: true })
 watch(sel, (tag, before) => { if (tag && before && tag !== before) { setQuery({ tag }); load(tag) } })
