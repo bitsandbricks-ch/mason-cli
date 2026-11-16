@@ -434,3 +434,24 @@ button.wide { width: 100%; text-align: left; }
 .side-open main .split.ld > :nth-child(2) { display: none; }
 .side-open main .split.ld > :first-child { border-right: 0; }
 .side-open main .view > .events.band { display: none; }
+
+/* the jump box (ctrl+k) */
+.modal.palette-wrap { place-items: start center; padding-top: 12vh; }
+.palette { width: min(640px, calc(100vw - 32px)); background: var(--bg); border: 1px solid var(--accent); box-shadow: var(--glow); }
+.palette > .row { padding: 8px 10px; border-bottom: 1px solid var(--line); gap: 8px; }
+.palette input { border: 0; outline: none; font-size: 14px; background: transparent; }
+.palette ul { list-style: none; margin: 0; padding: 4px 0; max-height: 52vh; overflow: auto; }
+.palette li { display: flex; gap: 10px; align-items: baseline; padding: 4px 12px; cursor: pointer; white-space: nowrap; }
+.palette li.sel { background: var(--sel); }
+.palette li.sel .label::before { content: "▸ "; color: var(--accent); }
+.palette li.static { cursor: default; }
+.palette .kind { flex: 0 0 5ch; }
+.palette .label { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.palette .hint { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; text-align: right; }
+.palette .foot-keys { border-top: 1px solid var(--line); padding: 4px 12px; }
+.palette .foot-keys b { color: var(--accent); font-weight: 400; }
+@media (max-width: 700px) {
+  .modal.palette-wrap { padding-top: 8px; }
+  .palette li { padding: 10px 12px; }
+  .palette .hint, .palette .foot-keys { display: none; }
+}

@@ -69,6 +69,8 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   too (Enter, or **p** on the list): a PR's page merges, auto-merges, marks ready and shows the diff; an
   issue's page comments, closes and reopens; a run's page lists every job and step with its time and runs
   the failed jobs again (**R**). `Esc` goes back.
+- **ctrl+k (⌘k, or ⌕ jump in the top bar) jumps anywhere:** type a few letters of a repo, a PR or MR, an
+  issue or a view; ↑↓ pick, Enter goes there (a repo, PR or issue opens in the side panel on a wide screen).
 - **On a wide screen the page opens in a side panel** on the right, and the list stays where it was. Moving
   in the list (↑↓, j/k, a click) shows the new row in the panel; `Esc` or ✕ closes it; **⤢ page** opens it as
   its own page; its left edge drags it wider or narrower (←→ on the edge too), kept on that device. A link in
