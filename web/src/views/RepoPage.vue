@@ -165,7 +165,7 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
         <router-link class="btn primary" to="/settings">connect {{ needs }} in settings</router-link>
       </div>
     </div>
-    <div v-else class="split page">
+    <div v-else class="split page repo-cols">
       <div class="pad">
         <div class="hide-xs"><h2>actions</h2><ActionList :actions="actions" /></div>
         <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" @result="(d) => (doctor = d)" @run="fixFrom" />

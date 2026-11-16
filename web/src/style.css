@@ -498,3 +498,12 @@ button.wide { width: 100%; text-align: left; }
 .picked-bar b { color: var(--accent); font-weight: 400; }
 /* the box only shows the pick: the cell takes the click (a box that handled it reverted its own tick) */
 .table .pick input { pointer-events: none; }
+
+/* a repo's page in one column (a phone, a narrow side panel): its version, PRs and branches first, the long
+   defaults, rules and settings after them */
+@media (max-width: 900px) { .split.page.repo-cols > :last-child { order: -1; border-bottom: 1px dashed var(--line); } }
+@container (max-width: 879px) {
+  .side-body .split.page.repo-cols { display: flex; flex-direction: column; }
+  .side-body .split.page.repo-cols > :last-child { order: -1; border-bottom: 1px dashed var(--line); }
+  .side-body .split.page.repo-cols > :first-child { border-bottom: 0; }
+}
