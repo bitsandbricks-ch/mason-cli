@@ -72,6 +72,10 @@ def test_signed_out_and_headers(op):
     assert r.status_code == 302 and "code_challenge_method=S256" in r.headers["Location"]
     assert "state=" in r.headers["Location"] and "mason_oauth=" in r.headers["Set-Cookie"]
     assert anon.get("/api/v1/auth/github/callback?state=nope&code=x").headers["Location"].startswith("/login?error=")
+    # a provider's error: only its code reaches the sign-in page, not text from whoever made the link
+    bad = "/api/v1/auth/github/callback?error=access_denied&error_description=Mason+moved+to+evil.example"
+    loc = anon.get(bad).headers["Location"]
+    assert "evil" not in loc and "access_denied" in loc
     assert anon.get("/api/v1/auth/gitlab/login").status_code == 404  # not set up
 
 

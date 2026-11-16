@@ -16,6 +16,7 @@ import ReleaseForm from '../components/ReleaseForm.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 import { openDetail } from '../ui.js'
+import { openOut } from '../links.js'
 
 // the route's query, or the side panel's when it shows in one (and then back closes the panel)
 const { query, back, setQuery } = usePage('/releases')
@@ -58,7 +59,7 @@ const badges = computed(() => {
   if (page.value.busy) out.push({ label: 'release run', value: 'running', cls: 'warn' })
   return out
 })
-const open = () => { const url = current.value?.url || page.value?.url; if (url) window.open(url, '_blank', 'noopener') }
+const open = () => { const url = current.value?.url || page.value?.url; openOut(url) }
 
 // A follow-up: the list, the version and whether a release run is going; the text when it is the shown release's.
 async function refresh() {

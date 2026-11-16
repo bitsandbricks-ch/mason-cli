@@ -3,6 +3,7 @@
 // happens where Mason runs (pip install), never from the web.
 import { onMounted, ref } from 'vue'
 import { get, log } from '../api.js'
+import { safeHref } from '../links.js'
 
 const idx = ref(null)
 const error = ref('')
@@ -32,7 +33,7 @@ onMounted(load)
           <span v-if="p.installed" class="ok">installed {{ p.installed }}{{ p.loaded ? '' : ' (restart to load)' }}</span>
         </div>
         <div>{{ p.description }}</div>
-        <div class="dim">provides: {{ p.provides.join(', ') || '-' }}<template v-if="p.homepage"> · <a :href="p.homepage" target="_blank" rel="noopener noreferrer">{{ p.homepage }}</a></template></div>
+        <div class="dim">provides: {{ p.provides.join(', ') || '-' }}<template v-if="safeHref(p.homepage)"> · <a :href="safeHref(p.homepage)" target="_blank" rel="noopener noreferrer">{{ p.homepage }}</a></template></div>
       </div>
     </div>
   </div>

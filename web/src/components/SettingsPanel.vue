@@ -9,6 +9,7 @@ import { get, log, post, qs, state } from '../api.js'
 import { forget } from '../load.js'
 import { ask } from '../ui.js'
 import ErrorNote from './ErrorNote.vue'
+import { safeHref } from '../links.js'
 
 const props = defineProps({ repo: { type: String, required: true } })
 const emit = defineEmits(['done'])
@@ -94,7 +95,7 @@ defineExpose({ load })
       <div class="row">
         <input v-model="filter" placeholder="find a setting: wiki, squash, pages…" aria-label="find a setting" style="flex: 1; min-width: 18ch">
         <button @click="toggleAll">{{ areas.every((a) => open[a.name]) ? 'fold all' : 'open all' }}</button>
-        <a v-if="data.settings_url" :href="data.settings_url" target="_blank" rel="noopener" class="dim hide-xs">on {{ host }} ↗</a>
+        <a v-if="safeHref(data.settings_url)" :href="safeHref(data.settings_url)" target="_blank" rel="noopener" class="dim hide-xs">on {{ host }} ↗</a>
       </div>
       <div v-for="a in areas" :key="a.name" class="area">
         <button class="head" :aria-expanded="isOpen(a.name)" @click="open[a.name] = !open[a.name]">
@@ -136,7 +137,7 @@ defineExpose({ load })
           <div v-else-if="!l.items.length" class="dim">none</div>
           <div v-for="(it, i) in l.items" :key="i" class="item"><span>{{ it.name }}</span> <span class="dim">{{ it.detail }}</span></div>
           <div class="dim note">
-            <a v-if="l.manage" :href="l.manage" target="_blank" rel="noopener">manage on {{ host }} ↗</a>
+            <a v-if="safeHref(l.manage)" :href="safeHref(l.manage)" target="_blank" rel="noopener">manage on {{ host }} ↗</a>
             <span v-if="l.keep"> · .mason.toml key: <code>{{ l.keep }}</code></span>
             <span v-if="l.note"> · {{ l.note }}</span>
           </div>

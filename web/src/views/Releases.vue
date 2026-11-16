@@ -19,6 +19,7 @@ import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 import { openDetail } from '../ui.js'
 import { useTrack } from '../side.js'
+import { openOut } from '../links.js'
 
 const router = useRouter()
 const problems = ref(false)
@@ -84,7 +85,7 @@ function done({ text, ok, repo }) {
   follow.now([repo || sel.value])
 }
 useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n: () => newRelease('release'), T: () => newRelease('tag'), Escape: () => { form.value = '' },
-  o: () => current.value?.url && window.open(current.value.url, '_blank', 'noopener') })
+  o: () => openOut(current.value?.url) })
 </script>
 
 <template>

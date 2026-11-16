@@ -12,6 +12,7 @@ import EventLog from '../components/EventLog.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import { fieldOf } from '../ui.js'
 import TextPane from '../components/TextPane.vue'
+import { openOut } from '../links.js'
 
 // the route's query, or the side panel's when it shows in one (and then back closes the panel)
 const { query, back } = usePage('/runs')
@@ -43,7 +44,7 @@ async function rerun() {
   output.value = t
   if (!t.startsWith('error')) { forget('/runs'); setTimeout(load, 2000); log.value?.burst() }
 }
-const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
+const visit = () => { const url = detail.value.split('\n')[1]; openOut(url) }
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })
 // the header: what ran, how it ended, and which jobs failed
 const failedJobs = computed(() => detail.value.split('\n').map((l) => l.match(/^\s{2}(failure|failed|timed_out|cancelled|canceled|startup_failure)\s+(.+?)(\s{2}\(.*\))?$/))
@@ -84,7 +85,7 @@ useKeys(keys)
       <ActionList ref="sheet" class="show-compact" :actions="actions" :title="`${gitlab ? 'pipeline' : 'run'} ${id}`" compact />
       <button class="any" @click="load(); log?.refresh()"><span class="k">r</span> reload</button>
     </div>
-    <StatusHeader :title="(detail.split('\n')[0] || '').trim() && detail !== '…' ? detail.split('\n')[0] : `${gitlab ? 'pipeline' : 'run'} ${id}`"
+    <StatusHeader :title="(detail.split('\n')[0] || '').trim() && detail !== '…' && !/^error/.test(detail) ? detail.split('\n')[0] : `${gitlab ? 'pipeline' : 'run'} ${id}`"
                   :sub="repo" :url="url" :badges="badges" :blockers="failedJobs" :next="next" />
     <div class="split page">
       <div class="pad">

@@ -6,6 +6,7 @@ import { computed } from 'vue'
 import { act } from '../load.js'
 import { ask, choose } from '../ui.js'
 import { useKeys } from '../keys.js'
+import { safeHref } from '../links.js'
 
 const props = defineProps({ repo: { type: String, required: true }, version: { type: Object, default: null } })
 const emit = defineEmits(['done'])
@@ -56,7 +57,7 @@ defineExpose({ bump, release })
     </div>
     <div v-if="v.pr" class="row" style="margin-top: 6px">
       <span class="dim">bump PR</span>
-      <a class="accent" :href="v.pr.url" target="_blank" rel="noopener">#{{ v.pr.number }}</a>
+      <a class="accent" :href="safeHref(v.pr.url) || undefined" target="_blank" rel="noopener">#{{ v.pr.number }}</a>
       <span>to {{ v.pr.version }} is open; merge it, then R releases it</span>
     </div>
   </div>

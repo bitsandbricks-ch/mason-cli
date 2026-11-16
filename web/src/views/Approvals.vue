@@ -8,6 +8,7 @@ import { ago } from '../ui.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
+import { openOut } from '../links.js'
 
 const { data, error, loading, load } = useLoad((q) => `/approvals${q}`)
 loadGroups()
@@ -29,7 +30,7 @@ async function approve(r = current.value) {
   const text = await act(`Approve ${r.waits_for} for ${r.repo} ${r.branch || ''}?`, '/approve', { repo: r.repo, id: r.id, kind: r.kind })
   if (text !== null) { output.value = text; load(true) }
 }
-const open = (r) => r?.url && window.open(r.url, '_blank', 'noopener')
+const open = (r) => openOut(r?.url)
 useKeys({ r: () => load(true), a: () => approve(), o: () => open(current.value) })
 </script>
 

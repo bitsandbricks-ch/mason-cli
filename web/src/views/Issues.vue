@@ -13,6 +13,7 @@ import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import { useTrack } from '../side.js'
+import { openOut } from '../links.js'
 
 const STATES = { open: 'open', closed: 'closed', all: 'all' }
 const f = reactive({ state: 'open', mine: false, label: '', stale: 0 })
@@ -85,7 +86,7 @@ async function submit() {
   detail.value = text
   if (!text.startsWith('error')) { Object.assign(form, { open: false, title: '', body: '', labels: '', assignees: '' }); load(true) }
 }
-const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
+const open = () => openOut(current.value?.url)
 const router = useRouter()
 useTrack(() => current.value && { kind: 'issue', repo: current.value.repo, number: current.value.number })
 const page = (i) => { const r = i || current.value; if (r) router.push({ path: '/issue', query: { repo: r.repo, number: r.number } }) }

@@ -7,6 +7,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { get, qs } from '../api.js'
 import { ago } from '../ui.js'
+import { safeHref } from '../links.js'
+import ErrorNote from './ErrorNote.vue'
 
 const props = defineProps({
   repo: { type: String, required: true },
@@ -101,7 +103,7 @@ const when = (s) => { try { return new Date(s).toLocaleString() } catch { return
     </div>
     <template v-if="!folded">
     <div v-if="!ready" class="empty">pick a row to see what happened to it</div>
-    <div v-else-if="error" class="bad">error: {{ error }}</div>
+    <ErrorNote v-else-if="error" :error="error" what="couldn't read the events" />
     <div v-else-if="!shown.length" class="empty">{{ loading ? 'loading…' : 'nothing yet' }}</div>
     <ol v-else class="event-list">
       <li v-for="e in shown" :key="keyOf(e)" :class="{ new: fresh.has(keyOf(e)), more: !!e.more }" @click="toggle(e)">
@@ -114,7 +116,7 @@ const when = (s) => { try { return new Date(s).toLocaleString() } catch { return
           <span v-if="e.detail" class="detail dim">{{ e.detail }}<template v-if="e.more && !open.has(keyOf(e))"> …</template></span>
           <pre v-if="open.has(keyOf(e))" class="text more">{{ e.more }}</pre>
         </span>
-        <a v-if="e.url" class="go" :href="e.url" target="_blank" rel="noopener noreferrer" :title="e.url" @click.stop>↗</a>
+        <a v-if="safeHref(e.url)" class="go" :href="safeHref(e.url)" target="_blank" rel="noopener noreferrer" :title="e.url" @click.stop>↗</a>
       </li>
     </ol>
     </template>

@@ -17,6 +17,7 @@ import ActionList from '../components/ActionList.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import { stateClass } from '../ui.js'
 import { useTrack } from '../side.js'
+import { openOut } from '../links.js'
 
 const emit = defineEmits(['rate'])
 const { data, error, loading, load } = useLoad((q) => `/status${q}`)
@@ -94,7 +95,7 @@ const merge = (now) => sel.value && run(`${now ? 'Merge now' : 'Auto-merge'} the
 const router = useRouter()
 useTrack(() => sel.value && { kind: 'repo', repo: sel.value })
 const page = (r) => router.push({ path: '/repo', query: { repo: r?.repo || sel.value } })
-const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
+const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; openOut(url) }
 async function newRepo() {
   const { ask } = await import('../ui.js')
   const name = await ask('New repo (owner/name, or gitlab:group/name)', { input: { placeholder: 'acme/new-service' }, allowDry: false })

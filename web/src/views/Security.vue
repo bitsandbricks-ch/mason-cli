@@ -6,6 +6,7 @@ import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
+import { openOut } from '../links.js'
 
 const { data, error, loading, load } = useLoad((q) => `/security${q}`)
 loadGroups()
@@ -17,7 +18,7 @@ const columns = [
   { key: 'severity', label: 'severity' }, { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : ''), card: 'head' },
   { key: 'kind', label: 'kind', cls: () => 'dim' }, { key: 'title', label: 'alert', cls: () => '', card: 'main' }, { key: 'where', label: 'where', cls: () => 'dim' },
 ]
-const open = (r) => r?.url && window.open(r.url, '_blank', 'noopener')
+const open = (r) => openOut(r?.url)
 useKeys({ r: () => load(true) })
 </script>
 

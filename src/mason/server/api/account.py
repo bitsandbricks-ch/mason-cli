@@ -4,6 +4,7 @@ device login, settings, secrets and the audit log."""
 from __future__ import annotations
 
 import json
+import re
 from datetime import timedelta
 
 from flask import Blueprint, abort, current_app, g, jsonify, make_response, redirect, request
@@ -119,7 +120,10 @@ def callback(name: str):
     if oauth.redirect_provider(name) is None:
         abort(404)
     if request.args.get("error"):
-        return _fail(request.args.get("error_description") or request.args["error"])
+        # only the provider's error code, not its description: anyone can send a link to this callback, and its
+        # text would show on our sign-in page as if Mason said it
+        code = re.sub(r"[^a-z_]", "", request.args["error"].lower())[:40] or "error"
+        return _fail(f"{name} didn't sign you in ({code}); try again")
     state, code = request.args.get("state", ""), request.args.get("code", "")
     row = db.get(OAuthState, security.sha256(state)) if state else None
     binding = request.cookies.get(STATE_COOKIE, "")

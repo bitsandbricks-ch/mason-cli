@@ -12,6 +12,7 @@ import ActionList from '../components/ActionList.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import EventLog from '../components/EventLog.vue'
 import TextPane from '../components/TextPane.vue'
+import { openOut } from '../links.js'
 
 // the route's query, or the side panel's when it shows in one (and then back closes the panel)
 const { query, back } = usePage('/issues')
@@ -57,9 +58,9 @@ async function comment() {
   const t = await act(`Post the comment on ${name.value}?`, '/issue', { repo: repo.value, number: number.value, action: 'comment', text: said }, { detail: said })
   if (t !== null) changed(t)
 }
-const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
+const visit = () => { const url = detail.value.split('\n')[1]; openOut(url) }
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })
-const titleLine = computed(() => (detail.value === '…' ? '' : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))
+const titleLine = computed(() => (detail.value === '…' || /^error/.test(detail.value) ? '' : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))
 const badges = computed(() => {
   if (!titleLine.value) return []
   const out = [{ label: 'state', value: isOpen.value ? 'open' : 'closed', cls: isOpen.value ? '' : 'ok' }]

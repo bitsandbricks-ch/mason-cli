@@ -14,6 +14,7 @@ import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import { useTrack } from '../side.js'
+import { openOut } from '../links.js'
 
 const { data, error, loading, load, keep } = useLoad((q) => `/prs${q}`)
 loadGroups()
@@ -92,7 +93,7 @@ async function ready() {
   if (got.ok) expect(p, { draft: false })
   follow.now([p.repo])
 }
-const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
+const open = () => openOut(current.value?.url)
 const router = useRouter()
 useTrack(() => current.value && { kind: 'pr', repo: current.value.repo, number: current.value.number })
 const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }

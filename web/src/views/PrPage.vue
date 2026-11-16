@@ -12,6 +12,7 @@ import ActionList from '../components/ActionList.vue'
 import EventLog from '../components/EventLog.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import TextPane from '../components/TextPane.vue'
+import { openOut } from '../links.js'
 
 // the route's query, or the side panel's when it shows in one (and then back closes the panel)
 const { query, back } = usePage('/prs')
@@ -66,7 +67,7 @@ function changed(text, flip) {
   setTimeout(load, 10000)
   log.value?.burst()
 }
-const open = computed(() => !state.value.merged && !state.value.closed)
+const open = computed(() => !state.value.merged && !state.value.closed && !failed.value) // failed: below
 async function merge_(now) {
   if (!open.value) return
   const t = await act(`${now ? 'Merge' : 'Auto-merge'} ${ref_.value}?`, '/merge', { targets: [target.value], now, ready: state.value.draft })
@@ -89,7 +90,9 @@ const url = computed(() => detail.value.split('\n')[1])
 // What the header shows, read from the detail (the same text the CLI prints): the fields, and the checks
 // with their states, so it can say why the PR can't merge yet.
 const field = (name) => (detail.value.split('\n').find((l) => new RegExp(`^\\s+${name}\\s`).test(l)) || '').trim().slice(name.length).trim()
-const titleLine = computed(() => (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, ''))
+// an answer that is an error (no such PR, no access) is no title, and says nothing about the PR's state
+const failed = computed(() => /^error/.test(detail.value))
+const titleLine = computed(() => (failed.value || detail.value === '…' ? '' : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))
 const checks = computed(() => {
   const lines = detail.value.split('\n')
   const at = lines.findIndex((l) => /^(Checks \(|Pipeline )/.test(l))
@@ -117,6 +120,7 @@ const blockers = computed(() => {
   return out
 })
 const badges = computed(() => {
+  if (!titleLine.value) return []
   const st = state.value
   const out = [{ label: 'state', value: st.merged ? 'merged' : st.closed ? 'closed' : st.draft ? 'draft' : 'open', cls: st.merged ? 'ok' : st.draft ? 'warn' : '' }]
   if (checks.value.length) {
@@ -142,7 +146,7 @@ const next = computed(() => {
   if (!blockers.value.length && /^(ready|mergeable)/.test(merge.value)) return { text: 'ready to merge.', label: 'merge now', key: 'M', fn: () => merge_(true) }
   return { text: running.value.length ? 'checks are still running.' : "it can't merge yet.", label: 'auto-merge when it can', key: 'm', fn: () => merge_(false) }
 })
-const visit = () => { if (url.value?.startsWith('http')) window.open(url.value, '_blank', 'noopener') }
+const visit = () => openOut(url.value)
 const actions = computed(() => [
   { k: 'm', group: 'merge', primary: true, label: state.value.auto ? 'auto-merge is on' : 'auto-merge when checks pass', fn: () => merge_(false), off: !open.value || state.value.auto },
   { k: 'M', group: 'merge', label: 'merge now', fn: () => merge_(true), off: !open.value },

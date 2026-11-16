@@ -10,6 +10,7 @@ import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import { useTrack } from '../side.js'
+import { openOut } from '../links.js'
 
 const failed = ref(false)
 const limit = ref(3)
@@ -25,7 +26,7 @@ const columns = [
   { key: 'branch', label: 'branch', cls: () => '' },
   { key: 'when', label: 'when', cls: () => 'dim' },
 ]
-const open = (r) => r?.url && window.open(r.url, '_blank', 'noopener')
+const open = (r) => openOut(r?.url)
 const current = computed(() => rows.value.find((r) => r.key === sel.value))
 const router = useRouter()
 useTrack(() => current.value?.id && { kind: 'run', repo: current.value.repo, id: current.value.id })
