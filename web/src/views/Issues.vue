@@ -3,8 +3,9 @@
 // reopen and comment; n opens a new issue in any repo. Enter (or page) opens one as its own page.
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { get, log, qs } from '../api.js'
-import { act, useLoad } from '../load.js'
+import { get, log, post, qs, state } from '../api.js'
+import { act, forget, useLoad } from '../load.js'
+import { alive } from '../pick.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope, scopedRepos } from '../scope.js'
 import { ago, ask, openDetail } from '../ui.js'
@@ -54,7 +55,30 @@ async function show() {
 }
 watch([sel, sideOpen], show)
 
+// several issues at once: space or the boxes pick them, and c / u close or reopen the picked ones
+const picked = ref([])
+watch(rows, (list) => { picked.value = alive(picked.value, list.map(keyOf)) })
+const pickedRows = computed(() => rows.value.filter((i) => picked.value.includes(keyOf(i))))
+async function setPicked(close) {
+  const list = pickedRows.value.filter((i) => (close ? i.state === 'open' : i.state !== 'open'))
+  if (!list.length) { log(`none of the picked issues is ${close ? 'open' : 'closed'}`, 'warn'); return }
+  const verb = close ? 'Close' : 'Reopen'
+  const a = await ask(`${verb} ${list.length} issue${list.length === 1 ? '' : 's'}?`, {
+    detail: [state.dryRun ? 'dry run is on: nothing changes\n' : '', ...list.map((i) => `${keyOf(i)} ${i.title}`)].join('\n').trim() })
+  if (!a) return
+  const dry = a === 'dry'
+  const out = []
+  let failed = 0
+  for (const i of list) { // one at a time: each is its own call, and one that fails doesn't stop the rest
+    try { out.push((await post('/issue', { repo: i.repo, number: i.number, action: close ? 'close' : 'reopen', dry_run: dry })).text) } catch (e) { failed++; out.push(`${keyOf(i)}: error: ${e.message}`) }
+  }
+  detail.value = out.join('\n')
+  log(`${dry ? '[dry-run] ' : ''}${verb} ${list.length} issues: ${failed ? `${failed} failed` : 'done'}`, failed ? 'error' : 'ok', { detail: detail.value })
+  if (!dry) { picked.value = []; forget('/issues'); load(true) }
+}
+
 async function setState(close) {
+  if (picked.value.length) return setPicked(close)
   const i = current.value
   if (!i || (close ? i.state !== 'open' : i.state === 'open')) return
   const text = await act(`${close ? 'Close' : 'Reopen'} ${keyOf(i)} ${i.title}?`, '/issue', { repo: i.repo, number: i.number, action: close ? 'close' : 'reopen' })
@@ -113,13 +137,20 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
       <span class="spacer" />
       <button class="primary any" @click="newIssue"><span class="k">n</span> new</button>
       <button :disabled="!current" @click="comment"><span class="k">m</span> comment</button>
-      <button :disabled="current?.state !== 'open'" @click="setState(true)"><span class="k">c</span> close</button>
-      <button :disabled="!current || current.state === 'open'" @click="setState(false)"><span class="k">u</span> reopen</button>
+      <button :disabled="!picked.length && current?.state !== 'open'" @click="setState(true)"><span class="k">c</span> close</button>
+      <button :disabled="!picked.length && (!current || current.state === 'open')" @click="setState(false)"><span class="k">u</span> reopen</button>
       <button :disabled="!current" @click="open"><span class="k">o</span> open</button>
       <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
     </div>
+    <div v-if="picked.length" class="picked-bar" role="status">
+      <span><b>{{ picked.length }}</b> picked</span>
+      <button @click="setPicked(true)"><span class="k">c</span> close them</button>
+      <button @click="setPicked(false)"><span class="k">u</span> reopen them</button>
+      <button @click="picked = []">clear</button>
+      <span class="dim hide-xs">space picks the selected row, shift+click a span</span>
+    </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :picked="picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" /></div>
       <div class="pad">
         <div v-if="form.open" class="box">
           <div class="form">
