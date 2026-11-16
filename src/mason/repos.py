@@ -981,7 +981,8 @@ def repo_alerts(repo: str) -> tuple[list[dict], list[str]]:
             text = str(err)
             if kind == "code-scanning" and ("no analysis" in text.lower() or "404" in text):
                 continue  # code scanning isn't set up: nothing to report
-            hint = "off, or gh lacks access (gh auth refresh -s security_events)"
+            hint = ("off, or your GitHub sign-in can't read them (an org may need to approve Mason)" if core.SERVING
+                    else "off, or gh lacks access (gh auth refresh -s security_events)")
             unread.append(f"{label}: {hint if '403' in text or '404' in text else text[:120]}")
             continue
         alerts += [dict(alert_row(kind, a), kind=label) for a in found if isinstance(a, dict)]

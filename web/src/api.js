@@ -6,6 +6,7 @@ export const state = reactive({
   me: null,          // /api/v1/me
   loaded: false,
   dryRun: savedDry(), // every change is a dry run while this is on (kept for this tab: a reload doesn't turn it off)
+  unreachable: '', // why /me failed when the server couldn't answer it
   log: [],           // [{at, text, kind, detail, where}] the bottom log (click it for all of them)
   busy: 0,
   rate: null,
@@ -67,7 +68,13 @@ export const put = (path, body = {}) => api('PUT', path, body)
 export const del = (path) => api('DELETE', path)
 
 export async function loadMe() {
-  try { state.me = await get('/me') } catch (e) { state.me = { user: null, providers: [] }; log(e.message, 'error') }
+  state.unreachable = ''
+  try { state.me = await get('/me') } catch (e) {
+    // down or unreachable isn't signed out: say so and offer a retry instead of a sign-in page with no way in
+    if (e.status === 0 || e.status >= 500) state.unreachable = e.status ? `Mason answered ${e.message}` : e.message
+    state.me = { user: null, providers: [] }
+    log(e.message, 'error')
+  }
   state.loaded = true
   return state.me
 }

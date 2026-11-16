@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 WEB = "https://github.com"
 WORKERS = 8  # repos handled at the same time
 DRY_RUN = False  # the CLI's; a context can override it (set_dry_run)
+SERVING = False  # the web app: one process for many users, so a dry run never goes in the global
 CACHE: str | None = None  # e.g. "90s": GET answers come from a cache for that long (the TUI sets it)
 
 
@@ -51,11 +52,16 @@ def dry_run() -> bool:
     return DRY_RUN if value is None else value
 
 
+def forget_dry_run() -> None:
+    """The server, before each request: a dry run set in this thread's context for an earlier one ends."""
+    _dry_run.set(None)
+
+
 def set_dry_run(value: bool) -> None:
     """Dry run for this context (and the CLI's global, so code reading core.DRY_RUN agrees)."""
     global DRY_RUN
     _dry_run.set(bool(value))
-    if not _context_stdout_installed():
+    if not SERVING and not _context_stdout_installed():
         DRY_RUN = bool(value)
 
 
@@ -272,10 +278,12 @@ def exists(repo: str) -> bool:
 def get_file(repo: str, path: str, ref: str | None = None) -> tuple[str, str] | None:
     """(text, blob sha) of a file, or None when it doesn't exist."""
     import base64
+    from urllib.parse import quote
 
-    q = f"?ref={ref}" if ref else ""
+    # encoded: a path may hold a space, a ref a "#" (the web app sends these over HTTP, not through gh)
+    q = f"?ref={quote(ref, safe='')}" if ref else ""
     try:
-        data = api("GET", f"/repos/{repo}/contents/{path}{q}")
+        data = api("GET", f"/repos/{repo}/contents/{quote(path)}{q}")
     except RuntimeError as err:
         if "404" in str(err) or "Not Found" in str(err):
             return None
@@ -298,13 +306,22 @@ def put_file(repo: str, branch: str, path: str, text: str, sha: str | None, mess
     body = {"message": message, "branch": branch, "content": base64.b64encode(text.encode()).decode()}
     if sha:
         body["sha"] = sha
-    api("PUT", f"/repos/{repo}/contents/{path}", body)
+    from urllib.parse import quote
+
+    api("PUT", f"/repos/{repo}/contents/{quote(path)}", body)
+
+
+def quote_ref(name: str) -> str:
+    """A branch or tag name for an API path: "/" stays, "#", "?" and spaces don't break the URL."""
+    from urllib.parse import quote
+
+    return quote(name, safe="/")
 
 
 def open_pr(repo: str, base: str, branch: str, files: dict[str, tuple[str, str | None]],
             message: str, title: str, body: str) -> str:
     """Commit `files` ({path: (new text, old blob sha or None)}) on a new branch and open a PR."""
-    head = api("GET", f"/repos/{repo}/git/ref/heads/{base}")["object"]["sha"]
+    head = api("GET", f"/repos/{repo}/git/ref/heads/{quote_ref(base)}")["object"]["sha"]
     api("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": head})
     for path, (text, sha) in files.items():
         put_file(repo, branch, path, text, sha, message)

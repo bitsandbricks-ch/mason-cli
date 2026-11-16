@@ -67,3 +67,4 @@ export const router = createRouter({
     { path: '/:rest(.*)*', redirect: '/' },
   ],
 })
+

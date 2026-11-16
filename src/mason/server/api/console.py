@@ -7,6 +7,7 @@ that don't say they are safe for the web (a plugin lists those in `web_commands`
 
 from __future__ import annotations
 
+import contextvars
 import shlex
 
 from flask import Blueprint, abort, jsonify
@@ -89,6 +90,9 @@ def run():
         abort(400, f"`mason {cmd}` works on your own machine, not in the operator (Settings has the same)")
     if cmd not in READS | WRITES | web_commands(only_on=True):  # a plugin switched off is off here too
         abort(400, f"`mason {cmd}` isn't available in the web console")
+    # "read it from stdin" (- or --notes=-): a web request has none, and the server's would hang or be empty
+    if any(a == "-" or (a.startswith("--") and a.endswith("=-")) for a in argv[1:]):
+        abort(400, "the web console can't read text from stdin: put the text in quotes instead of -")
     write = is_write(argv)
     if write and not can_write():
         abort(403, "this API key is read-only: add --dry-run")
@@ -102,7 +106,9 @@ def run():
     with as_user():
         token = config.OVERRIDE.set(mine)
         try:
-            text = core.capture(cli.main, argv)
+            # in a copy of the context: the CLI sets its dry run for the context (set_dry_run), and on a server
+            # thread that serves the next request too, that setting outlived the command
+            text = contextvars.copy_context().run(core.capture, cli.main, argv)
         except core.RateLimited as err:
             abort(429, str(err))
         finally:

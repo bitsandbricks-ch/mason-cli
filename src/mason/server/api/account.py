@@ -454,7 +454,7 @@ def device_code():
         code = security.user_code()
     db.add(DeviceGrant(device_hash=security.sha256(device), user_code=code, scope=scope,
                        client_name=str(data.get("client") or "mason")[:100],
-                       expires_at=utcnow() + timedelta(minutes=DEVICE_MINUTES)))
+                       expires_at=utcnow() + timedelta(minutes=DEVICE_MINUTES), ip=ip[:64]))
     db.commit()
     url = current_app.config["OP"].url
     return jsonify({"device_code": device, "user_code": code, "verification_uri": f"{url}/device",
@@ -496,8 +496,9 @@ def device_info():
     if row is None or row.expires_at < utcnow() or row.approved_by or row.denied:
         auth.record_failure(f"devcode:{ip}")
         abort(404, "no such code, or it expired")
+    # where the code was asked for, next to where it is approved: a code someone sent you comes from elsewhere
     return jsonify({"user_code": row.user_code, "client": row.client_name, "scope": row.scope,
-                    "created_at": iso(row.created_at)})
+                    "created_at": iso(row.created_at), "ip": row.ip, "same_address": bool(row.ip) and row.ip == ip})
 
 
 @bp.post("/device/approve")

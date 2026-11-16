@@ -28,7 +28,7 @@ watch(sel, async (key) => {
   url.value = ''
   if (key == null) return
   try {
-    const got = await get(`/plugins/${route.params.plugin}/tabs/${route.params.tab}?key=${encodeURIComponent(key)}`)
+    const got = await get(`/plugins/${encodeURIComponent(route.params.plugin)}/tabs/${encodeURIComponent(route.params.tab)}?key=${encodeURIComponent(key)}`)
     if (sel.value === key) { text.value = got.text; url.value = got.url || '' }
   } catch (e) { text.value = `error: ${e.message}` }
 })

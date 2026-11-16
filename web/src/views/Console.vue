@@ -31,7 +31,12 @@ onMounted(async () => {
     const c = await get('/console/commands')
     writes.value = new Set(c.writes)
     plugins.value = new Set(c.plugins)
-    out.value.push({ line: '', text: `${c.help}\nhere: ${[...c.reads, ...c.writes, ...c.plugins].sort().join(' ')}` })
+    const names = [...c.reads, ...c.writes, ...c.plugins].sort()
+    // six to a line: the output keeps its columns, so one long line would scroll sideways on a phone
+    const rows = Array.from({ length: Math.ceil(names.length / 6) }, (_, i) => names.slice(i * 6, i * 6 + 6).join(' '))
+    // the full help is 100 columns wide: a phone gets the list and a pointer to it
+    const intro = window.matchMedia('(max-width: 700px)').matches ? 'type -h for the full help' : c.help
+    out.value.push({ line: '', text: `${intro}\nhere:\n  ${rows.join('\n  ')}` })
   } catch (e) { log(e.message, 'error') }
 })
 async function run() {

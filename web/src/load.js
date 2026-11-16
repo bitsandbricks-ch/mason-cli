@@ -168,7 +168,7 @@ export function useFollow({ pending, refresh }) {
 
 // A change: ask first (y / d for a dry run / n), then send it; returns {text, dry, ok} (null when not asked to).
 export async function change(question, path, body = {}, { detail = '' } = {}) {
-  const a = await ask(question, { detail: detail || (state.dryRun ? 'dry run is on: nothing changes' : '') })
+  const a = await ask(question, { detail: [detail, state.dryRun ? 'dry run is on: nothing changes' : ''].filter(Boolean).join('\n') })
   if (!a) return null
   const dry = a === 'dry'
   try {

@@ -499,6 +499,9 @@ button.wide { width: 100%; text-align: left; }
 /* the box only shows the pick: the cell takes the click (a box that handled it reverted its own tick) */
 .table .pick input { pointer-events: none; }
 
+/* a new account: no repos named yet */
+.setup-hint { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 8px 12px;
+  border-bottom: 1px solid var(--accent); background: var(--bg2); }
 /* a repo's page in one column (a phone, a narrow side panel): its version, PRs and branches first, the long
    defaults, rules and settings after them */
 @media (max-width: 900px) { .split.page.repo-cols > :last-child { order: -1; border-bottom: 1px dashed var(--line); } }

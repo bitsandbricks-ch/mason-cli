@@ -102,7 +102,7 @@ useKeys(keys)
         <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
       </div>
       <div class="pad">
-        <TextPane :text="detail" :skip="url ? 2 : 0" placeholder="loading…" />
+        <TextPane :text="detail" :skip="url ? 2 : 0" plain placeholder="loading…" />
       </div>
     </div>
     <EventLog ref="log" band :repo="repo" kind="issue" :number="number" :title="name" />

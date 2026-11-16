@@ -54,11 +54,11 @@ async function submit() {
     <p v-else-if="publishes" class="warn">{{ publishes }} creates releases when a tag is pushed: a new tag (T) fits this repo better, a release made here first would collide with it.</p>
     <div class="form">
       <label>repo</label>
-      <input v-if="repos.length" v-model="f.repo" list="release-repos" placeholder="owner/name or gitlab:group/project">
+      <input v-if="repos.length" v-model="f.repo" aria-label="repo" list="release-repos" placeholder="owner/name or gitlab:group/project">
       <span v-else class="accent">{{ f.repo }}</span>
-      <label>tag</label><input v-model="f.tag" placeholder="v1.4.0" autofocus @keydown.enter="submit">
-      <template v-if="mode !== 'tag'"><label>title</label><input v-model="f.title" :placeholder="f.tag || 'the tag'" @keydown.enter="submit"></template>
-      <label>target</label><input v-model="f.target" :placeholder="mode === 'tag' ? 'default branch' : 'default branch (only for a new tag)'">
+      <label>tag</label><input aria-label="tag" v-model="f.tag" placeholder="v1.4.0" autofocus @keydown.enter="submit">
+      <template v-if="mode !== 'tag'"><label>title</label><input aria-label="title" v-model="f.title" :placeholder="f.tag || 'the tag'" @keydown.enter="submit"></template>
+      <label>target</label><input aria-label="target" v-model="f.target" :placeholder="mode === 'tag' ? 'default branch' : 'default branch (only for a new tag)'">
       <template v-if="!gitlab() && mode !== 'tag'">
         <label>kind</label>
         <span class="row">
@@ -69,7 +69,7 @@ async function submit() {
       </template>
     </div>
     <datalist id="release-repos"><option v-for="r in repos" :key="r" :value="r" /></datalist>
-    <textarea v-if="mode !== 'tag'" v-model="f.notes" rows="10" placeholder="release notes (Markdown)" style="margin-top: 8px" />
+    <textarea v-if="mode !== 'tag'" v-model="f.notes" aria-label="release notes" rows="10" placeholder="release notes (Markdown)" style="margin-top: 8px" />
     <div class="row" style="margin-top: 8px">
       <button class="primary" @click="submit">{{ mode === 'tag' ? 'push tag' : 'create release' }}</button>
       <button @click="cancel">cancel <span class="dim">(esc)</span></button>

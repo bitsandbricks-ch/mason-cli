@@ -53,7 +53,7 @@ useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: 
     </div>
     <div class="split ld">
       <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ every action is pinned to a commit'" outside @activate="open" /></div>
-      <div class="pad"><TextPane :text="output || (current ? `${current.repo}\n${current.path}:${current.line}\n\n${current.text}` : '')"
+      <div class="pad"><TextPane :text="output || (current ? `${current.repo}\n${current.path}:${current.line}\n\n${current.text}${current.raw === 'pinned' ? '\n\np pins the repo\'s actions to commits' : '\n\nfixed by hand in the workflow file: o opens it'}` : '')"
         placeholder="p opens a PR that pins the selected repo's actions to commit SHAs; A does it for every repo listed" /></div>
     </div>
   </div>

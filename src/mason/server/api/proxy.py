@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.parse
 
 from flask import Blueprint, Response, abort, g, request
 
@@ -215,8 +216,11 @@ def rest(path: str):
     if not allowed(request.method, path):
         abort(403, f"the operator doesn't pass {request.method} {path} on")
     t = transport()
+    # Flask decoded the path: encode it again for GitHub, so a file name with a space works and a "%2e%2e"
+    # or "%2f" the client encoded twice stays text instead of turning into a step or a slash over there
+    wire = urllib.parse.quote(path, safe="/@:,;=+!$&'()*-._~")
     query = request.query_string.decode()
-    full = path + (("?" + query) if query else "")
+    full = wire + (("?" + query) if query else "")
     accept = request.headers.get("Accept") or "application/vnd.github+json"
     if accept not in ("application/vnd.github+json", "application/json", "application/octet-stream",
                       "application/vnd.github.diff"):
@@ -229,7 +233,7 @@ def rest(path: str):
             try:
                 status, headers, raw = t.request(request.method, t.api_url + full, data or None, accept=accept)
             finally:  # the operator's own pages must not show what this write changed as it was
-                t.forget(path)
+                t.forget(wire)
     except HttpError as err:
         return Response(err.body or b"{}", status=err.status, content_type="application/json")
     except core.RateLimited as err:
@@ -260,6 +264,8 @@ def rest(path: str):
 @need("read")
 def graphql():
     payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        abort(400, "send a JSON object: {query, variables}")
     query = str(payload.get("query") or "")
     try:
         ops = operations(query)

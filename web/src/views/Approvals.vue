@@ -19,11 +19,16 @@ loadGroups()
 const sel = ref(null)
 const output = ref('')
 const rows = computed(() => (data.value?.approvals || []).map((r) => ({ ...r, key: `${r.repo}|${r.kind}|${r.id}`, when: ago(r.created) })))
+// the list gets the reason's first part; the whole of it (with its link) shows beside the list
+function short(why) {
+  const head = String(why).split(/:\s|, but /)[0]
+  return head.length > 60 ? `${head.slice(0, 59)}…` : head
+}
 const columns = [
   { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
   { key: 'name', label: 'run', cls: () => '', card: 'main' },
   { key: 'waits_for', label: 'waits for', cls: (r) => (r.blocked ? 'dim' : 'warn') },
-  { key: 'blocked', label: 'you can approve', fmt: (v) => (v ? `no: ${v}` : 'yes'), cls: (r) => (r.blocked ? 'bad' : 'ok') },
+  { key: 'blocked', label: 'you can approve', fmt: (v) => (v ? `no: ${short(v)}` : 'yes'), cls: (r) => (r.blocked ? 'bad' : 'ok') },
   { key: 'branch', label: 'branch', cls: () => '' },
   { key: 'when', label: 'since', cls: () => 'dim' },
 ]

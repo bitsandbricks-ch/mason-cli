@@ -341,3 +341,15 @@ def test_sizes():
     assert size_of("1g", 0) == 1024 * MB
     assert size_of("", 5) == 5 and size_of("lots", 5) == 5
     assert size_of("12", 0) == 12 * MB
+
+
+def test_file_paths_and_refs_go_out_encoded(api):
+    import base64
+
+    from mason import core
+    t = HttpTransport("tok", api_url=api.url, graphql_url=api.url + "/graphql")
+    path = "/repos/acme/web/contents/docs/my%20notes.md?ref=fix%23two"
+    api.answers[path] = {"content": base64.b64encode(b"hi").decode(), "sha": "abc"}
+    with core.using(t):
+        assert core.get_file("acme/web", "docs/my notes.md", "fix#two") == ("hi", "abc")
+    assert api.hits(path)

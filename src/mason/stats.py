@@ -74,6 +74,7 @@ def summarize(repo: str, provider: str, merged: list[tuple], opened: list[dateti
 def github(repos: list[str], days: int = 30) -> list[dict]:
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=days)
+    repos = [r for r in repos if "/" in r]  # a bare name (a typo in mason.toml's repos) has no owner to ask about
     batches = [repos[i:i + 20] for i in range(0, len(repos), 20)]
 
     def nodes(batch: list[str]) -> dict:

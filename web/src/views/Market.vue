@@ -4,6 +4,8 @@
 import { onMounted, ref } from 'vue'
 import { get, log } from '../api.js'
 import { safeHref } from '../links.js'
+import { RouterLink } from 'vue-router'
+import ErrorNote from '../components/ErrorNote.vue'
 
 const idx = ref(null)
 const error = ref('')
@@ -16,7 +18,11 @@ onMounted(load)
 
 <template>
   <div class="view">
-    <div v-if="error" class="pad bad">{{ error }}</div>
+    <div v-if="error" class="pad">
+      <ErrorNote :error="error" what="the plugin index" />
+      <p class="dim">Installed plugins keep working: switch them under <RouterLink to="/plugins">plugins</RouterLink>.</p>
+      <button @click="load">try again</button>
+    </div>
     <div v-else-if="idx" class="scroll pad">
       <div class="box">
         <span class="accent">{{ idx.name || 'plugin index' }}</span> <span class="dim">{{ idx.index }}</span><br>

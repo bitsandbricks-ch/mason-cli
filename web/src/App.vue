@@ -12,6 +12,7 @@ import Logo from './components/Logo.vue'
 import SidePanel from './components/SidePanel.vue'
 import Palette from './components/Palette.vue'
 import KeysSheet from './components/KeysSheet.vue'
+import SetupHint from './components/SetupHint.vue'
 import { clearRecent, sideOpen } from './side.js'
 import { confirmLeave } from './unsaved.js'
 import { forget } from './load.js'
@@ -58,7 +59,7 @@ onMounted(async () => {
   }
 })
 async function guard() {
-  if (!state.loaded) return
+  if (!state.loaded || state.unreachable) return
   await router.isReady() // before the first page is resolved the route is still "/", and the link was lost
   if (!signedIn.value && !route.meta.public) router.replace({ name: 'login', query: route.path !== '/' ? { next: route.fullPath } : {} })
 }
@@ -123,6 +124,7 @@ watch(() => state.log[0], (l) => {
   toastTimer = setTimeout(() => { toast.value = null }, l.kind === 'error' ? 10000 : 4000)
 })
 
+const retry = () => window.location.reload()
 async function logout() {
   if (!(await confirmLeave())) return
   forget() // what this account's lists said: not for whoever signs in next in this tab
@@ -161,6 +163,9 @@ window.addEventListener('keydown', (e) => {
 
 <template>
   <div v-if="!state.loaded" class="center"><span class="cursor">connecting</span></div>
+  <div v-else-if="state.unreachable" class="center">
+    <div class="box"><span class="bad">{{ state.unreachable }}</span><br><br><button class="primary" @click="retry">try again</button></div>
+  </div>
   <router-view v-else-if="!signedIn || route.meta.public" />
   <div v-else-if="phone" class="screen phone">
     <header class="top">
@@ -172,6 +177,7 @@ window.addEventListener('keydown', (e) => {
       <button v-if="state.dryRun" class="chip on" title="dry run is on: changes only show what they would do" @click="state.dryRun = false">dry run ✕</button>
     </header>
     <main :class="{ detail }">
+      <SetupHint v-if="!detail" />
       <router-view @rate="refreshRate" />
       <div v-if="menu" class="sheet" role="dialog" aria-label="every view">
         <section v-for="g in GROUPS" :key="g">
@@ -251,7 +257,7 @@ window.addEventListener('keydown', (e) => {
       </nav>
     </div>
     <div class="body" :class="{ 'side-open': sideOpen }">
-      <main><router-view @rate="refreshRate" /></main>
+      <main><SetupHint /><router-view @rate="refreshRate" /></main>
       <SidePanel />
     </div>
     <footer class="foot">

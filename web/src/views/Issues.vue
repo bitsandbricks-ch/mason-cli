@@ -159,7 +159,11 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
       <span class="dim hide-xs">space picks the selected row, shift+click a span</span>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :picked="picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" /></div>
+      <div>
+        <details v-if="data?.failed?.length" class="pad warn"><summary>{{ data.failed.length }} repo{{ data.failed.length === 1 ? '' : 's' }} couldn't be read</summary>
+          <div v-for="x in data.failed" :key="x" class="dim">{{ x }}</div></details>
+        <DataTable v-model="sel" :picked="picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" />
+      </div>
       <div class="pad">
         <div v-if="form.open" class="box">
           <div class="form">

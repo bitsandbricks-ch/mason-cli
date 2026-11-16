@@ -132,7 +132,7 @@ async function saveFile(remove = false) {
     if (f.problems.length && !(await ask(`${f.path} has problems. Save it anyway?`, { allowDry: false, detail: f.problems.join('\n') }))) return
   }
   const got = await send(`${remove ? 'Remove' : 'Save'} ${f.path} in ${props.repo}?`, put, '/mason/file',
-    { repo: props.repo, path: f.path, text: f.text, delete: remove, force: true })
+    { repo: props.repo, path: f.path, text: f.text, delete: remove, force: true, base: f.isNew ? '' : f.original })
   if (got && !got.dry) file.value = null
 }
 async function keepLive() {
