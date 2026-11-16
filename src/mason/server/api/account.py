@@ -4,6 +4,7 @@ device login, settings, secrets and the audit log."""
 from __future__ import annotations
 
 import json
+import re
 from datetime import timedelta
 
 from flask import Blueprint, abort, current_app, g, jsonify, make_response, redirect, request
@@ -75,6 +76,9 @@ def providers():
 
 def safe_next(value: str | None) -> str:
     v = value or "/"
+    # browsers drop tabs and newlines from a URL, so "/\t/example.com" would become "//example.com": another site
+    if any(ord(c) < 0x21 or ord(c) == 0x7F for c in v):
+        return "/"
     return v if v.startswith("/") and not v.startswith("//") and "\\" not in v and len(v) < 200 else "/"
 
 
@@ -119,7 +123,10 @@ def callback(name: str):
     if oauth.redirect_provider(name) is None:
         abort(404)
     if request.args.get("error"):
-        return _fail(request.args.get("error_description") or request.args["error"])
+        # only the provider's error code, not its description: anyone can send a link to this callback, and its
+        # text would show on our sign-in page as if Mason said it
+        code = re.sub(r"[^a-z_]", "", request.args["error"].lower())[:40] or "error"
+        return _fail(f"{name} didn't sign you in ({code}); try again")
     state, code = request.args.get("state", ""), request.args.get("code", "")
     row = db.get(OAuthState, security.sha256(state)) if state else None
     binding = request.cookies.get(STATE_COOKIE, "")
@@ -592,7 +599,7 @@ def secret_of(user: User, name: str) -> str:
 @need("read")
 def audit_log():
     q = db.query(Audit).filter(Audit.user_id == g.user.id)  # only your own: nobody reads another user's
-    rows = q.order_by(Audit.id.desc()).limit(min(int(request.args.get("limit", 200)), 1000)).all()
+    rows = q.order_by(Audit.id.desc()).limit(min(request.args.get("limit", 200, type=int) or 200, 1000)).all()
     names = {u.id: u.name for u in db.query(User).filter(User.id.in_({r.user_id for r in rows if r.user_id}))}
     return jsonify([{"at": iso(r.at), "user": names.get(r.user_id, ""), "via": r.via, "ip": r.ip, "action": r.action,
                      "target": r.target, "dry_run": r.dry_run, "ok": r.ok, "detail": r.detail} for r in rows])

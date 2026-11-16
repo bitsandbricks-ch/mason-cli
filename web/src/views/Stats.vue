@@ -1,6 +1,8 @@
 <script setup>
 // Stats: what moved over the last N days, for all repos, per group and per repo.
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useTrack } from '../side.js'
 import { useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
@@ -33,7 +35,10 @@ const columns = [
   { key: 'last_release_days', label: 'last release', right: true, fmt: (v) => (v === null ? '-' : `${v}d ago`), cls: () => 'dim' },
 ]
 const groups = computed(() => Object.entries(data.value?.groups || {}))
-useKeys({ r: () => load(true) })
+const router = useRouter()
+const page = (r) => { const repo = r?.repo || sel.value; if (repo) router.push({ path: '/repo', query: { repo } }) }
+useTrack(() => sel.value && { kind: 'repo', repo: sel.value }, { sel, kind: 'repo', key: (t) => (t.kind === 'repo' ? t.repo : null) })
+useKeys({ r: () => load(true), p: () => page() })
 </script>
 
 <template>
@@ -57,7 +62,7 @@ useKeys({ r: () => load(true) })
         <tbody><tr v-for="[g, v] in groups" :key="g"><td>{{ g }}</td><td class="right">{{ v.repos }}</td><td class="right">{{ v.merged }}</td><td class="right">{{ n(v.median_merge_hours, 'h') }}</td><td class="right">{{ v.open }}</td><td class="right">{{ n(v.success_rate, '%') }}</td><td class="right">{{ v.releases }}</td></tr></tbody>
       </table>
       <h2>per repo</h2>
-      <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : 'nothing moved'" />
+      <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : 'nothing moved'" @activate="page" />
     </div>
   </div>
 </template>

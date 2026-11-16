@@ -2,20 +2,23 @@
 // One issue as a page (Enter on Issues): its text and comments, comment, close or reopen, and its event
 // log at the bottom.
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { usePage } from '../side.js'
 import { get, qs } from '../api.js'
-import { act, forget } from '../load.js'
+import { change, forget } from '../load.js'
 import { useKeys } from '../keys.js'
 import { ask, fieldOf } from '../ui.js'
 import ActionList from '../components/ActionList.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import EventLog from '../components/EventLog.vue'
 import TextPane from '../components/TextPane.vue'
+import { openOut } from '../links.js'
 
-const route = useRoute()
+// the route's query, or the side panel's when it shows in one (and then back closes the panel)
+const { query, back } = usePage('/issues')
 const router = useRouter()
-const repo = computed(() => String(route.query.repo || ''))
-const number = computed(() => Number(route.query.number) || 0)
+const repo = computed(() => String(query.value.repo || ''))
+const number = computed(() => Number(query.value.number) || 0)
 const name = computed(() => `${repo.value}#${number.value}`)
 const detail = ref('')
 const output = ref('')
@@ -26,19 +29,22 @@ const sheet = ref(null)
 async function load() {
   if (!repo.value || !number.value) return
   if (!detail.value) detail.value = '…'
+  const asked = `${repo.value}#${number.value}`
+  const still = () => asked === `${repo.value}#${number.value}`
   try {
     const t = (await get(`/issue${qs({ repo: repo.value, number: number.value })}`)).text
+    if (!still()) return // the panel moved on to another issue
     detail.value = t
     const line = t.split('\n').find((l) => /^\s+state\s/.test(l)) || ''
     isOpen.value = !/\bclosed\b/.test(line)
-  } catch (e) { detail.value = `error: ${e.message}` }
+  } catch (e) { if (still()) detail.value = `error: ${e.message}` }
 }
 watch([repo, number], () => { detail.value = ''; output.value = ''; load() }, { immediate: true })
 
-function changed(text, open) {
+function changed({ text, ok, dry }, open) {
   output.value = text
-  if (text.startsWith('error')) return
-  if (open !== undefined && !/\[dry-run\]/.test(text)) isOpen.value = open
+  if (!ok) return
+  if (open !== undefined && !dry) isOpen.value = open
   forget('/issues')
   load()
   setTimeout(load, 3000)
@@ -46,19 +52,18 @@ function changed(text, open) {
 }
 async function setState(close) {
   if (close !== isOpen.value) return
-  const t = await act(`${close ? 'Close' : 'Reopen'} ${name.value}?`, '/issue', { repo: repo.value, number: number.value, action: close ? 'close' : 'reopen' })
-  if (t !== null) changed(t, !close)
+  const got = await change(`${close ? 'Close' : 'Reopen'} ${name.value}?`, '/issue', { repo: repo.value, number: number.value, action: close ? 'close' : 'reopen' })
+  if (got) changed(got, !close)
 }
 async function comment() {
   const said = await ask(`Comment on ${name.value}`, { input: { placeholder: 'your comment' }, allowDry: false })
   if (!said?.trim()) return
-  const t = await act(`Post the comment on ${name.value}?`, '/issue', { repo: repo.value, number: number.value, action: 'comment', text: said }, { detail: said })
-  if (t !== null) changed(t)
+  const got = await change(`Post the comment on ${name.value}?`, '/issue', { repo: repo.value, number: number.value, action: 'comment', text: said }, { detail: said })
+  if (got) changed(got)
 }
-const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
-const back = () => (window.history.state?.back ? router.back() : router.push('/issues'))
+const visit = () => { const url = detail.value.split('\n')[1]; openOut(url) }
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })
-const titleLine = computed(() => (detail.value === '…' ? '' : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))
+const titleLine = computed(() => (detail.value === '…' || /^error/.test(detail.value) ? '' : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))
 const badges = computed(() => {
   if (!titleLine.value) return []
   const out = [{ label: 'state', value: isOpen.value ? 'open' : 'closed', cls: isOpen.value ? '' : 'ok' }]

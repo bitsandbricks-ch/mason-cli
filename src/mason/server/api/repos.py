@@ -28,6 +28,7 @@ from mason.server import gitlab as GL
 from mason.server.api.account import body
 from mason.server.auth import audit, can_write, need
 from mason.server.context import as_user, gitlab_projects, load_config, valid_repo
+from mason.server.context import number as number_of
 
 bp = Blueprint("repos", __name__, url_prefix="/api/v1")
 
@@ -236,6 +237,7 @@ def prs():
                             "review": (p.get("reviewDecision") or "").lower().replace("_", " "),
                             "auto": bool(p.get("autoMergeRequest")), "merge": R.merge_word(p),
                             "author": (p.get("author") or {}).get("login", ""),
+                            "reviewers": reviewers(p),
                             "branch": p.get("headRefName", "")})
             for p in (node.get("merged") or {}).get("nodes") or []:
                 merged.append({"repo": repo, "provider": "github", "number": p["number"], "title": p["title"],
@@ -260,6 +262,18 @@ def pr():
                 abort(409, "connect GitLab first")
             return jsonify({"text": capture_rate(GL.mr_detail, gl, repo, number, diff)})
         return jsonify({"text": capture_rate(R.pr_detail, repo, number, diff, request.args.get("body") == "1")})
+
+
+def reviewers(p: dict) -> list[str]:
+    """Who the PR waits on for a review: logins, and teams as team:slug."""
+    out = []
+    for n in (p.get("reviewRequests") or {}).get("nodes") or []:
+        r = (n or {}).get("requestedReviewer") or {}
+        if r.get("login"):
+            out.append(r["login"])
+        elif r.get("slug"):
+            out.append(f"team:{r['slug']}")
+    return out
 
 
 @bp.post("/merge")
@@ -316,7 +330,7 @@ def pr_bypass():
 def ready():
     data = body()
     dry = write_allowed(bool(data.get("dry_run")))
-    repo, number = valid_repo(str(data.get("repo", ""))), int(data.get("number") or 0)
+    repo, number = valid_repo(str(data.get("repo", ""))), number_of(data.get("number"))
     with as_user(dry) as (_gh, gl):
         if is_gl(repo):
             text = capture_rate(GL.mark_ready, gl, repo, number)
@@ -358,7 +372,7 @@ def run_rerun():
     """Run the failed jobs of a GitHub run again, or retry a GitLab pipeline's failed jobs: {repo, id, dry_run?}."""
     data = body()
     dry = write_allowed(bool(data.get("dry_run")))
-    repo, ident = valid_repo(str(data.get("repo", ""))), int(data.get("id") or 0)
+    repo, ident = valid_repo(str(data.get("repo", ""))), number_of(data.get("id"), "id")
     if not ident:
         abort(400, "id: the run or pipeline id")
     with as_user(dry) as (_gh, gl):
@@ -506,7 +520,7 @@ def approvals():
 def approve():
     data = body()
     dry = write_allowed(bool(data.get("dry_run")))
-    repo, ident = valid_repo(str(data.get("repo", ""))), int(data.get("id") or 0)
+    repo, ident = valid_repo(str(data.get("repo", ""))), number_of(data.get("id"), "id")
     with as_user(dry) as (_gh, gl):
         if is_gl(repo):
             text = capture_rate(GL.approve, gl, repo, str(data.get("kind") or ""), ident)
@@ -824,7 +838,7 @@ def issue_change():
     """close, reopen or comment: {repo, number, action, text?, not_planned?}."""
     data = body()
     repo = valid_repo(str(data.get("repo") or ""))
-    number = int(data.get("number") or 0)
+    number = number_of(data.get("number"))
     action = data.get("action")
     if number <= 0 or action not in ("close", "reopen", "comment"):
         abort(400, "number, and action close, reopen or comment")

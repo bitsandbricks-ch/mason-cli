@@ -1,11 +1,13 @@
 <script setup>
 // Settings: logins, the defaults repo and which repos to manage, API keys, sessions and plugin secrets.
 // Everything a CLI user keeps in files lives here, per user: nobody else sees or changes yours.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { del, get, loadMe, log, post, put, state } from '../api.js'
 import { deviceSignIn } from '../signin.js'
 import { ago, ask, tellRevoked } from '../ui.js'
+import { useUnsaved } from '../unsaved.js'
+import { safeHref } from '../links.js'
 
 const router = useRouter()
 const s = ref(null)
@@ -31,10 +33,15 @@ function cancelLink() { stopLink?.(); stopLink = null; linking.value = null }
 onBeforeUnmount(() => stopLink?.())
 
 const asText = (v) => (v || []).join(', ')
+// leaving asks first while the form has changes, or a new key is still shown (it isn't shown again)
+const saved = ref('')
+useUnsaved(computed(() => !!s.value && JSON.stringify(s.value) !== saved.value), 'your settings')
+useUnsaved(computed(() => !!fresh.value), 'the new API key (it is not shown again)')
 async function load() {
   try {
     const got = await get('/settings')
     s.value = { ...got, ...Object.fromEntries(LISTS.map((k) => [k, asText(got[k])])) }
+    saved.value = JSON.stringify(s.value)
     ;[keys.value, sessions.value, secrets.value] = await Promise.all([get('/keys'), get('/sessions'), get('/secrets')])
   } catch (e) { log(e.message, 'error') }
 }
@@ -75,6 +82,8 @@ async function setSecret(x) {
   try { await put(`/secrets/${x.name}`, { value: v }); load() } catch (e) { log(e.message, 'error') }
 }
 async function dropSecret(x) {
+  // it can't be shown again, so removing it by a slip of the mouse means typing it in again
+  if (!(await ask(`Remove ${x.label}? Plugins that need it stop working until you set it again.`, { allowDry: false }))) return
   try { await del(`/secrets/${x.name}`); load() } catch (e) { log(e.message, 'error') }
 }
 async function deleteAccount() {
@@ -97,8 +106,10 @@ onMounted(load)
         <div class="accent">accounts</div>
         <div v-for="i in state.me.identities" :key="i.id" class="row">
           <span class="ok">●</span><span>{{ i.provider }}</span><span class="accent">{{ i.login }}</span>
-          <span class="dim">{{ i.host }} · scopes {{ i.scopes || '-' }}</span><span class="spacer" />
-          <button @click="unlink(i)">disconnect</button>
+          <span class="dim">{{ i.host }}{{ i.scopes ? ` · scopes ${i.scopes}` : '' }}</span><span class="spacer" />
+          <!-- the only login can't go (the server says so too): deleting the account is below -->
+          <button v-if="state.me.identities.length > 1" @click="unlink(i)">disconnect</button>
+          <span v-else class="dim" title="connect another account first, or delete your account below">your only login</span>
         </div>
         <div class="row" style="margin-top: 6px">
           <template v-for="p in state.me.providers" :key="p">
@@ -109,7 +120,7 @@ onMounted(load)
           </template>
         </div>
         <p v-if="linking">Enter <span class="accent">{{ linking.user_code }}</span> at
-          <a class="accent" :href="linking.verification_uri" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
+          <a class="accent" :href="safeHref(linking.verification_uri) || undefined" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
           <span class="dim"> (waiting<span class="cursor" />)</span>
           <button @click="cancelLink">cancel</button></p>
       </div>

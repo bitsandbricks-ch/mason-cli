@@ -4,7 +4,8 @@
 // Esc goes back. After a release, a tag or a bump, and while a release run is going, the page reads the repo
 // again by itself until the run is done.
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { usePage } from '../side.js'
 import { qs } from '../api.js'
 import { cached, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
@@ -14,11 +15,13 @@ import StatusHeader from '../components/StatusHeader.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
-import { openDetail, replaceQuery } from '../ui.js'
+import { openDetail, phone } from '../ui.js'
+import { openOut } from '../links.js'
 
-const route = useRoute()
+// the route's query, or the side panel's when it shows in one (and then back closes the panel)
+const { query, back, setQuery } = usePage('/releases')
 const router = useRouter()
-const repo = computed(() => String(route.query.repo || ''))
+const repo = computed(() => String(query.value.repo || ''))
 const page = ref(null)
 const text = ref('')
 const sel = ref(null)
@@ -27,19 +30,22 @@ const form = ref('') // '', 'release' or 'tag'
 const loading = ref(false)
 let waitFor = '' // a tag just made: picked once its release shows (see refresh)
 const log = ref(null)
+const formEl = ref(null)
 
 async function load(tag = '', fresh = false) {
   if (!repo.value) return
   loading.value = true
+  const name = repo.value
   try {
-    const got = await cached(`/release${qs({ repo: repo.value, tag, fresh })}`, fresh)
+    const got = await cached(`/release${qs({ repo: name, tag, fresh })}`, fresh)
+    if (name !== repo.value) return // the panel moved on to another repo
     if (!tag || !page.value) page.value = got // a link to a tag still needs the list
     text.value = got.text
     sel.value = got.selected || null
-  } catch (e) { text.value = `error: ${e.message}` } finally { loading.value = false }
+  } catch (e) { if (name === repo.value) text.value = `error: ${e.message}` } finally { if (name === repo.value) loading.value = false }
 }
-watch(repo, () => { page.value = null; form.value = ''; output.value = ''; waitFor = ''; load(String(route.query.tag || '')) }, { immediate: true })
-watch(sel, (tag, before) => { if (tag && before && tag !== before) { replaceQuery({ tag }); load(tag) } })
+watch(repo, () => { page.value = null; form.value = ''; output.value = ''; waitFor = ''; load(String(query.value.tag || '')) }, { immediate: true })
+watch(sel, (tag, before) => { if (tag && before && tag !== before) { setQuery({ tag }); load(tag) } })
 
 const rows = computed(() => page.value?.releases || [])
 const columns = [
@@ -56,8 +62,7 @@ const badges = computed(() => {
   if (page.value.busy) out.push({ label: 'release run', value: 'running', cls: 'warn' })
   return out
 })
-const open = () => { const url = current.value?.url || page.value?.url; if (url) window.open(url, '_blank', 'noopener') }
-const back = () => (window.history.state?.back ? router.back() : router.push('/releases'))
+const open = () => { const url = current.value?.url || page.value?.url; openOut(url) }
 
 // A follow-up: the list, the version and whether a release run is going; the text when it is the shown release's.
 async function refresh() {
@@ -83,7 +88,7 @@ function done({ text: t, tag, ok }) {
   follow.now([repo.value])
   log.value?.burst()
 }
-useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, n: () => { form.value = 'release' }, T: () => { form.value = 'tag' },
+useKeys({ Escape: async () => { if (!form.value) back(); else if (await formEl.value?.leave() !== false) form.value = '' }, Backspace: back, n: () => { form.value = 'release' }, T: () => { form.value = 'tag' },
   o: open, r: () => { load(sel.value || '', true); log.value?.refresh() } })
 </script>
 
@@ -101,11 +106,14 @@ useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: ba
     </div>
     <StatusHeader :title="repo" sub="releases" :url="page?.url || ''" :badges="badges" />
     <div class="split ld">
-      <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.tag"
-                      :empty="loading ? 'loading…' : 'no releases yet: n creates the first'" @activate="open" /></div>
+      <div>
+        <!-- on a phone the list is all you see until a tap: the version (and R to release it) goes above it -->
+        <div v-if="phone && page?.version" class="pad"><VersionBar :repo="repo" :version="page.version" @done="done" /></div>
+        <DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.tag"
+                      :empty="loading ? 'loading…' : phone ? 'no releases yet: new release creates the first' : 'no releases yet: n creates the first'" outside @activate="open" /></div>
       <div class="pad">
-        <VersionBar v-if="page?.version" :repo="repo" :version="page.version" @done="done" />
-        <ReleaseForm v-if="form" :key="form" :mode="form" :repo="repo" :suggest="page?.suggest" :publishes="page?.publishes"
+        <VersionBar v-if="!phone && page?.version" :repo="repo" :version="page.version" @done="done" />
+        <ReleaseForm v-if="form" ref="formEl" :key="form" :mode="form" :repo="repo" :suggest="page?.suggest" :publishes="page?.publishes"
                      @done="done" @cancel="form = ''" />
         <template v-if="output"><h2>output</h2><TextPane :text="output" /></template>
         <TextPane v-if="!form" :text="text" :skip="text.split('\n')[0] === repo ? 1 : 0" :placeholder="loading ? 'loading…' : 'pick a release'" />

@@ -12,6 +12,7 @@ import { get, log, post, put, qs, state } from '../api.js'
 import { ask } from '../ui.js'
 import ErrorNote from './ErrorNote.vue'
 import RulesetForm from './RulesetForm.vue'
+import { useUnsaved } from '../unsaved.js'
 
 const props = defineProps({ repo: { type: String, required: true } })
 const emit = defineEmits(['done'])
@@ -21,13 +22,15 @@ const mode = ref('auto')
 const editing = ref(false) // the protect form
 const form = ref({})
 const file = ref(null) // {path, text, original, problems, editable, isNew}
+useUnsaved(() => !!file.value?.editable && file.value.text !== file.value.original, () => `your changes to ${props.repo}'s ${file.value?.path}`)
 const BOOLS = [['signed_commits', 'signed commits'], ['linear_history', 'linear history'], ['code_owners', 'code owner review'],
   ['resolve_threads', 'resolve threads'], ['dismiss_stale', 'dismiss stale reviews'], ['up_to_date', 'branch up to date'],
   ['last_push_approval', 'approve the last push'], ['merge_queue', 'merge queue']]
 
 async function load() {
   error.value = ''
-  try { data.value = await get(`/mason${qs({ repo: props.repo })}`) } catch (e) { error.value = e.message; data.value = null }
+  const asked = props.repo // a late answer for the repo shown before is dropped
+  try { const got = await get(`/mason${qs({ repo: asked })}`); if (asked === props.repo) data.value = got } catch (e) { if (asked === props.repo) { error.value = e.message; data.value = null } }
 }
 watch(() => props.repo, () => { data.value = null; editing.value = false; file.value = null; load() }, { immediate: true })
 

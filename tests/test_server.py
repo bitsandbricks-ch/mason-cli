@@ -72,6 +72,10 @@ def test_signed_out_and_headers(op):
     assert r.status_code == 302 and "code_challenge_method=S256" in r.headers["Location"]
     assert "state=" in r.headers["Location"] and "mason_oauth=" in r.headers["Set-Cookie"]
     assert anon.get("/api/v1/auth/github/callback?state=nope&code=x").headers["Location"].startswith("/login?error=")
+    # a provider's error: only its code reaches the sign-in page, not text from whoever made the link
+    bad = "/api/v1/auth/github/callback?error=access_denied&error_description=Mason+moved+to+evil.example"
+    loc = anon.get(bad).headers["Location"]
+    assert "evil" not in loc and "access_denied" in loc
     assert anon.get("/api/v1/auth/gitlab/login").status_code == 404  # not set up
 
 
@@ -126,6 +130,8 @@ def test_lists(op):
     prs = c.get("/api/v1/prs").json["prs"]
     assert {p["number"] for p in prs if p["repo"] == "acme/web"} == {7, 8, 9}
     assert next(p for p in prs if p["number"] == 9)["conflicts"]
+    seven = next(p for p in prs if p["repo"] == "acme/web" and p["number"] == 7)
+    assert seven["reviewers"] == ["mike", "team:ops"]  # who it waits on for a review (to do: "asks for your review")
     assert "blocked: required checks" in c.get("/api/v1/pr?repo=acme/web&number=7").json["text"]
     assert any(r["repo"] == "acme/web" for r in c.get("/api/v1/runs?repo=web").json["runs"])
     waits = c.get("/api/v1/approvals").json["approvals"]
@@ -231,6 +237,41 @@ def test_console(op):
     assert "usage" in c.post("/api/v1/console", json={"line": "mason status --nope"}, headers=H).json["text"]
 
 
+
+def test_console_asks_the_parser_what_writes():
+    from mason.server.api.console import is_write
+    w = lambda line: is_write(line.split())  # noqa: E731
+    assert not w("merge --dry-run web#8") and w("merge web#8")
+    assert w("merge web#8 -- --dry-run")  # after --, --dry-run is a target, and web#8 would merge
+    assert w("doctor --fi web") and w("doctor --fix web") and not w("doctor web")  # --fi is --fix to argparse
+    assert not w("doctor --dry --fix web")  # and --dry is --dry-run
+    assert not w("release") and not w("release --list web") and w("release web") and w("release -- --list")
+    assert not w("issue view web#1") and w("issue close web#1") and w("issue")
+    assert not w("status")
+
+
+def test_sign_in_returns_only_to_this_site():
+    from mason.server.api.account import safe_next
+    assert safe_next("/runs?repo=acme/web") == "/runs?repo=acme/web" and safe_next(None) == "/"
+    for bad in ("//example.com", "https://example.com", "/\\example.com", "/\t/example.com", "/\n/example.com",
+                "\t//example.com", "/ /x", "/" + "a" * 300):
+        assert safe_next(bad) == "/", bad
+
+
+def test_bad_numbers_are_400_and_a_bug_is_json(op, monkeypatch):
+    _, c = op
+    r = c.post("/api/v1/ready", json={"repo": "acme/web", "number": "x"}, headers=H)
+    assert r.status_code == 400 and "whole number" in r.json["error"]
+    assert c.post("/api/v1/run/rerun", json={"repo": "acme/web", "id": -3}, headers=H).status_code == 400
+    assert c.get("/api/v1/audit?limit=lots").status_code == 200
+    from mason.server.api import repos
+
+    def boom(*a, **k):
+        raise ZeroDivisionError("secret detail")
+    monkeypatch.setattr(repos, "capture_rate", boom)
+    r = c.post("/api/v1/ready", json={"repo": "acme/web", "number": 7}, headers=H)
+    assert r.status_code == 500 and "ZeroDivisionError" in r.json["error"] and "secret" not in r.json["error"]
+
 def test_api_keys_and_device_login(op):
     app, c = op
     r = c.post("/api/v1/keys", json={"name": "laptop", "scope": "read"}, headers=H)
@@ -280,7 +321,41 @@ def test_proxy_allowlist():
     assert allowed("GET", "/repos/acme/web/hooks") and allowed("GET", "/repos/acme/web/keys")  # doctor reads the lists
     assert not allowed("GET", "/repos/acme/web/hooks/1") and not allowed("POST", "/repos/acme/web/hooks")
     assert not allowed("POST", "/repos/acme/web/keys") and allowed("PATCH", "/repos/acme/web/properties/values")
+    # a dot or slash still encoded would be decoded once more on GitHub's side and leave the repo
+    for sneaky in ("/repos/acme/web/contents/%2e%2e/%2E%2E/%2e%2e/user/keys", "/repos/acme/web/contents/a%2Fb",
+                   "/repos/acme/web/contents/../../user", "/repos/acme/web/contents/a\\b"):
+        assert not allowed("PUT", sneaky) and not allowed("GET", sneaky)
+    assert allowed("PUT", "/repos/acme/web/contents/docs/a b.md")
 
+
+
+def test_proxy_graphql_reads_the_document_not_its_text():
+    from mason.server.api.proxy import operations
+    assert operations("# hi\n{ viewer { login } }") == [("query", ["viewer"])]
+    assert operations('query { a: repository(owner: "a", name: "b") { ...R } }\nfragment R on Repository { id }') == \
+        [("query", ["repository"])]
+    ok = 'mutation($i: MergePullRequestInput!) { m: mergePullRequest(input: $i) { clientMutationId } }'
+    assert operations(ok) == [("mutation", ["mergePullRequest"])]
+    # what a regex over the text missed: commas and comments are space, and a string is only text
+    assert operations('mutation { mergePullRequest(input: {}) { a } deleteRef , (input: {}) { a } }')[0][1] == \
+        ["mergePullRequest", "deleteRef"]
+    hidden = 'mutation { mergePullRequest(input: {commitHeadline: "#(input:"}) { a } deleteRef #c\n(input: {}) { a } }'
+    assert operations(hidden)[0][1] == ["mergePullRequest", "deleteRef"]
+    assert operations('mutation { ...F } fragment F on Mutation { deleteRef(input: {}) { a } }') == [("mutation", None)]
+    assert [k for k, _ in operations(",mutation { deleteRef(input: {}) { a } }")] == ["mutation"]
+    assert len(operations("query { a } mutation { deleteRef(input: {}) { a } }")) == 2
+    blocks = 'mutation { mergePullRequest(input: {b: """a \\""" deleteRef(""", c: "\\"x"}) { a } }'
+    assert operations(blocks) == [("mutation", ["mergePullRequest"])]
+    for bad in ("", "nonsense { a }", "{ a", 'query { a(b: "open) }', 'query { a(b: """open) }',
+                'query { a(b: "x\ny") }'):
+        with pytest.raises(ValueError):
+            operations(bad)
+    import time
+    start = time.monotonic()  # escapes are scanned once, not tried again and again
+    for crafted in ('{ a(b: "' + '\\"' * 50000 + ") }", '{ a(b: """' + '\\"""' * 50000 + ") }"):
+        with pytest.raises(ValueError):
+            operations(crafted)
+    assert time.monotonic() - start < 1
 
 def test_defaults_editor(op):
     _, c = op
@@ -454,6 +529,7 @@ def test_device_sign_in_is_open_to_anyone(op, monkeypatch):
 
     class Demo:
         name = "demo"
+        web_commands = ("demo",)
         def tui_tabs(self): return []  # noqa: E301,E704
         def tui_checks(self): return []  # noqa: E301,E704
         def status_columns(self): return []  # noqa: E301,E704
@@ -889,6 +965,9 @@ def test_operator_panel(op, monkeypatch, capsys):
     assert not demo["on"] and demo["off_for_all"]
     annc.put("/api/v1/plugins/demo", json={"on": True}, headers=AH)
     assert not annc.get("/api/v1/plugins").json["plugins"][0]["on"]
+    # nor through the console
+    assert "demo" not in annc.get("/api/v1/console/commands").json["plugins"]
+    assert annc.post("/api/v1/console", json={"line": "mason demo"}, headers=AH).status_code == 400
     assert annc.put("/api/v1/operator/plugins/demo", json={"on": True}, headers=AH).status_code == 403
     mike.put("/api/v1/operator/plugins/demo", json={"on": True}, headers=H)
     assert annc.get("/api/v1/plugins").json["plugins"][0]["on"]

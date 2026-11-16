@@ -18,6 +18,8 @@ import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 import { openDetail } from '../ui.js'
+import { useSide, useTrack } from '../side.js'
+import { openOut } from '../links.js'
 
 const router = useRouter()
 const problems = ref(false)
@@ -29,6 +31,7 @@ const { data, error, loading, load, keep } = useLoad((q) => {
 loadGroups()
 const sel = ref(null)
 const form = ref('') // '', 'release' or 'tag'
+const formEl = ref(null) // the release form: asks before its notes go
 const output = ref('')
 const repoNames = ref([]) // the picker's repos: those of the filter, read again when it changes
 watch(() => [scope.provider, scope.group], () => { repoNames.value = [] })
@@ -43,9 +46,12 @@ const current = computed(() => rows.value.find((r) => r.repo === sel.value))
 const relTag = computed(() => { const m = String(current.value?.url || '').match(/\/releases\/tag\/([^/?#]+)$/); return m ? decodeURIComponent(m[1]) : '' })
 const toggle = () => { problems.value = !problems.value; load() }
 const toggleUnreleased = () => { unreleased.value = !unreleased.value; load() }
+useTrack(() => sel.value && { kind: 'release', repo: sel.value }, { sel, kind: 'release', key: (t) => (t.kind === 'release' ? t.repo : null) })
 const page = (r) => { const repo = r?.repo || sel.value; if (repo) router.push({ path: '/release', query: { repo } }) }
+const side = useSide()
 async function newRelease(mode = 'release') {
   form.value = mode
+  side.close() // the form shows where the panel would cover it
   openDetail()
   output.value = ''
   if (!repoNames.value.length) {
@@ -81,8 +87,8 @@ function done({ text, ok, repo }) {
   form.value = ''
   follow.now([repo || sel.value])
 }
-useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n: () => newRelease('release'), T: () => newRelease('tag'), Escape: () => { form.value = '' },
-  o: () => current.value?.url && window.open(current.value.url, '_blank', 'noopener') })
+useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n: () => newRelease('release'), T: () => newRelease('tag'), Escape: async () => { if (form.value && await formEl.value?.leave() !== false) form.value = '' },
+  o: () => openOut(current.value?.url) })
 </script>
 
 <template>
@@ -99,10 +105,10 @@ useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n:
       <button :disabled="!sel" @click="page()"><span class="k">⏎</span> releases of the repo</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : 'no releases yet: pick a repo page and press n to create one'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : problems || unreleased ? 'none match: p and u switch the filters off' : 'no repos in this filter: new release (n) picks any repo'" @activate="page" /></div>
       <div class="pad">
         <VersionBar v-if="current?.version && !form" :key="current.repo" :repo="current.repo" :version="current.version" @done="done" />
-        <ReleaseForm v-if="form" :key="form" :mode="form" :repo="sel || ''" :repos="repoNames" @done="done" @cancel="form = ''" />
+        <ReleaseForm v-if="form" ref="formEl" :key="form" :mode="form" :repo="sel || ''" :repos="repoNames" @done="done" @cancel="form = ''" />
         <template v-if="output"><h2>output</h2><TextPane :text="output" /></template>
         <TextPane v-if="!form" :text="current?.text" placeholder="pick a repo; Enter shows all its releases" />
       </div>
