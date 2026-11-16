@@ -105,8 +105,10 @@ onMounted(load)
         <div class="accent">accounts</div>
         <div v-for="i in state.me.identities" :key="i.id" class="row">
           <span class="ok">●</span><span>{{ i.provider }}</span><span class="accent">{{ i.login }}</span>
-          <span class="dim">{{ i.host }} · scopes {{ i.scopes || '-' }}</span><span class="spacer" />
-          <button @click="unlink(i)">disconnect</button>
+          <span class="dim">{{ i.host }}{{ i.scopes ? ` · scopes ${i.scopes}` : '' }}</span><span class="spacer" />
+          <!-- the only login can't go (the server says so too): deleting the account is below -->
+          <button v-if="state.me.identities.length > 1" @click="unlink(i)">disconnect</button>
+          <span v-else class="dim" title="connect another account first, or delete your account below">your only login</span>
         </div>
         <div class="row" style="margin-top: 6px">
           <template v-for="p in state.me.providers" :key="p">
