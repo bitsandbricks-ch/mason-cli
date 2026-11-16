@@ -5,8 +5,9 @@
 // and then while a PR of it waits for auto-merge, so a PR that merges by itself leaves the list without r.
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { get, qs } from '../api.js'
+import { get, qs, state } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
+import { alive } from '../pick.js'
 import { useKeys } from '../keys.js'
 import { pinned, pinnedFirst } from '../pins.js'
 import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
@@ -14,6 +15,8 @@ import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
+import { sideOpen, useTrack } from '../side.js'
+import { openOut } from '../links.js'
 
 const { data, error, loading, load, keep } = useLoad((q) => `/prs${q}`)
 loadGroups()
@@ -21,15 +24,18 @@ const filter = ref('all')
 const sel = ref(null)
 const detail = ref('')
 const diff = ref(false)
-const FILTERS = { all: 'all open', ready: 'ready', drafts: 'drafts', auto: 'auto-merge', conflicts: 'conflicts', merged: 'merged' }
+const FILTERS = { all: 'all open', review: 'asks you', ready: 'ready', drafts: 'drafts', auto: 'auto-merge', conflicts: 'conflicts', merged: 'merged' }
 
 const keyOf = (p) => `${p.repo}#${p.number}`
+const myLogins = computed(() => new Set((state.me?.identities || []).map((i) => String(i.login).toLowerCase())))
+const asksMe = (p) => (p.reviewers || []).some((r) => myLogins.value.has(String(r).toLowerCase()))
 const rows = computed(() => {
   if (filter.value === 'merged') return (data.value?.merged || []).map((p) => ({ ...p, state: `merged ${p.by ? 'by ' + p.by : ''}` }))
   return pinnedFirst(data.value?.prs || [], pinned.value).filter((p) => ({
-    all: true, ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
+    all: true, review: asksMe(p), ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
   })[filter.value]).map((p) => ({
-    ...p, state: p.draft ? 'draft' : p.conflicts ? 'CONFLICTS' : p.merge || 'ready', flags: [p.auto && 'auto-merge', p.review].filter(Boolean).join(' · '),
+    ...p, state: p.draft ? 'draft' : p.conflicts ? 'CONFLICTS' : p.merge || 'ready',
+    flags: [asksMe(p) && 'asks you to review', p.auto && 'auto-merge', p.review].filter(Boolean).join(' · '),
   }))
 })
 const columns = [
@@ -63,11 +69,34 @@ async function show() {
   const p = current.value
   if (!p) { detail.value = ''; return }
   detail.value = '…'
-  try { detail.value = (await get(`/pr${qs({ repo: p.repo, number: p.number, diff: diff.value })}`)).text } catch (e) { detail.value = `error: ${e.message}` }
+  // the side panel shows it (and the preview is hidden): don't ask twice; shown again when the panel closes
+  if (sideOpen.value) { detail.value = ''; return }
+  try {
+    const text = (await get(`/pr${qs({ repo: p.repo, number: p.number, diff: diff.value })}`)).text
+    if (current.value === p) detail.value = text // an older answer after you moved on is dropped
+  } catch (e) { if (current.value === p) detail.value = `error: ${e.message}` }
 }
-watch([sel, diff], show)
+watch([sel, diff, sideOpen], show)
+
+// several PRs at once: space or the boxes pick them, and m / M merge the picked ones instead of the selected one
+const picked = ref([])
+watch(rows, (list) => { picked.value = alive(picked.value, list.map(keyOf)) })
+const pickedRows = computed(() => rows.value.filter((p) => picked.value.includes(keyOf(p))))
+async function mergePicked(now) {
+  const list = pickedRows.value
+  if (!list.length) return
+  const got = await change(`${now ? 'Merge' : 'Auto-merge'} ${list.length} pull request${list.length === 1 ? '' : 's'}?`, '/merge',
+    { targets: list.map(keyOf), now, ready: list.some((p) => p.draft) }, { detail: list.map((p) => `${keyOf(p)} ${p.title}`).join('\n') })
+  if (!got) return
+  detail.value = got.text
+  if (got.dry) return
+  if (got.ok) { for (const p of list) expect(p, now ? { gone: true } : { auto: true, draft: false }); picked.value = [] }
+  follow.now([...new Set(list.map((p) => p.repo))])
+}
 
 async function doMerge(now) {
+  if (filter.value === 'merged') return // like the buttons: nothing left to merge there
+  if (picked.value.length) return mergePicked(now)
   const p = current.value
   if (!p) return
   const got = await change(`${now ? 'Merge' : 'Auto-merge'} ${keyOf(p)} ${p.title}?`, '/merge', { targets: [keyOf(p)], now, ready: p.draft })
@@ -92,8 +121,10 @@ async function ready() {
   if (got.ok) expect(p, { draft: false })
   follow.now([p.repo])
 }
-const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
+const open = () => openOut(current.value?.url)
 const router = useRouter()
+useTrack(() => current.value && { kind: 'pr', repo: current.value.repo, number: current.value.number },
+  { sel, kind: 'pr', key: (t) => (t.kind === 'pr' ? `${t.repo}#${t.number}` : null) })
 const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }
 useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, p: () => page(), v: cycle })
@@ -113,8 +144,15 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
       <button class="any" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
     </div>
+    <div v-if="picked.length" class="picked-bar" role="status">
+      <span><b>{{ picked.length }}</b> picked</span>
+      <button @click="mergePicked(false)"><span class="k">m</span> auto-merge them</button>
+      <button @click="mergePicked(true)"><span class="k">M</span> merge them now</button>
+      <button @click="picked = []">clear</button>
+      <span class="dim hide-xs">space picks the selected row, shift+click a span</span>
+    </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :picked="filter === 'merged' ? null : picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
     <EventLog band :repo="current?.repo || ''" kind="pr" :number="current?.number || ''" :title="current ? `${current.repo}${current.provider === 'gitlab' ? '!' : '#'}${current.number} ${current.title}` : ''" />

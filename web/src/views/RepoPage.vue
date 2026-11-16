@@ -4,7 +4,8 @@
 // pages, and its event log at the bottom. After a change, and while a release run is going, the page reads
 // the repo again by itself (see useFollow).
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { usePage } from '../side.js'
 import { qs } from '../api.js'
 import { act, cached, forget, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
@@ -21,14 +22,19 @@ import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 import { stateClass } from '../ui.js'
 import { pinned, togglePin } from '../pins.js'
+import { openOut } from '../links.js'
 
-const route = useRoute()
+// the route's query, or the side panel's when it shows in one (and then back closes the panel)
+const { query, back } = usePage('/')
 const router = useRouter()
-const repo = computed(() => String(route.query.repo || ''))
+const repo = computed(() => String(query.value.repo || ''))
 const gitlab = computed(() => repo.value.startsWith('gitlab:'))
+// no GitLab (or GitHub) account to read it with: one card that says how, instead of an error in every panel
+const needs = computed(() => (/^error: connect (GitLab|GitHub)\b/i.exec(detail.value) || [])[1] || '')
 const detail = ref('')
 const output = ref('')
 const form = ref('') // '', 'release' or 'tag'
+const formEl = ref(null) // the release form: asks before its notes go
 const suggest = ref('')
 const publishes = ref('')
 const version = ref(null)
@@ -113,8 +119,10 @@ const actions = computed(() => [
   { k: 'o', group: 'elsewhere', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: open },
 ])
 async function loadReleases(fresh = false, quiet = false) {
+  const name = repo.value
   try {
-    const p = await cached(`/release${qs({ repo: repo.value, fresh })}`, fresh, { quiet })
+    const p = await cached(`/release${qs({ repo: name, fresh })}`, fresh, { quiet })
+    if (name !== repo.value) return // the panel moved on to another repo
     suggest.value = p.suggest; publishes.value = p.publishes || ''; version.value = p.version || null; busy.value = !!p.busy
   } catch { suggest.value = suggest.value || 'v0.1.0' }
 }
@@ -130,14 +138,13 @@ async function newRelease(mode) {
   if (!suggest.value) await loadReleases()
 }
 function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); follow.now([repo.value]); log.value?.burst() } }
-const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
-const back = () => (window.history.state?.back ? router.back() : router.push('/'))
+const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; openOut(url) }
 const doctorPanel = ref(null)
 const masonPanel = ref(null)
 const settingsPanel = ref(null)
 const branchesPanel = ref(null)
 const reload = () => { load(true); log.value?.refresh(); doctorPanel.value?.load(true); masonPanel.value?.load(); settingsPanel.value?.load(); branchesPanel.value?.load() }
-const keys = { '.': () => sheet.value?.pick(), Escape: () => (form.value ? (form.value = '') : back()), Backspace: back, r: () => reload() }
+const keys = { '.': () => sheet.value?.pick(), Escape: async () => { if (!form.value) back(); else if (await formEl.value?.leave() !== false) form.value = '' }, Backspace: back, r: () => reload() }
 watch(actions, (list) => list.forEach((a) => { keys[a.k] = () => !a.off && a.fn() }), { immediate: true })
 useKeys(keys)
 // last: the immediate watch uses everything above
@@ -150,11 +157,17 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
       <button class="hide-xs" @click="back"><span class="k">esc</span> back</button>
       <span class="dim hide-xs">repos ›</span>
       <span class="spacer" />
-      <ActionList ref="sheet" class="show-compact" :actions="actions" :title="repo" compact />
+      <ActionList v-if="!needs" ref="sheet" class="show-compact" :actions="actions" :title="repo" compact />
       <button class="any" @click="reload"><span class="k">r</span> reload</button>
     </div>
     <StatusHeader :title="pinned.has(repo) ? `★ ${repo}` : repo" :url="info?.url" :badges="badges" :next="next" />
-    <div class="split page">
+    <div v-if="needs" class="pad">
+      <div class="box">
+        <p>Mason reads {{ repo }} with your {{ needs }} account, and none is connected yet.</p>
+        <router-link class="btn primary" to="/settings">connect {{ needs }} in settings</router-link>
+      </div>
+    </div>
+    <div v-else class="split page repo-cols">
       <div class="pad">
         <div class="hide-xs"><h2>actions</h2><ActionList :actions="actions" /></div>
         <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" @result="(d) => (doctor = d)" @run="fixFrom" />
@@ -165,7 +178,7 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
       </div>
       <div class="pad">
         <VersionBar v-if="version" ref="vbar" :repo="repo" :version="version" @done="done" />
-        <ReleaseForm v-if="form" :key="form" :mode="form" :repo="repo" :suggest="suggest" :publishes="publishes"
+        <ReleaseForm v-if="form" ref="formEl" :key="form" :mode="form" :repo="repo" :suggest="suggest" :publishes="publishes"
                      @done="done" @cancel="form = ''" />
         <h2>{{ gitlab ? 'merge requests' : 'pull requests' }} <span class="dim">({{ pulls.length }})</span></h2>
         <ul v-if="pulls.length" class="pull-list">
@@ -182,6 +195,6 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
         <TextPane v-if="rest || !info" :text="info ? rest : detail" placeholder="loading…" />
       </div>
     </div>
-    <EventLog ref="log" band :repo="repo" kind="repo" :title="repo" />
+    <EventLog v-if="!needs" ref="log" band :repo="repo" kind="repo" :title="repo" />
   </div>
 </template>

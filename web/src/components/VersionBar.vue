@@ -3,9 +3,10 @@
 // version and its changelog section) and release (R: push v<version> once the bump is merged). Shown on a repo's
 // and its releases' pages, and under the selected repo in Releases.
 import { computed } from 'vue'
-import { act } from '../load.js'
+import { change } from '../load.js'
 import { ask, choose } from '../ui.js'
 import { useKeys } from '../keys.js'
+import { safeHref } from '../links.js'
 
 const props = defineProps({ repo: { type: String, required: true }, version: { type: Object, default: null } })
 const emit = defineEmits(['done'])
@@ -29,15 +30,15 @@ async function bump() {
   if (!level) return
   const lv = level.trim()
   const to = next.value[lv] || lv
-  const text = await act(`Open a PR in ${props.repo} that sets ${v.value.file} to ${to} and adds the changelog section?`, '/bump',
+  const got = await change(`Open a PR in ${props.repo} that sets ${v.value.file} to ${to} and adds the changelog section?`, '/bump',
     { repo: props.repo, level: lv }, { detail: `${cur} → ${to} (${lv}). After its merge, R pushes the tag and the repo's workflow releases it.` })
-  if (text !== null) emit('done', { text, repo: props.repo, ok: !text.startsWith('error') && !text.includes('[dry-run]') })
+  if (got) emit('done', { text: got.text, repo: props.repo, ok: got.ok && !got.dry })
 }
 async function release() {
   if (!v.value?.todo) return
-  const text = await act(`Push the tag ${v.value.tag} on ${v.value.base} of ${props.repo}?`, '/release/version', { repo: props.repo },
+  const got = await change(`Push the tag ${v.value.tag} on ${v.value.base} of ${props.repo}?`, '/release/version', { repo: props.repo },
     { detail: `${v.value.file} says ${v.value.version}, latest release ${v.value.released || 'none'}. The repo's release workflow takes it from there.` })
-  if (text !== null) emit('done', { text, repo: props.repo, ok: !text.startsWith('error') && !text.includes('[dry-run]') })
+  if (got) emit('done', { text: got.text, repo: props.repo, ok: got.ok && !got.dry })
 }
 useKeys({ b: bump, R: release })
 defineExpose({ bump, release })
@@ -56,7 +57,7 @@ defineExpose({ bump, release })
     </div>
     <div v-if="v.pr" class="row" style="margin-top: 6px">
       <span class="dim">bump PR</span>
-      <a class="accent" :href="v.pr.url" target="_blank" rel="noopener">#{{ v.pr.number }}</a>
+      <a class="accent" :href="safeHref(v.pr.url) || undefined" target="_blank" rel="noopener">#{{ v.pr.number }}</a>
       <span>to {{ v.pr.version }} is open; merge it, then R releases it</span>
     </div>
   </div>

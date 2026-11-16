@@ -72,6 +72,10 @@ def test_signed_out_and_headers(op):
     assert r.status_code == 302 and "code_challenge_method=S256" in r.headers["Location"]
     assert "state=" in r.headers["Location"] and "mason_oauth=" in r.headers["Set-Cookie"]
     assert anon.get("/api/v1/auth/github/callback?state=nope&code=x").headers["Location"].startswith("/login?error=")
+    # a provider's error: only its code reaches the sign-in page, not text from whoever made the link
+    bad = "/api/v1/auth/github/callback?error=access_denied&error_description=Mason+moved+to+evil.example"
+    loc = anon.get(bad).headers["Location"]
+    assert "evil" not in loc and "access_denied" in loc
     assert anon.get("/api/v1/auth/gitlab/login").status_code == 404  # not set up
 
 
@@ -84,6 +88,9 @@ def test_me_csrf_settings(op):
     assert r.status_code == 403
     assert c.put("/api/v1/settings", json={"defaults": "/etc"}, headers=H).status_code == 400  # no server folders
     assert c.put("/api/v1/settings", json={"orgs": "acme, mike"}, headers=H).json["orgs"] == ["acme", "mike"]
+    r = c.put("/api/v1/settings", json={"repos": "acme/web, tool"}, headers=H)  # tool has no owner
+    assert r.status_code == 400 and "tool" in r.json["error"]
+    assert c.put("/api/v1/settings", json={"orgs": ["acme/web"]}, headers=H).status_code == 400
     assert c.get("/api/v1/settings").json["org_defaults"] is True  # each org's .mason: on unless turned off
     assert c.get("/api/v1/settings").json["pinned"] == []
     got = c.put("/api/v1/settings", json={"pinned": ["acme/web", "gitlab:grp/sub/app"]}, headers=H).json
@@ -131,6 +138,8 @@ def test_lists(op):
     prs = c.get("/api/v1/prs").json["prs"]
     assert {p["number"] for p in prs if p["repo"] == "acme/web"} == {7, 8, 9}
     assert next(p for p in prs if p["number"] == 9)["conflicts"]
+    seven = next(p for p in prs if p["repo"] == "acme/web" and p["number"] == 7)
+    assert seven["reviewers"] == ["mike", "team:ops"]  # who it waits on for a review (to do: "asks for your review")
     assert "blocked: required checks" in c.get("/api/v1/pr?repo=acme/web&number=7").json["text"]
     assert any(r["repo"] == "acme/web" for r in c.get("/api/v1/runs?repo=web").json["runs"])
     waits = c.get("/api/v1/approvals").json["approvals"]
@@ -234,7 +243,48 @@ def test_console(op):
     assert c.post("/api/v1/console", json={"line": "mason init /etc"}, headers=H).status_code == 400
     assert c.post("/api/v1/console", json={"line": "rm -rf /"}, headers=H).status_code == 400
     assert "usage" in c.post("/api/v1/console", json={"line": "mason status --nope"}, headers=H).json["text"]
+    from mason import core
+    assert core.dry_run() is False  # the dry run of `merge --dry-run` above ended with the command
+    r = c.post("/api/v1/console", json={"line": "mason issue comment web#3 -"}, headers=H)
+    assert r.status_code == 400 and "stdin" in r.json["error"]  # the server's stdin would hang the request
+    r = c.post("/api/v1/console", json={"line": "mason release new web v9.9.9 --notes=- --dry-run"}, headers=H)
+    assert r.status_code == 400 and "stdin" in r.json["error"]
 
+
+
+def test_console_asks_the_parser_what_writes():
+    from mason.server.api.console import is_write
+    w = lambda line: is_write(line.split())  # noqa: E731
+    assert not w("merge --dry-run web#8") and w("merge web#8")
+    assert w("merge web#8 -- --dry-run")  # after --, --dry-run is a target, and web#8 would merge
+    assert w("doctor --fi web") and w("doctor --fix web") and not w("doctor web")  # --fi is --fix to argparse
+    assert not w("doctor --dry --fix web")  # and --dry is --dry-run
+    assert not w("release") and not w("release --list web") and w("release web") and w("release -- --list")
+    assert not w("issue view web#1") and w("issue close web#1") and w("issue")
+    assert not w("status")
+
+
+def test_sign_in_returns_only_to_this_site():
+    from mason.server.api.account import safe_next
+    assert safe_next("/runs?repo=acme/web") == "/runs?repo=acme/web" and safe_next(None) == "/"
+    for bad in ("//example.com", "https://example.com", "/\\example.com", "/\t/example.com", "/\n/example.com",
+                "\t//example.com", "/ /x", "/" + "a" * 300):
+        assert safe_next(bad) == "/", bad
+
+
+def test_bad_numbers_are_400_and_a_bug_is_json(op, monkeypatch):
+    _, c = op
+    r = c.post("/api/v1/ready", json={"repo": "acme/web", "number": "x"}, headers=H)
+    assert r.status_code == 400 and "whole number" in r.json["error"]
+    assert c.post("/api/v1/run/rerun", json={"repo": "acme/web", "id": -3}, headers=H).status_code == 400
+    assert c.get("/api/v1/audit?limit=lots").status_code == 200
+    from mason.server.api import repos
+
+    def boom(*a, **k):
+        raise ZeroDivisionError("secret detail")
+    monkeypatch.setattr(repos, "capture_rate", boom)
+    r = c.post("/api/v1/ready", json={"repo": "acme/web", "number": 7}, headers=H)
+    assert r.status_code == 500 and "ZeroDivisionError" in r.json["error"] and "secret" not in r.json["error"]
 
 def test_api_keys_and_device_login(op):
     app, c = op
@@ -255,7 +305,10 @@ def test_api_keys_and_device_login(op):
     code = dev.post("/api/v1/device/code", json={"scope": "write"}).json
     assert dev.post("/api/v1/device/token", json={"device_code": code["device_code"]}).json["error"] == \
         "authorization_pending"
-    assert c.get(f"/api/v1/device/info?code={code['user_code']}").json["scope"] == "write"
+    got = c.get(f"/api/v1/device/info?code={code['user_code']}").json
+    assert got["scope"] == "write" and got["ip"] == "127.0.0.1" and got["same_address"]
+    other = c.get(f"/api/v1/device/info?code={code['user_code']}", environ_base={"REMOTE_ADDR": "203.0.113.9"}).json
+    assert not other["same_address"]  # the approval page warns: the code was asked for elsewhere
     assert c.post("/api/v1/device/approve", json={"user_code": code["user_code"]}, headers=H).json["ok"]
     from mason.server.models import DeviceGrant, db
     with app.app_context():
@@ -285,7 +338,94 @@ def test_proxy_allowlist():
     assert allowed("GET", "/repos/acme/web/hooks") and allowed("GET", "/repos/acme/web/keys")  # doctor reads the lists
     assert not allowed("GET", "/repos/acme/web/hooks/1") and not allowed("POST", "/repos/acme/web/hooks")
     assert not allowed("POST", "/repos/acme/web/keys") and allowed("PATCH", "/repos/acme/web/properties/values")
+    # a dot or slash still encoded would be decoded once more on GitHub's side and leave the repo
+    for sneaky in ("/repos/acme/web/contents/%2e%2e/%2E%2E/%2e%2e/user/keys", "/repos/acme/web/contents/a%2Fb",
+                   "/repos/acme/web/contents/../../user", "/repos/acme/web/contents/a\\b"):
+        assert not allowed("PUT", sneaky) and not allowed("GET", sneaky)
+    assert allowed("PUT", "/repos/acme/web/contents/docs/a b.md")
 
+
+def test_graphql_proxy_refuses_hidden_mutations(op):
+    _, c = op
+    sneaky = 'mutation { mergePullRequest(input: {}) { x } deleteRef # hidden\n(input: {refId: "1"}) { x } }'
+    r = c.post("/api/v1/github/graphql", json={"query": sneaky}, headers=H)
+    assert r.status_code == 403 and "deleteRef" in r.json["error"]
+    r = c.post("/api/v1/github/graphql", json={"query": "query { viewer { login } } mutation { deleteRef(input: {}) "
+                                                         "{ x } }"}, headers=H)
+    assert r.status_code == 400 and "one operation" in r.json["error"]
+    assert c.post("/api/v1/github/graphql", json={"query": "fragment F on X { y }"}, headers=H).status_code == 400
+    assert c.post("/api/v1/github/graphql", json="x", headers=H).status_code == 400
+    assert c.get("/api/v1/audit?limit=x").status_code == 200
+
+
+def test_bad_numbers_are_a_400_not_a_500(op):
+    _, c = op
+    for path, data in (("/api/v1/ready", {"repo": "acme/web", "number": "x"}),
+                       ("/api/v1/run/rerun", {"repo": "acme/web", "id": [1]}),
+                       ("/api/v1/issue", {"repo": "acme/web", "number": -3, "action": "close"})):
+        r = c.post(path, json={**data, "dry_run": True}, headers=H)
+        assert r.status_code == 400, (path, r.status_code)
+
+
+def test_a_crash_is_json_without_details(op, monkeypatch):
+    app, c = op
+    from mason.server.api import repos as repos_api
+
+    def boom(*_a, **_kw):
+        raise KeyError("secret detail")
+    monkeypatch.setattr(repos_api, "load_config", boom)
+    app.config["PROPAGATE_EXCEPTIONS"] = False  # as in production: the test client would re-raise it
+    r = c.get("/api/v1/repos")
+    assert r.status_code == 500 and "server's log" in r.json["error"]
+    assert "secret detail" not in r.get_data(as_text=True)
+
+
+def test_sign_in_only_goes_back_to_this_site():
+    """next= after a sign-in: browsers drop tabs and newlines, so "/\t/evil.example" would be //evil.example."""
+    from mason.server.api.account import safe_next
+    assert safe_next("/prs?group=acme/#top") == "/prs?group=acme/#top"
+    for bad in ("//evil.example", "/\t/evil.example", "/\n/evil.example", "/\\evil.example", "https://evil.example",
+                "/prs\n", "/a b", "x" * 300, None, ""):
+        assert safe_next(bad) == "/"
+
+
+def test_sign_in_with_a_tab_in_next_stays_here(op):
+    app, _ = op
+    anon = app.test_client()
+    r = anon.get("/api/v1/auth/github/login?next=/%09/evil.example")
+    assert r.status_code == 302
+    with app.app_context():
+        from mason.server.models import OAuthState, db
+        assert [row.return_to for row in db.query(OAuthState)] == ["/"]
+
+
+def test_proxy_graphql_reads_the_document_not_its_text():
+    from mason.server.api.proxy import operations
+    assert operations("# hi\n{ viewer { login } }") == [("query", ["viewer"])]
+    assert operations('query { a: repository(owner: "a", name: "b") { ...R } }\nfragment R on Repository { id }') == \
+        [("query", ["repository"])]
+    ok = 'mutation($i: MergePullRequestInput!) { m: mergePullRequest(input: $i) { clientMutationId } }'
+    assert operations(ok) == [("mutation", ["mergePullRequest"])]
+    # what a regex over the text missed: commas and comments are space, and a string is only text
+    assert operations('mutation { mergePullRequest(input: {}) { a } deleteRef , (input: {}) { a } }')[0][1] == \
+        ["mergePullRequest", "deleteRef"]
+    hidden = 'mutation { mergePullRequest(input: {commitHeadline: "#(input:"}) { a } deleteRef #c\n(input: {}) { a } }'
+    assert operations(hidden)[0][1] == ["mergePullRequest", "deleteRef"]
+    assert operations('mutation { ...F } fragment F on Mutation { deleteRef(input: {}) { a } }') == [("mutation", None)]
+    assert [k for k, _ in operations(",mutation { deleteRef(input: {}) { a } }")] == ["mutation"]
+    assert len(operations("query { a } mutation { deleteRef(input: {}) { a } }")) == 2
+    blocks = 'mutation { mergePullRequest(input: {b: """a \\""" deleteRef(""", c: "\\"x"}) { a } }'
+    assert operations(blocks) == [("mutation", ["mergePullRequest"])]
+    for bad in ("", "nonsense { a }", "{ a", 'query { a(b: "open) }', 'query { a(b: """open) }',
+                'query { a(b: "x\ny") }'):
+        with pytest.raises(ValueError):
+            operations(bad)
+    import time
+    start = time.monotonic()  # escapes are scanned once, not tried again and again
+    for crafted in ('{ a(b: "' + '\\"' * 50000 + ") }", '{ a(b: """' + '\\"""' * 50000 + ") }"):
+        with pytest.raises(ValueError):
+            operations(crafted)
+    assert time.monotonic() - start < 1
 
 def test_defaults_editor(op):
     _, c = op
@@ -295,6 +435,9 @@ def test_defaults_editor(op):
     bad = c.post("/api/v1/defaults/validate", json={"path": "mason.toml",
                                                     "text": '[[group]]\nname="a"\nmatch={nope=1}\n'}, headers=H).json
     assert "match doesn't know nope" in bad["problems"][0]
+    bad = c.post("/api/v1/defaults/validate", json={"path": "mason.toml", "text": 'repos = ["acme/web", "tool"]\n'},
+                 headers=H).json
+    assert bad["problems"] == ["repos are owner/name: tool"]
     bad = c.post("/api/v1/defaults/validate", headers=H, json={
         "path": "mason.toml", "text": '[[group]]\nname="a"\nskip=["nope"]\nvisibility="x"\nactions={y=1}\n'}).json
     assert [p.split(": ")[1][:14] for p in bad["problems"]] == ["skip doesn't k", "visibility is ", "actions knows "]
@@ -302,6 +445,12 @@ def test_defaults_editor(op):
                headers=H).json
     assert "a ruleset needs a name" in rs["problems"]
     assert c.put("/api/v1/defaults/file", json={"path": "../etc/passwd", "text": "x"}, headers=H).status_code == 400
+    # saving over a file that changed since the editor opened it asks first (409), the same text goes on
+    now = c.get("/api/v1/defaults/file?path=mason.toml").json["text"]
+    put = {"path": "mason.toml", "text": now + "\n", "mode": "commit", "force": True}
+    r = c.put("/api/v1/defaults/file", json={**put, "base": "an older text"}, headers=H)
+    assert r.status_code == 409 and "changed in acme/defaults since you opened it" in r.json["error"]
+    assert c.put("/api/v1/defaults/file", json={**put, "base": now}, headers=H).status_code != 409
     assert any(t["kind"] == "ruleset" for t in c.get("/api/v1/defaults/templates").json)
     got = c.post("/api/v1/defaults/ruleset-from", json={"repo": "acme/api"}, headers=H).json
     assert got[0]["path"] == "rulesets/default/main.json" and json.loads(got[0]["text"])["name"] == "main"
@@ -313,8 +462,11 @@ def test_market(op, tmp_path):
     pem, pub = market.keygen()
     doc = {"name": "test", "plugins": [{"name": "demo", "package": "demo-pkg", "version": "1.0",
                                         "source": "git+https://example.org/demo@v1"}]}
+    r = c.get("/api/v1/market")  # no index yet: the error doesn't name the server's files
+    assert r.status_code == 502 and str(tmp_path) not in r.json["error"]
     (tmp_path / "index.json").write_text(json.dumps(doc))
     got = c.get("/api/v1/market").json
+    assert str(tmp_path) not in got["index"]
     assert got["status"] == "unverified" and got["plugins"][0]["name"] == "demo" and "can_install" not in got
     (tmp_path / "index.json").write_text(json.dumps(market.sign(doc, pem)))
     app.config["OP"].plugin_index_keys = [pub]
@@ -459,6 +611,7 @@ def test_device_sign_in_is_open_to_anyone(op, monkeypatch):
 
     class Demo:
         name = "demo"
+        web_commands = ("demo",)
         def tui_tabs(self): return []  # noqa: E301,E704
         def tui_checks(self): return []  # noqa: E301,E704
         def status_columns(self): return []  # noqa: E301,E704
@@ -578,6 +731,9 @@ def test_proxy_reads_through_the_users_cache_and_writes_make_it_stale(op, monkey
         client.get("/api/v1/github/rest/repos/acme/web/labels")
         got = api.hits("/repos/acme/web/labels")
         assert len(got) == 3 and got[-1][0] == "GET" and got[-1][2].get("If-None-Match") == etag
+        # the path goes on encoded: a file name with a space works
+        client.get("/api/v1/github/rest/repos/acme/web/contents/my%20file.md")
+        assert api.hits("/repos/acme/web/contents/my%20file.md")
     finally:
         api.server.shutdown()
 # ── revoking tokens when a login is disconnected or the account deleted ──────
@@ -778,7 +934,7 @@ def test_key_and_session_caps(op, monkeypatch):
 def test_settings_size_and_device_lookups(op):
     app, c = op
     big = [f"org-{n:03d}-" + "x" * 180 for n in range(200)]
-    r = c.put("/api/v1/settings", json={"orgs": big, "repos": big}, headers=H)
+    r = c.put("/api/v1/settings", json={"orgs": big, "repos": [f"acme/{x}" for x in big]}, headers=H)
     assert r.status_code == 413 and "KB" in r.json["error"]
     codes = [c.get("/api/v1/device/info?code=BCDF-GHJK").status_code for _ in range(11)]
     assert codes[:10] == [404] * 10 and codes[10] == 429
@@ -894,6 +1050,9 @@ def test_operator_panel(op, monkeypatch, capsys):
     assert not demo["on"] and demo["off_for_all"]
     annc.put("/api/v1/plugins/demo", json={"on": True}, headers=AH)
     assert not annc.get("/api/v1/plugins").json["plugins"][0]["on"]
+    # nor through the console
+    assert "demo" not in annc.get("/api/v1/console/commands").json["plugins"]
+    assert annc.post("/api/v1/console", json={"line": "mason demo"}, headers=AH).status_code == 400
     assert annc.put("/api/v1/operator/plugins/demo", json={"on": True}, headers=AH).status_code == 403
     mike.put("/api/v1/operator/plugins/demo", json={"on": True}, headers=H)
     assert annc.get("/api/v1/plugins").json["plugins"][0]["on"]
@@ -1083,6 +1242,9 @@ def test_mason_files_write(op, monkeypatch, tmp_path):
     ok = c.put("/api/v1/mason/file", json={"repo": "acme/web", "path": ".mason.toml", "text": "auto_fix = true\n",
                                            "mode": "commit"}, headers=H).json
     assert ok["mode"] == "commit" and "pushed to the default branch" in ok["text"]
+    r = c.put("/api/v1/mason/file", json={"repo": "acme/web", "path": ".mason.toml", "text": "auto_fix = false\n",
+                                          "base": "not what is there", "mode": "commit"}, headers=H)
+    assert r.status_code == 409 and "since you opened it" in r.json["error"]
     saved = c.post("/api/v1/mason/save-live", json={"repo": "acme/api"}, headers=H).json
     assert saved["mode"] == "pr" and "-X PUT /repos/acme/api/contents/.mason/rulesets/main.json" in log.read_text()
     audit = json.dumps(c.get("/api/v1/audit").json)
@@ -1273,3 +1435,96 @@ def test_move_or_remove_github_rulesets(op, monkeypatch, tmp_path):
     assert "-X DELETE /repos/acme/api/contents/.github/rulesets/release.json" in calls and "-X PUT" not in calls
     assert c.post("/api/v1/mason/move", json={"repo": "acme/api", "paths": [".mason.toml"]},
                   headers=H).status_code == 400
+
+
+def test_broken_plugin_reason_only_for_operators(op, monkeypatch):
+    app, mike = op
+    from mason import plugins
+    from mason.server import operators
+    monkeypatch.setattr(plugins, "errors", ["bad: No module named '/srv/secret/path'"])
+    assert mike.get("/api/v1/plugins").json["broken"] == ["bad"]
+    with app.app_context():
+        operators.add("github:mike")
+    assert mike.get("/api/v1/plugins").json["broken"] == ["bad: No module named '/srv/secret/path'"]
+
+
+def test_plugin_index_error_names_the_file_only_for_operators(op, monkeypatch):
+    app, mike = op
+    from mason import market
+    from mason.server import operators
+
+    def gone(*_a, **_kw):
+        raise OSError("[Errno 2] No such file: '/srv/secret/index.json'")
+    monkeypatch.setattr(market, "listing", gone)
+    r = mike.get("/api/v1/market")
+    assert r.status_code == 502 and "/srv/secret" not in r.json["error"]
+    with app.app_context():
+        operators.add("github:mike")
+    assert "/srv/secret" in mike.get("/api/v1/market").json["error"]
+
+
+def test_list_names_are_checked_and_one_bad_repo_doesnt_sink_issues(op):
+    _, c = op
+    for bad in ("../../x", "a/b/c", "x/..", "./x"):
+        assert c.get(f"/api/v1/issues?repo={bad}").status_code == 400, bad
+    assert c.get("/api/v1/repo?repo=../x").status_code == 400
+    got = c.get("/api/v1/issues?repo=acme/web&repo=acme/nope").json
+    assert got["failed"] and got["failed"][0].startswith("acme/nope: ")
+
+
+def test_web_hints_dont_say_gh(op):
+    _, c = op
+    from mason import core, packages
+    assert core.SERVING and "gh auth" not in packages.scope_hint()
+
+
+def test_old_database_gets_the_device_ip_column(tmp_path):
+    import sqlite3
+
+    from mason.server import models
+    path = tmp_path / "old.db"
+    con = sqlite3.connect(path)
+    con.executescript("CREATE TABLE device_grants (id INTEGER PRIMARY KEY, device_hash VARCHAR(64), "
+                      "user_code VARCHAR(16), client_name VARCHAR(100), scope VARCHAR(10), created_at DATETIME, "
+                      "expires_at DATETIME, approved_by INTEGER, denied BOOLEAN, key_enc TEXT, last_poll DATETIME);")
+    con.close()
+    engine = models.init(f"sqlite:///{path}")
+    from sqlalchemy import inspect
+    assert "ip" in {c["name"] for c in inspect(engine).get_columns("device_grants")}
+    models.db.remove()
+    engine.dispose()
+
+
+def test_one_token_refresh_at_a_time(op, monkeypatch):
+    app, _ = op
+    import threading
+    import time
+    from datetime import timedelta
+
+    from mason.server import oauth
+    from mason.server.models import Identity, db, utcnow
+    with app.app_context():
+        ident = db.query(Identity).first()
+        ident.refresh_enc = app.config["VAULT"].encrypt("r1")
+        ident.expires_at = utcnow() + timedelta(seconds=30)  # about to expire
+        ident_id = ident.id
+        db.commit()
+    calls = []
+
+    def fake(method, url, data=None, token=None, headers=None):
+        calls.append(data["refresh_token"])
+        time.sleep(0.2)  # the other request arrives meanwhile
+        return 200, {"access_token": f"new-{len(calls)}", "refresh_token": f"r{len(calls) + 1}", "expires_in": 7200}
+    monkeypatch.setattr(oauth, "_http", fake)
+    got = []
+
+    def use():
+        with app.app_context():
+            got.append(oauth.access_token(db.get(Identity, ident_id)))
+            db.remove()
+    threads = [threading.Thread(target=use) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert calls == ["r1"] and got == ["new-1"] * 3  # one refresh; the others use its token
