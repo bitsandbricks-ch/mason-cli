@@ -90,9 +90,9 @@ def run():
     if write and not can_write():
         abort(403, "this API key is read-only: add --dry-run")
     if cmd == "doctor" and not write and not getattr(parsed(argv), "dry_run", False) and not can_write():
-        argv.append("--no-auto")  # a repo's auto_fix doesn't turn a read-only key into a write
+        argv.insert(1, "--no-auto")  # (before any --) a repo's auto_fix doesn't turn a read-only key into a write
     if cmd in ("approve", "rerun", "release") and write and "--yes" not in argv:
-        argv.append("--yes")  # nobody can answer y/N here; the console asked before sending
+        argv.insert(1, "--yes")  # nobody can answer y/N here; the console asked before sending
     s = user_settings(__import__("flask").g.user)
     mine = {k: s[k] for k in ("defaults", "ref", "orgs", "repos", "exclude") if s.get(k)}
     mine["org_defaults"] = s.get("org_defaults") is not False
