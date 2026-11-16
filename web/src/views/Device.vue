@@ -45,7 +45,9 @@ onMounted(lookup)
       <div v-if="done" class="box ok">{{ done }}</div>
       <div v-else-if="info" class="box">
         <div>A terminal calling itself <span class="accent">{{ info.client }}</span> asks for an API key ({{ info.user_code }}),
-          started {{ ago(info.created_at) }}.</div>
+          started {{ ago(info.created_at) }}<template v-if="info.ip"> from {{ info.ip }}</template>.</div>
+        <p v-if="info.ip && !info.same_address" class="warn">That isn't the address this browser comes from. Fine if your
+          terminal runs on another machine or network; if you didn't start it, deny.</p>
         <p v-if="fromLink" class="warn">This page was opened from a link. Approve only if you just ran
           <span class="accent">mason login</span> yourself and your terminal shows {{ info.user_code }}: whoever started it
           gets this key.</p>

@@ -259,7 +259,10 @@ def test_api_keys_and_device_login(op):
     code = dev.post("/api/v1/device/code", json={"scope": "write"}).json
     assert dev.post("/api/v1/device/token", json={"device_code": code["device_code"]}).json["error"] == \
         "authorization_pending"
-    assert c.get(f"/api/v1/device/info?code={code['user_code']}").json["scope"] == "write"
+    got = c.get(f"/api/v1/device/info?code={code['user_code']}").json
+    assert got["scope"] == "write" and got["ip"] == "127.0.0.1" and got["same_address"]
+    other = c.get(f"/api/v1/device/info?code={code['user_code']}", environ_base={"REMOTE_ADDR": "203.0.113.9"}).json
+    assert not other["same_address"]  # the approval page warns: the code was asked for elsewhere
     assert c.post("/api/v1/device/approve", json={"user_code": code["user_code"]}, headers=H).json["ok"]
     from mason.server.models import DeviceGrant, db
     with app.app_context():
@@ -1399,3 +1402,20 @@ def test_web_hints_dont_say_gh(op):
     _, c = op
     from mason import core, packages
     assert core.SERVING and "gh auth" not in packages.scope_hint()
+
+
+def test_old_database_gets_the_device_ip_column(tmp_path):
+    import sqlite3
+
+    from mason.server import models
+    path = tmp_path / "old.db"
+    con = sqlite3.connect(path)
+    con.executescript("CREATE TABLE device_grants (id INTEGER PRIMARY KEY, device_hash VARCHAR(64), "
+                      "user_code VARCHAR(16), client_name VARCHAR(100), scope VARCHAR(10), created_at DATETIME, "
+                      "expires_at DATETIME, approved_by INTEGER, denied BOOLEAN, key_enc TEXT, last_poll DATETIME);")
+    con.close()
+    engine = models.init(f"sqlite:///{path}")
+    from sqlalchemy import inspect
+    assert "ip" in {c["name"] for c in inspect(engine).get_columns("device_grants")}
+    models.db.remove()
+    engine.dispose()
