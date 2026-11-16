@@ -4,11 +4,13 @@ import { nextTick, onMounted, ref } from 'vue'
 import { get, log, post, state } from '../api.js'
 import { ask } from '../ui.js'
 import TextPane from '../components/TextPane.vue'
+import { prepare } from '../consoleline.js'
 
 const HISTORY = 'mason.console.history'
 const line = ref('')
 const out = ref([]) // [{line, text}]
 const writes = ref(new Set())
+const plugins = ref(new Set())
 const history = ref(load())
 const at = ref(-1)
 const input = ref(null)
@@ -27,21 +29,23 @@ onMounted(async () => {
   try {
     const c = await get('/console/commands')
     writes.value = new Set(c.writes)
+    plugins.value = new Set(c.plugins)
     out.value.push({ line: '', text: `${c.help}\nhere: ${[...c.reads, ...c.writes, ...c.plugins].sort().join(' ')}` })
   } catch (e) { log(e.message, 'error') }
 })
 async function run() {
-  let l = line.value.trim()
-  if (!l || running.value) return
-  if (l === 'clear') { out.value = []; line.value = ''; return }
-  remember(l)
+  const typed = line.value.trim()
+  if (!typed || running.value) return
+  if (typed === 'clear') { out.value = []; line.value = ''; return }
+  remember(typed)
   at.value = -1
   line.value = ''
-  const words = l.replace(/^mason\s+/, '').split(/\s+/)
-  if (writes.value.has(words[0]) && !words.includes('--dry-run')) {
+  // the header's dry-run switch counts here too; a line that can change repos asks first
+  let { line: l, ask: asks } = prepare(typed, { writes: writes.value, plugins: plugins.value, dryRun: state.dryRun })
+  if (asks) {
     const a = await ask(`Run "${l}"? It can change repos.`)
     if (!a) { out.value.push({ line: l, text: 'cancelled' }); return }
-    if (a === 'dry') l += ' --dry-run'
+    if (a === 'dry') l = prepare(l, { writes: writes.value, plugins: plugins.value, dryRun: true }).line
   }
   running.value = true
   try {

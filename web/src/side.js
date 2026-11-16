@@ -94,5 +94,7 @@ export function useTrack(fn, { sel, key, kind = '' } = {}) {
 const RECENT = 'mason-recent'
 export function recent() { try { return JSON.parse(localStorage.getItem(RECENT) || '[]').filter((t) => t?.kind && t.repo) } catch { return [] } }
 function saveRecent(list) { try { localStorage.setItem(RECENT, JSON.stringify(list)) } catch { /* private mode */ } }
-// signing out: the next person in this browser doesn't see what you opened
-export function clearRecent() { try { localStorage.removeItem(RECENT) } catch { /* private mode */ } }
+// signing out: the next person in this browser doesn't see what you opened or typed in the console
+export function clearRecent() {
+  try { localStorage.removeItem(RECENT); localStorage.removeItem('mason.console.history') } catch { /* private mode */ }
+}
