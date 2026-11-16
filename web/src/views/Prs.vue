@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router'
 import { get, qs } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { useSeen } from '../seen.js'
 import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
@@ -96,6 +97,7 @@ const router = useRouter()
 const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }
 useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, p: () => page(), v: cycle })
+const seen = useSeen('prs', () => (data.value?.prs || []).map(keyOf))
 </script>
 
 <template>
@@ -113,7 +115,7 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <button class="any" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
+      <div><DataTable :is-new="seen.isNew" v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
     <EventLog band :repo="current?.repo || ''" kind="pr" :number="current?.number || ''" :title="current ? `${current.repo}${current.provider === 'gitlab' ? '!' : '#'}${current.number} ${current.title}` : ''" />

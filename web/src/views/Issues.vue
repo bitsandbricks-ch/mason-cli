@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 import { get, log, qs } from '../api.js'
 import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { useSeen } from '../seen.js'
 import { loadGroups, scope, scopedRepos } from '../scope.js'
 import { ago, ask, openDetail } from '../ui.js'
 import EventLog from '../components/EventLog.vue'
@@ -89,6 +90,7 @@ const router = useRouter()
 const page = (i) => { const r = i || current.value; if (r) router.push({ path: '/issue', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(STATES); f.state = k[(k.indexOf(f.state) + 1) % k.length] }
 useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => setState(false), m: comment, o: open, p: () => page(), v: cycle, i: () => { f.mine = !f.mine } })
+const seen = useSeen('issues', () => (data.value?.issues || []).map(keyOf))
 </script>
 
 <template>
@@ -108,7 +110,7 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
       <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" /></div>
+      <div><DataTable :is-new="seen.isNew" v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" /></div>
       <div class="pad">
         <div v-if="form.open" class="box">
           <div class="form">

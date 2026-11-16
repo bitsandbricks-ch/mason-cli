@@ -92,6 +92,7 @@ move it to "Done" when it ships.
 
 ## Done
 
+- "New since your last visit" marks in the pull request, issue and run lists (per browser).
 - TUI keyboard: Tab / Shift+Tab through every panel and dialog, F1-F10 for help, search, filter and sort.
 
 - Workflow hardening: `mason workflows [--fix]`, doctor's `workflows` check and the web app's Workflows tab.

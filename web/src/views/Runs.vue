@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { useSeen } from '../seen.js'
 import { loadGroups, scope } from '../scope.js'
 import { ago } from '../ui.js'
 import EventLog from '../components/EventLog.vue'
@@ -30,6 +31,7 @@ const router = useRouter()
 const page = (r) => { const x = r || current.value; if (x?.id) router.push({ path: '/run', query: { repo: x.repo, id: x.id } }) }
 const toggle = () => { failed.value = !failed.value; load() }
 useKeys({ r: () => load(true), f: toggle, o: () => open(current.value), p: () => page() })
+const seen = useSeen('runs', () => rows.value.filter((r) => r.id != null).map((r) => r.key))
 </script>
 
 <template>
@@ -42,7 +44,7 @@ useKeys({ r: () => load(true), f: toggle, o: () => open(current.value), p: () =>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
       <button :disabled="!current?.id" @click="page()"><span class="k">p</span> page</button>
     </div>
-    <div class="scroll"><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no workflow runs yet: repos with GitHub Actions or GitLab CI show theirs here'" @activate="page" /></div>
+    <div class="scroll"><DataTable :is-new="seen.isNew" v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no workflow runs yet: repos with GitHub Actions or GitLab CI show theirs here'" @activate="page" /></div>
     <EventLog band :repo="current?.id ? current.repo : ''" kind="run" :number="current?.id || ''" :title="current?.id ? `${current.repo} ${current.name}` : ''" />
   </div>
 </template>

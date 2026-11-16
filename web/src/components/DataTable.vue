@@ -12,7 +12,8 @@ const props = defineProps({
   rows: { type: Array, default: () => [] },
   rowKey: { type: Function, default: (r) => r.key ?? r.repo ?? JSON.stringify(r) },
   empty: { type: String, default: 'nothing here' },
-  error: { type: String, default: '' }, // the list couldn't load: said in plain words instead of "empty"
+  error: { type: String, default: '' },
+  isNew: { type: Function, default: null }, // (row key) => true marks a row "new since your last visit" (seen.js) // the list couldn't load: said in plain words instead of "empty"
   modelValue: { default: null }, // the selected row's key
 })
 const emit = defineEmits(['update:modelValue', 'activate'])
@@ -59,6 +60,8 @@ const sortChoice = computed({
   get: () => (sortKey.value ? `${sortKey.value}:${sortDir.value}` : ''),
   set: (v) => { const [k, d] = v.split(':'); sortKey.value = k; sortDir.value = Number(d) || 1 },
 })
+const isNewRow = (r) => !!props.isNew?.(props.rowKey(r))
+const newCount = computed(() => (props.isNew ? props.rows.filter(isNewRow).length : 0))
 const index = computed(() => shown.value.findIndex((r) => props.rowKey(r) === props.modelValue))
 
 function select(i, scroll = true) {
@@ -92,6 +95,7 @@ defineExpose({ focus: () => table.value?.focus(), shown })
       <input ref="filterInput" v-model="filter" class="grow" placeholder="filter" aria-label="filter the list"
              @keydown.esc="filter = ''; table?.focus()" @keydown.enter="table?.focus()">
       <span class="dim nowrap">{{ shown.length }}<template v-if="shown.length !== rows.length">/{{ rows.length }}</template></span>
+      <span v-if="newCount" class="accent nowrap" title="not shown to you before in this browser">· {{ newCount }} new</span>
       <select v-if="phone && rows.length > 1" v-model="sortChoice" class="sort" aria-label="sort by">
         <option value="">sort</option>
         <template v-for="c in columns" :key="c.key">
@@ -104,6 +108,7 @@ defineExpose({ focus: () => table.value?.focus(), shown })
       <li v-for="r in shown" :key="rowKey(r)" role="option" :aria-selected="rowKey(r) === modelValue"
           :class="{ sel: rowKey(r) === modelValue }" @click="tap(r)">
         <div class="head">
+          <span v-if="isNewRow(r)" class="new-dot" title="new since your last visit">●</span>
           <span v-for="c in head" :key="c.key" :class="cls(c, r)"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</span>
           <span v-if="inSplit" class="go dim" aria-hidden="true">›</span>
         </div>
@@ -129,7 +134,7 @@ defineExpose({ focus: () => table.value?.focus(), shown })
         <tr v-for="r in shown" :key="rowKey(r)" :class="{ sel: rowKey(r) === modelValue }"
             @click="emit('update:modelValue', rowKey(r))" @dblclick="emit('activate', r)">
           <td v-for="c in columns" :key="c.key" :class="[cls(c, r), { right: c.right }]"
-              :title="String(cell(c, r))"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</td>
+              :title="String(cell(c, r))"><span v-if="c === columns[0] && isNewRow(r)" class="new-dot" title="new since your last visit">● </span><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</td>
         </tr>
       </tbody>
     </table>

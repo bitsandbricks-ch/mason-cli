@@ -94,6 +94,7 @@ label.check { display: inline-flex; gap: 6px; align-items: center; cursor: point
 .table tbody tr:hover { background: var(--bg2); }
 .table tr.sel { background: var(--sel); }
 .table tr.sel td:first-child::before { content: "▸ "; color: var(--accent); }
+.new-dot { color: var(--accent); }
 .empty { padding: 16px 12px; color: var(--dim); }
 
 /* text panes */
