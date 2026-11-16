@@ -39,7 +39,9 @@ export function useLoad(fetcher, { scoped = true } = {}) {
   const error = ref('')
   const loading = ref(false)
   let last = null // the memo key of what data shows
+  let seq = 0 // the newest load: an older one that answers late (the group was switched meanwhile) is dropped
   async function load(fresh = false) {
+    const mine = ++seq
     const q = scoped ? qs({ provider: scope.provider === 'all' ? '' : scope.provider, group: scope.group, fresh }) : ''
     const got = fetcher(q, fresh) // a path (remembered, see cached) or a promise
     const key = typeof got === 'string' ? keyOf(got) : null
@@ -47,17 +49,19 @@ export function useLoad(fetcher, { scoped = true } = {}) {
     const hit = key && memo.get(key)
     if (!fresh && hit) {
       data.value = hit.data
-      if (Date.now() - hit.at < FRESH_MS) return
+      if (Date.now() - hit.at < FRESH_MS) { loading.value = false; error.value = ''; return }
     }
     loading.value = true
     error.value = ''
     try {
-      data.value = key ? await cached(got, true) : await got
+      const value = key ? await cached(got, true) : await got
+      if (mine === seq) data.value = value
     } catch (e) {
+      if (mine !== seq) return
       error.value = e.message
       log(e.message, 'error')
     } finally {
-      loading.value = false
+      if (mine === seq) loading.value = false
     }
   }
   // Show a changed answer (a follow-up's), and remember it, so going back to the view shows it too.

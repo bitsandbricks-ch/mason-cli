@@ -428,7 +428,12 @@ button.wide { width: 100%; text-align: left; }
   .side-body .split.page > * { overflow: auto; }
   .side-body .split.page > :first-child { border-right: 1px solid var(--line); border-bottom: 0; }
 }
-.side-body .events.band { height: 28vh; }
+/* a narrow panel scrolls as one column: the page, then its events (a band of its own left the page a sliver) */
+@container (max-width: 879px) {
+  .side-body > .view { display: block; overflow: auto; }
+  .side-body .events.band { height: auto; min-height: 0; overflow: visible; }
+}
+@container (min-width: 880px) { .side-body .events.band { height: 28vh; } }
 /* with the panel open the list takes the rest: its own preview and event log move into the panel */
 .side-open main .split.ld { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .side-open main .split.ld > :nth-child(2) { display: none; }

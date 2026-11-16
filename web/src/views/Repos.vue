@@ -15,7 +15,7 @@ import DoctorPanel from '../components/DoctorPanel.vue'
 import TextPane from '../components/TextPane.vue'
 import ActionList from '../components/ActionList.vue'
 import StatusHeader from '../components/StatusHeader.vue'
-import { stateClass } from '../ui.js'
+import { ask, choose, stateClass } from '../ui.js'
 import { useTrack } from '../side.js'
 import { openOut } from '../links.js'
 
@@ -97,11 +97,13 @@ useTrack(() => sel.value && { kind: 'repo', repo: sel.value }, { sel, kind: 'rep
 const page = (r) => router.push({ path: '/repo', query: { repo: r?.repo || sel.value } })
 const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; openOut(url) }
 async function newRepo() {
-  const { ask } = await import('../ui.js')
   const name = await ask('New repo (owner/name, or gitlab:group/name)', { input: { placeholder: 'acme/new-service' }, allowDry: false })
   if (!name) return
-  const vis = await ask(`Make ${name} public? (n: private)`, { allowDry: false })
-  await run(`Create ${name} the way its group wants it?`, '/new', { repo: name, public: vis === 'yes' })
+  // a choice, not y/n: "n" meant private, and Esc made a private repo instead of stopping
+  const vis = await choose(`Who may see ${name}?`, [{ key: 'p', value: 'private', label: 'private', hint: 'only those you add' },
+    { key: 'P', value: 'public', label: 'public', hint: 'everyone' }])
+  if (!vis) return
+  await run(`Create ${name} (${vis}) the way its group wants it?`, '/new', { repo: name, public: vis === 'public' })
 }
 const sheet = ref(null)
 const releases = () => sel.value && router.push({ path: '/release', query: { repo: sel.value } })

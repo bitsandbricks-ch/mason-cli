@@ -75,6 +75,8 @@ async function setSecret(x) {
   try { await put(`/secrets/${x.name}`, { value: v }); load() } catch (e) { log(e.message, 'error') }
 }
 async function dropSecret(x) {
+  // it can't be shown again, so removing it by a slip of the mouse means typing it in again
+  if (!(await ask(`Remove ${x.label}? Plugins that need it stop working until you set it again.`, { allowDry: false }))) return
   try { await del(`/secrets/${x.name}`); load() } catch (e) { log(e.message, 'error') }
 }
 async function deleteAccount() {
