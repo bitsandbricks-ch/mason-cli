@@ -7,6 +7,7 @@ import { ask } from './ui.js'
 // last answer at once and asks again only when it is older than FRESH_MS. r and every change ask again.
 const memo = new Map() // path -> {at, data}
 const FRESH_MS = 60_000
+const STALE_MS = 5 * 60_000 // a list this old is read again when its tab shows again
 const MAX = 200
 
 function remember(path, data) {
@@ -39,6 +40,7 @@ export function useLoad(fetcher, { scoped = true } = {}) {
   const error = ref('')
   const loading = ref(false)
   let last = null // the memo key of what data shows
+  let shownAt = 0 // when data was last read from the server
   let seq = 0 // the newest load: an older one that answers late (the group was switched meanwhile) is dropped
   async function load(fresh = false) {
     const mine = ++seq
@@ -49,13 +51,13 @@ export function useLoad(fetcher, { scoped = true } = {}) {
     const hit = key && memo.get(key)
     if (!fresh && hit) {
       data.value = hit.data
-      if (Date.now() - hit.at < FRESH_MS) { loading.value = false; error.value = ''; return }
+      if (Date.now() - hit.at < FRESH_MS) { loading.value = false; error.value = ''; shownAt = hit.at; return }
     }
     loading.value = true
     error.value = ''
     try {
       const value = key ? await cached(got, true) : await got
-      if (mine === seq) data.value = value
+      if (mine === seq) { data.value = value; shownAt = Date.now() }
     } catch (e) {
       if (mine !== seq) return
       error.value = e.message
@@ -67,10 +69,17 @@ export function useLoad(fetcher, { scoped = true } = {}) {
   // Show a changed answer (a follow-up's), and remember it, so going back to the view shows it too.
   function keep(value) {
     data.value = value
+    shownAt = Date.now()
     if (last) remember(last, value)
   }
   onMounted(() => load())
   if (scoped) watch(() => [scope.provider, scope.group], () => load())
+  // back to a tab left open for a while (overnight): read the list again instead of showing the old one
+  const back = () => {
+    if (!document.hidden && shownAt && Date.now() - shownAt > STALE_MS && !loading.value) load()
+  }
+  document.addEventListener('visibilitychange', back)
+  onScopeDispose(() => document.removeEventListener('visibilitychange', back))
   return { data, error, loading, load, keep }
 }
 
