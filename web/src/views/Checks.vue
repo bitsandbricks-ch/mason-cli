@@ -9,6 +9,7 @@ import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
+import { useTrack } from '../side.js'
 
 const output = ref('')
 const found = ref([]) // doctor's result per repo: the table on top, the full output below it
@@ -22,6 +23,7 @@ const columns = [
 ]
 const rows = computed(() => found.value.slice().sort((a, b) => (a.ok - b.ok) || (b.problems.length - a.problems.length) || a.repo.localeCompare(b.repo)))
 const page = (r) => router.push({ path: '/repo', query: { repo: r.repo } })
+useTrack(() => sel.value && { kind: 'repo', repo: sel.value }, { sel, kind: 'repo', key: (t) => (t.kind === 'repo' && rows.value.some((r) => r.repo === t.repo) ? t.repo : null) })
 const running = ref('')
 const only = ref('')
 const pluginChecks = ref([])

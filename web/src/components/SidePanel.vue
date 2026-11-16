@@ -20,7 +20,12 @@ const side = useSide()
 provide(SIDE, side)
 const router = useRouter()
 const target = side.target
-const label = computed(() => target.value && encodeSide(target.value).replace(/^\w+:/, ''))
+const label = computed(() => {
+  const t = target.value
+  if (!t) return ''
+  const s = encodeSide(t).replace(/^\w+:/, '')
+  return t.kind === 'pr' && t.repo.startsWith('gitlab:') ? s.replace(/#(\d+)$/, '!$1') : s // GitLab calls them !2
+})
 watch(target, (t) => { sideOpen.value = !!t }, { immediate: true })
 onBeforeUnmount(() => { sideOpen.value = false })
 
@@ -70,7 +75,7 @@ function nudge(e) {
     <div class="side-grip" role="separator" aria-orientation="vertical" tabindex="0" :aria-valuenow="width"
          title="drag to resize (← → too)" @pointerdown="drag" @pointermove="move" @pointerup="drop" @pointercancel="drop" @keydown="nudge" />
     <div class="side-head">
-      <span class="dim">{{ LABEL[target.kind] }}</span>
+      <span class="dim">{{ target.kind === 'pr' && target.repo.startsWith('gitlab:') ? 'merge request' : LABEL[target.kind] }}</span>
       <span class="side-title" :title="label">{{ label }}</span>
       <span class="spacer" />
       <template v-if="steps">
