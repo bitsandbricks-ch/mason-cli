@@ -11,6 +11,7 @@ import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
 import SidePanel from './components/SidePanel.vue'
 import Palette from './components/Palette.vue'
+import KeysSheet from './components/KeysSheet.vue'
 import { sideOpen } from './side.js'
 
 const route = useRoute()
@@ -129,6 +130,7 @@ let pointerAt = null // arrows scroll the pane the pointer is in
 window.addEventListener('pointerover', (e) => { pointerAt = e.target }, { passive: true })
 // ctrl+k / ⌘k: the jump box, from anywhere (even a text field)
 const jump = ref(false)
+const help = ref(false) // the keys sheet (?)
 window.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey) && !e.altKey && signedIn.value && !prompt.open) {
     jump.value = !jump.value
@@ -136,7 +138,7 @@ window.addEventListener('keydown', (e) => {
   }
 })
 window.addEventListener('keydown', (e) => {
-  if (jump.value) return
+  if (jump.value || help.value) return
   if (prompt.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey || !signedIn.value) return
   const tab = TABS.find((t) => t.key === e.key)
   if (tab) { router.push(tab.path); e.preventDefault(); return }
@@ -147,7 +149,7 @@ window.addEventListener('keydown', (e) => {
     // only from a tab itself: on a repo's (or a PR's) page ←→ threw you out to the next tab
     const i = TABS.findIndex((t) => t.name === route.name)
     if (i >= 0) { router.push(TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length].path); e.preventDefault() }
-  } else if (e.key === '?') { router.push('/console'); log('keys: ctrl+k jump · 1-9 tabs · ←→ next tab · ↑↓/jk move · Enter act · / filter · r reload · t theme · : console · ` log') }
+  } else if (e.key === '?') { help.value = true; e.preventDefault() }
 })
 </script>
 
@@ -251,7 +253,7 @@ window.addEventListener('keydown', (e) => {
             :title="'the session log (`)'" role="button" :aria-expanded="logOpen" @click="logOpen = !logOpen">
         {{ logOpen ? '▾' : '▸' }} [{{ last.at }}] {{ last.text }}<span v-if="state.log.length > 1" class="dim"> (+{{ state.log.length - 1 }})</span></span>
       <span v-else class="last dim">ready</span>
-      <span class="keys"><template v-if="sideOpen"><b>esc</b> close panel </template><b>^k</b> jump <b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b>?</b> help</span>
+      <span class="keys"><template v-if="sideOpen"><b>esc</b> close panel </template><b>^k</b> jump <b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b role="button" class="help-key" @click="help = true">?</b> keys</span>
     </footer>
     <section v-if="logOpen" class="session-log" aria-label="the session log">
       <div class="row"><h2 style="margin: 0">log <span class="dim">({{ state.log.length }}, this session)</span></h2><span class="spacer" />
@@ -269,5 +271,6 @@ window.addEventListener('keydown', (e) => {
     </section>
   </div>
   <Palette v-if="signedIn" v-model="jump" />
+  <KeysSheet v-if="signedIn" v-model="help" />
   <PromptDialog />
 </template>

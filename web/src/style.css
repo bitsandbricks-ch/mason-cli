@@ -455,3 +455,12 @@ button.wide { width: 100%; text-align: left; }
   .palette li { padding: 10px 12px; }
   .palette .hint, .palette .foot-keys { display: none; }
 }
+
+/* the keys sheet (?) */
+.keys-wrap { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .35); display: flex; justify-content: flex-end; }
+.keys-sheet { width: min(440px, 100vw); height: 100%; overflow: auto; background: var(--bg); border-left: 1px solid var(--accent);
+  animation: side-in .14s ease-out; outline: none; }
+.keys-sheet dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0 0 16px; }
+.keys-sheet dt { color: var(--accent); white-space: nowrap; }
+.keys-sheet dd { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .keys-sheet { animation: none; } }
