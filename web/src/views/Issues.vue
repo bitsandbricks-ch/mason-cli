@@ -1,4 +1,5 @@
 <script setup>
+import { useUnsaved } from '../unsaved.js'
 import { openLink } from '../links.js'
 // Issues across GitHub repos and GitLab projects: filter by state, label, mine and age; open, close,
 // reopen and comment; n opens a new issue in any repo. Enter (or page) opens one as its own page.
@@ -67,6 +68,7 @@ async function comment() {
 
 // the new-issue form
 const form = reactive({ open: false, repo: '', title: '', body: '', labels: '', assignees: '' })
+useUnsaved(() => form.open && !!(form.title.trim() || form.body.trim()), 'the issue you are writing')
 const repoNames = ref([]) // the picker's repos: those of the filter, read again when it changes
 watch(() => [scope.provider, scope.group], () => { repoNames.value = [] })
 async function newIssue() {
