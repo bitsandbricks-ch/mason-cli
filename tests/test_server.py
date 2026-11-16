@@ -229,6 +229,8 @@ def test_console(op):
     assert c.post("/api/v1/console", json={"line": "mason init /etc"}, headers=H).status_code == 400
     assert c.post("/api/v1/console", json={"line": "rm -rf /"}, headers=H).status_code == 400
     assert "usage" in c.post("/api/v1/console", json={"line": "mason status --nope"}, headers=H).json["text"]
+    r = c.post("/api/v1/console", json={"line": "mason issue comment web#3 -"}, headers=H)
+    assert r.status_code == 400 and "stdin" in r.json["error"]  # the server's stdin would hang the request
 
 
 def test_api_keys_and_device_login(op):
@@ -280,6 +282,54 @@ def test_proxy_allowlist():
     assert allowed("GET", "/repos/acme/web/hooks") and allowed("GET", "/repos/acme/web/keys")  # doctor reads the lists
     assert not allowed("GET", "/repos/acme/web/hooks/1") and not allowed("POST", "/repos/acme/web/hooks")
     assert not allowed("POST", "/repos/acme/web/keys") and allowed("PATCH", "/repos/acme/web/properties/values")
+
+
+def test_graphql_operations_cant_hide_a_mutation():
+    """Comments, commas, aliases, strings and extra operations don't slip a mutation past the list."""
+    from mason.server.api.proxy import BadQuery, operations
+    assert operations('query { viewer { login } a: repository(owner: "x", name: "y") { ...R } }\n'
+                      'fragment R on Repository { name }') == [("query", ["viewer", "repository"])]
+    ready = "mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { clientMutationId } }"
+    assert operations(ready) == [("mutation", ["markPullRequestReadyForReview"])]
+    sneaky = 'mutation { mergePullRequest(input: {}) { x } deleteRef # hidden\n(, input: {refId: "1"}) { x } }'
+    assert operations(sneaky) == [("mutation", ["mergePullRequest", "deleteRef"])]
+    assert operations("mutation { mergePullRequest: deleteRef(input: {}) { x } }") == [("mutation", ["deleteRef"])]
+    assert operations('mutation { mergePullRequest(input: {body: "deleteRef(input:"}) { x } }')[0][1] == \
+        ["mergePullRequest"]
+    assert "..." in operations("mutation { ... on Mutation { deleteRef(input: {}) { x } } }")[0][1]
+    assert len(operations("query { a } mutation { deleteRef(input: {}) { x } }")) == 2
+    with pytest.raises(BadQuery):
+        operations("mutation { mergePullRequest(input: {}) { x }")
+
+
+def test_graphql_proxy_refuses_hidden_mutations(op):
+    _, c = op
+    sneaky = 'mutation { mergePullRequest(input: {}) { x } deleteRef # hidden\n(input: {refId: "1"}) { x } }'
+    r = c.post("/api/v1/github/graphql", json={"query": sneaky}, headers=H)
+    assert r.status_code == 403 and "deleteRef" in r.json["error"]
+    r = c.post("/api/v1/github/graphql", json={"query": "query { viewer { login } } mutation { deleteRef(input: {}) "
+                                                         "{ x } }"}, headers=H)
+    assert r.status_code == 400 and "one GraphQL operation" in r.json["error"]
+    assert c.post("/api/v1/github/graphql", json={"query": "fragment F on X { y }"}, headers=H).status_code == 400
+
+
+def test_sign_in_only_goes_back_to_this_site():
+    """next= after a sign-in: browsers drop tabs and newlines, so "/\t/evil.example" would be //evil.example."""
+    from mason.server.api.account import safe_next
+    assert safe_next("/prs?group=acme/#top") == "/prs?group=acme/#top"
+    for bad in ("//evil.example", "/\t/evil.example", "/\n/evil.example", "/\\evil.example", "https://evil.example",
+                "/prs\n", "/a b", "x" * 300, None, ""):
+        assert safe_next(bad) == "/"
+
+
+def test_sign_in_with_a_tab_in_next_stays_here(op):
+    app, _ = op
+    anon = app.test_client()
+    r = anon.get("/api/v1/auth/github/login?next=/%09/evil.example")
+    assert r.status_code == 302
+    with app.app_context():
+        from mason.server.models import OAuthState, db
+        assert [row.return_to for row in db.query(OAuthState)] == ["/"]
 
 
 def test_defaults_editor(op):

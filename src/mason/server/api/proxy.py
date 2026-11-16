@@ -60,8 +60,86 @@ NEVER = re.compile(r"/(collaborators|invitations|keys|hooks|transfer|"
                    r"teams|members|interaction-limits)(/|$)|/user/(emails|keys|gpg_keys|ssh_signing_keys)")
 MUTATIONS = {"markPullRequestReadyForReview", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge",
              "mergePullRequest", "convertPullRequestToDraft"}
-OPERATION = re.compile(r"^\s*(?:#[^\n]*\n\s*)*(query|mutation|subscription|\{)", re.S)
-MUTATION_FIELD = re.compile(r"(\w+)\s*\(\s*input\s*:")
+TOKEN = re.compile(r'''
+    (?P<skip>[\s,\ufeff]+|\#[^\n\r]*)
+  | (?P<block>"""(?:\\"""|(?!""").)*""")
+  | (?P<string>"(?:\\.|[^"\\\n\r])*")
+  | (?P<spread>\.\.\.)
+  | (?P<name>[_A-Za-z][_0-9A-Za-z]*)
+  | (?P<number>-?[0-9][0-9.eE+-]*)
+  | (?P<punct>[!$&()\[\]{}:=@|])
+''', re.S | re.X)
+
+
+class BadQuery(ValueError):
+    pass
+
+
+def _tokens(query: str) -> list[str]:
+    out, pos = [], 0
+    while pos < len(query):
+        m = TOKEN.match(query, pos)
+        if not m:
+            raise BadQuery(f"can't read the query at {query[pos:pos + 20]!r}")
+        pos = m.end()
+        if m.lastgroup == "skip":
+            continue
+        out.append("" if m.lastgroup in ("block", "string") else m.group())  # strings are never names
+    return out
+
+
+def _skip(tokens: list[str], i: int, open_: str, close: str) -> int:
+    """The index after the balanced group that starts at tokens[i] == open_."""
+    depth = 0
+    while i < len(tokens):
+        depth += (tokens[i] == open_) - (tokens[i] == close)
+        i += 1
+        if depth == 0:
+            return i
+    raise BadQuery(f"a {open_} isn't closed")
+
+
+def operations(query: str) -> list[tuple[str, list[str]]]:
+    """[(query|mutation|subscription, the fields it selects at the top)] of a GraphQL document, read
+    like GitHub reads it: comments, commas, aliases and strings can't hide a field. A fragment spread at
+    the top of a mutation counts as the field "...", which is never allowed."""
+    t, i, ops = _tokens(query), 0, []
+    while i < len(t):
+        if t[i] == "fragment":  # fragment Name on Type @dir { ... }
+            while i < len(t) and t[i] != "{":
+                i += 1
+            i = _skip(t, i, "{", "}")
+            continue
+        kind = "query"
+        if t[i] in ("query", "mutation", "subscription"):
+            kind = t[i]
+            i += 1
+            while i < len(t) and t[i] != "{":  # name, (variables = defaults), @directives(args)
+                i = _skip(t, i, "(", ")") if t[i] == "(" else i + 1
+        if i >= len(t) or t[i] != "{":
+            raise BadQuery("not a GraphQL query")
+        end = _skip(t, i, "{", "}")
+        fields, j = [], i + 1
+        while j < end - 1:
+            if t[j] == "...":
+                fields.append("...")
+                j += 1
+                continue
+            if t[j] == "(":
+                j = _skip(t, j, "(", ")")
+            elif t[j] == "{":
+                j = _skip(t, j, "{", "}")
+            elif t[j] == "@":
+                j += 2  # the directive's name; its arguments are skipped as a group
+            elif t[j] == ":":
+                fields[-1:] = []  # what came before was an alias
+                j += 1
+            else:
+                fields.append(t[j])
+                j += 1
+        ops.append((kind, fields))
+        i = end
+    return ops
 
 
 def transport():
@@ -142,15 +220,19 @@ def rest(path: str):
 def graphql():
     payload = request.get_json(silent=True) or {}
     query = str(payload.get("query") or "")
-    m = OPERATION.match(query)
-    if not m:
-        abort(400, "not a GraphQL query")
-    if m.group(1) == "subscription":
+    try:
+        ops = operations(query)
+    except BadQuery as err:
+        abort(400, str(err))
+    if len(ops) != 1:  # which one GitHub runs would depend on operationName, which isn't passed on
+        abort(400, "send one GraphQL operation" if ops else "not a GraphQL query")
+    kind, fields = ops[0]
+    if kind == "subscription":
         abort(403, "no subscriptions")
-    if m.group(1) == "mutation":
+    if kind == "mutation":
         if not can_write():
             abort(403, "this API key is read-only")
-        names = set(MUTATION_FIELD.findall(query))
+        names = set(fields) - {"__typename"}
         if not names or names - MUTATIONS:
             abort(403, f"the operator doesn't pass these mutations on: {', '.join(sorted(names - MUTATIONS)) or '?'}")
         audit("proxy.graphql", ", ".join(sorted(names)))

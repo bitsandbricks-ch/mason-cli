@@ -4,6 +4,7 @@ device login, settings, secrets and the audit log."""
 from __future__ import annotations
 
 import json
+import re
 from datetime import timedelta
 
 from flask import Blueprint, abort, current_app, g, jsonify, make_response, redirect, request
@@ -73,9 +74,14 @@ def providers():
                     for p in (op.github, op.gitlab)])
 
 
+SAFE_NEXT = re.compile(r"/(?![/\\])[A-Za-z0-9/._~%!$&'()*+,;=:@?#-]*")
+
+
 def safe_next(value: str | None) -> str:
-    v = value or "/"
-    return v if v.startswith("/") and not v.startswith("//") and "\\" not in v and len(v) < 200 else "/"
+    """A path on this site to go back to after signing in, else "/". Browsers drop tabs and newlines
+    from URLs ("/\t/evil.example" is "//evil.example"), so only plain URL characters pass."""
+    v = str(value or "/")
+    return v if len(v) < 200 and SAFE_NEXT.fullmatch(v) and "\\" not in v else "/"
 
 
 @bp.get("/auth/<name>/login")

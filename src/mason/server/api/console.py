@@ -73,6 +73,8 @@ def run():
         abort(400, f"`mason {cmd}` works on your own machine, not in the operator (Settings has the same)")
     if cmd not in READS | WRITES | web_commands():
         abort(400, f"`mason {cmd}` isn't available in the web console")
+    if "-" in argv[1:]:  # "read it from stdin": a web request has none, and the server's would hang or be empty
+        abort(400, "the web console can't read text from stdin: put the text in quotes instead of -")
     write = is_write(argv)
     if write and not can_write():
         abort(403, "this API key is read-only: add --dry-run")
