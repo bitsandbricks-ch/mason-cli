@@ -3,6 +3,7 @@
 import { nextTick, onMounted, ref } from 'vue'
 import { get, log, post, state } from '../api.js'
 import { ask } from '../ui.js'
+import { consoleWrites } from '../text.js'
 import TextPane from '../components/TextPane.vue'
 
 const HISTORY = 'mason.console.history'
@@ -26,7 +27,7 @@ onMounted(async () => {
   if (!window.matchMedia('(pointer: coarse)').matches) input.value?.focus() // no keyboard popping up on phones
   try {
     const c = await get('/console/commands')
-    writes.value = new Set(c.writes)
+    writes.value = new Set([...c.writes, ...c.plugins]) // a plugin command counts as a change on the server too
     out.value.push({ line: '', text: `${c.help}\nhere: ${[...c.reads, ...c.writes, ...c.plugins].sort().join(' ')}` })
   } catch (e) { log(e.message, 'error') }
 })
@@ -37,8 +38,7 @@ async function run() {
   remember(l)
   at.value = -1
   line.value = ''
-  const words = l.replace(/^mason\s+/, '').split(/\s+/)
-  if (writes.value.has(words[0]) && !words.includes('--dry-run')) {
+  if (consoleWrites(l, writes.value)) {
     const a = await ask(`Run "${l}"? It can change repos.`)
     if (!a) { out.value.push({ line: l, text: 'cancelled' }); return }
     if (a === 'dry') l += ' --dry-run'

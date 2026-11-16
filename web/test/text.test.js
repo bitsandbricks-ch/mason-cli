@@ -47,3 +47,12 @@ test('a field of the CLI detail text', () => {
   assert.equal(fieldOf(text, 'branch'), 'feat -> main')
   assert.equal(fieldOf(text, 'nope'), '')
 })
+
+test('which console lines ask first', async () => {
+  const { consoleWrites } = await import('../src/text.js')
+  const writes = new Set(['merge', 'approve', 'doctor', 'issue', 'release', 'workflows', 'hubra-sync'])
+  for (const l of ['merge web#7', 'mason approve', 'doctor', 'issue close web#3', 'release web', 'workflows --fix', 'hubra-sync x'])
+    assert.equal(consoleWrites(l, writes), true, l)
+  for (const l of ['status', 'merge --dry-run web#7', 'issue view web#3', 'release', 'release --list web', 'workflows', ''])
+    assert.equal(consoleWrites(l, writes), false, l)
+})

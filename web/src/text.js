@@ -63,3 +63,15 @@ export function fieldOf(text, name) {
   const re = new RegExp(`^\\s+${name}\\s`)
   return (String(text || '').split('\n').find((l) => re.test(l)) || '').trim().slice(name.length).trim()
 }
+
+// Whether a console line changes repos, so the console asks first: like the server's console.is_write, except
+// that doctor always asks (a repo's auto_fix can make a plain check fix things).
+export function consoleWrites(line, writes) {
+  const argv = String(line || '').trim().replace(/^mason\s+/, '').split(/\s+/).filter(Boolean)
+  const [cmd] = argv
+  if (!cmd || argv.includes('--dry-run')) return false
+  if (cmd === 'workflows') return argv.includes('--fix')
+  if (cmd === 'issue') return argv[1] !== 'view'
+  if (cmd === 'release') return !argv.includes('--list') && argv.slice(1).some((a) => !a.startsWith('-'))
+  return writes.has(cmd)
+}
