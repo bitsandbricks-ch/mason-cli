@@ -312,7 +312,7 @@ def write(gl, repo: str, changes: dict[str, str | None], mode: str, message: str
     base = info.get("default_branch") or "main"
     branch = base if mode == "commit" else f"mason/settings-{secrets.token_hex(3)}"
     if mode != "commit":
-        head = core.api("GET", f"/repos/{repo}/git/ref/heads/{base}")["object"]["sha"]
+        head = core.api("GET", f"/repos/{repo}/git/ref/heads/{core.quote_ref(base)}")["object"]["sha"]
         core.api("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": head})
     for path, text in changes.items():
         got = core.get_file(repo, path, branch)

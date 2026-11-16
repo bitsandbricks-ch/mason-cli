@@ -311,10 +311,17 @@ def put_file(repo: str, branch: str, path: str, text: str, sha: str | None, mess
     api("PUT", f"/repos/{repo}/contents/{quote(path)}", body)
 
 
+def quote_ref(name: str) -> str:
+    """A branch or tag name for an API path: "/" stays, "#", "?" and spaces don't break the URL."""
+    from urllib.parse import quote
+
+    return quote(name, safe="/")
+
+
 def open_pr(repo: str, base: str, branch: str, files: dict[str, tuple[str, str | None]],
             message: str, title: str, body: str) -> str:
     """Commit `files` ({path: (new text, old blob sha or None)}) on a new branch and open a PR."""
-    head = api("GET", f"/repos/{repo}/git/ref/heads/{base}")["object"]["sha"]
+    head = api("GET", f"/repos/{repo}/git/ref/heads/{quote_ref(base)}")["object"]["sha"]
     api("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": head})
     for path, (text, sha) in files.items():
         put_file(repo, branch, path, text, sha, message)

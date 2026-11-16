@@ -123,7 +123,8 @@ def baseline(cfg: Config, group: Group) -> dict:
             if missing:
                 want["missing_files"] = missing
             want["files"] = {p: shas[p] for p in group.files if p in shas}
-            want["head"] = (api("GET", f"/repos/{group.reference}/git/ref/heads/{ref['default_branch']}")
+            branch = core.quote_ref(ref["default_branch"])
+            want["head"] = (api("GET", f"/repos/{group.reference}/git/ref/heads/{branch}")
                             or {}).get("object", {}).get("sha", "")
     want["settings"].update(group.require)  # the reference must have these, so its repos must too
     want["settings"].update(group.settings)

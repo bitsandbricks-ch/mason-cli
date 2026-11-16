@@ -243,7 +243,7 @@ def write_github(repo: str, ref: str | None, path: str, text: str, delete: bool,
         raise RuntimeError(f"{path} isn't there")
     branch = base if mode == "commit" else f"mason/defaults-{secrets.token_hex(3)}"
     if mode == "pr":
-        head = core.api("GET", f"/repos/{repo}/git/ref/heads/{base}")["object"]["sha"]
+        head = core.api("GET", f"/repos/{repo}/git/ref/heads/{core.quote_ref(base)}")["object"]["sha"]
         core.api("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": head})
     q = urllib.parse.quote(path)
     if delete:

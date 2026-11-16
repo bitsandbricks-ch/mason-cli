@@ -234,7 +234,7 @@ def push_tag(repo: str, tag: str, target: str = "", cfg: Config | None = None) -
     if re.fullmatch(r"[0-9a-f]{40}", base):
         sha = base
     else:
-        sha = api("GET", f"/repos/{repo}/git/ref/heads/{base}")["object"]["sha"]
+        sha = api("GET", f"/repos/{repo}/git/ref/heads/{core.quote_ref(base)}")["object"]["sha"]
     api("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/tags/{tag}", "sha": sha})
     R.forget(repo)
     say(f"   pushed the tag {tag} on {base} of {repo} at {sha[:7]}; {then}")
