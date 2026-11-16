@@ -24,7 +24,7 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from mason import config, core, rules
 from mason import defaults as D
-from mason.server import gitlab as GL
+from mason import gitlab as GL
 from mason.server.api.account import body
 from mason.server.api.defaults import check_path
 from mason.server.api.defaults import validate as validate_defaults

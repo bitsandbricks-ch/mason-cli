@@ -11,7 +11,7 @@ import pytest
 
 from mason import cache, core
 from mason.cache import MB, Budget, Spaces, Store, TTLDict, size_of, ttl_for
-from mason.server.gitlab import GitLab
+from mason.gitlab import GitLab
 from mason.transport import HttpTransport
 
 

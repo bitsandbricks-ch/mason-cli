@@ -9,7 +9,7 @@ from mason import events as E
 
 @pytest.fixture()
 def gl():
-    from mason.server import gitlab as GL
+    from mason import gitlab as GL
 
     answers = {
         "/projects/grp%2Fapp/merge_requests/5": {
@@ -49,7 +49,7 @@ def gl():
 
 
 def test_merge_request_events(gl):
-    from mason.server import gitlab as GL
+    from mason import gitlab as GL
 
     ev = GL.mr_events(gl, "gitlab:grp/app", 5)
     by = {e["what"]: e for e in ev}
@@ -61,7 +61,7 @@ def test_merge_request_events(gl):
 
 
 def test_project_and_pipeline_events(gl):
-    from mason.server import gitlab as GL
+    from mason import gitlab as GL
 
     what = [e["what"] for e in GL.repo_events(gl, "gitlab:grp/app")]
     assert what == ["pushed 3 commits to main", "accepted MR !5"]

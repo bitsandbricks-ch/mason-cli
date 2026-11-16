@@ -18,7 +18,7 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from mason import config, core, templates
 from mason import defaults as D
-from mason.server import gitlab as GL
+from mason import gitlab as GL
 from mason.server.api.account import body
 from mason.server.auth import audit, need
 from mason.server.context import as_user, user_settings, valid_repo

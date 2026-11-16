@@ -12,6 +12,7 @@ HERE = Path(__file__).parent
 def env(tmp_path_factory):
     bin_dir = tmp_path_factory.mktemp("bin")
     (bin_dir / "gh").symlink_to(HERE / "fake_gh")
+    (bin_dir / "glab").symlink_to(HERE / "fake_glab")
     clean = {k: v for k, v in os.environ.items() if not k.startswith(("MASON_", "SSH_"))}
     return {
         **clean,

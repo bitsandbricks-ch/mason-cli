@@ -150,7 +150,7 @@ def load_config(orgs: list[str] | None = None):
 
 
 def gitlab_projects(gl, cfg) -> dict:
-    from mason.server import gitlab as GL
+    from mason import gitlab as GL
     if gl is None:
         return {}
     s = user_settings(g.user)
