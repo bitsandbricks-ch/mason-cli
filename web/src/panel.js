@@ -104,3 +104,10 @@ export function clampWidth(want, screen, list = 360) {
 
 // whose keys a key press is for: with a panel open the page in it has them, the view under it doesn't
 export const listens = ({ sideOpen, inSide }) => !sideOpen || inSide
+
+// Does going from `from` to `to` take away what is on screen (and with it what you were editing)? Another
+// page, or another thing in the side panel; not a change of a filter, a tab inside the page or #detail.
+export function leaves(to, from) {
+  return to.path !== from.path || (to.query?.side || '') !== (from.query?.side || '') ||
+    (!!targetOf(to) && encodeSide(targetOf(to)) !== encodeSide(targetOf(from) || {}))
+}

@@ -7,6 +7,7 @@ import { ApiError, get, log, post, put } from '../api.js'
 import { useKeys } from '../keys.js'
 import { ask } from '../ui.js'
 import TextPane from '../components/TextPane.vue'
+import { useUnsaved } from '../unsaved.js'
 
 const info = ref(null)
 const TOML = computed(() => info.value?.path || 'mason.toml')
@@ -21,6 +22,7 @@ const templates = ref([])
 const showTemplates = ref(false)
 const editor = ref(null)
 const dirty = computed(() => text.value !== original.value)
+useUnsaved(() => dirty.value, () => `your changes to ${path.value}`)
 
 async function load() {
   missing.value = ''

@@ -10,12 +10,14 @@ import { forget } from '../load.js'
 import { ask } from '../ui.js'
 import ErrorNote from './ErrorNote.vue'
 import { safeHref } from '../links.js'
+import { useUnsaved } from '../unsaved.js'
 
 const props = defineProps({ repo: { type: String, required: true } })
 const emit = defineEmits(['done'])
 const data = ref(null)
 const error = ref('')
 const edits = ref({}) // key -> new value
+useUnsaved(() => Object.keys(edits.value).length > 0, () => `the settings you changed on ${props.repo}`)
 const filter = ref('')
 const open = ref({}) // area name -> open
 const busy = ref(false)

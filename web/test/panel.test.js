@@ -88,3 +88,16 @@ test('with a panel open only the page in it takes keys', () => {
   assert.equal(listens({ sideOpen: true, inSide: false }), false)
   assert.equal(listens({ sideOpen: true, inSide: true }), true)
 })
+
+test('what counts as leaving the page (for unsaved changes)', async () => {
+  const { leaves } = await import('../src/panel.js')
+  const repo = { path: '/repo', query: { repo: 'acme/web' } }
+  assert.equal(leaves({ path: '/repo', query: { repo: 'acme/web', tab: 'x' } }, repo), false)
+  assert.equal(leaves({ path: '/repo', query: { repo: 'acme/api' } }, repo), true)
+  assert.equal(leaves({ path: '/prs', query: {} }, repo), true)
+  const list = { path: '/', query: { side: 'repo:acme/web' } }
+  assert.equal(leaves({ path: '/', query: { side: 'repo:acme/web', group: 'acme/' } }, list), false)
+  assert.equal(leaves({ path: '/', query: { side: 'repo:acme/api' } }, list), true)
+  assert.equal(leaves({ path: '/', query: {} }, list), true)
+  assert.equal(leaves({ path: '/defaults', query: { file: 'b' } }, { path: '/defaults', query: { file: 'a' } }), false)
+})

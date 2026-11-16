@@ -13,6 +13,8 @@ import SidePanel from './components/SidePanel.vue'
 import Palette from './components/Palette.vue'
 import KeysSheet from './components/KeysSheet.vue'
 import { sideOpen } from './side.js'
+import { confirmLeave } from './unsaved.js'
+import { forget } from './load.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -121,6 +123,8 @@ watch(() => state.log[0], (l) => {
 })
 
 async function logout() {
+  if (!(await confirmLeave())) return
+  forget() // what this account's lists said: not for whoever signs in next in this tab
   try { await post('/auth/logout') } catch (e) { log(e.message, 'error') }
   state.me = { user: null, providers: state.me?.providers || [] }
   router.replace('/login')
