@@ -4,7 +4,8 @@
 import { computed, ref } from 'vue'
 import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
-import { loadGroups, scope } from '../scope.js'
+import { emptyText } from '../empty.js'
+import { loadGroups, narrowed, scope } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
@@ -51,7 +52,7 @@ useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: 
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ every action is pinned to a commit'" @activate="open" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('✓ every action is pinned to a commit', [], narrowed())" @activate="open" /></div>
       <div class="pad"><TextPane :text="output || (current ? `${current.repo}\n${current.path}:${current.line}\n\n${current.text}` : '')"
         placeholder="p opens a PR that pins the selected repo's actions to commit SHAs; A does it for every repo listed" /></div>
     </div>

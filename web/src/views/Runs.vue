@@ -4,8 +4,9 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { emptyText } from '../empty.js'
 import { useLinkFilters } from '../useLink.js'
-import { loadGroups, scope } from '../scope.js'
+import { loadGroups, narrowed, scope } from '../scope.js'
 import { ago } from '../ui.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
@@ -46,7 +47,7 @@ useKeys({ r: () => load(true), f: toggle, o: () => open(current.value), p: () =>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
       <button :disabled="!current?.id" @click="page()"><span class="k">p</span> page</button>
     </div>
-    <div class="scroll"><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no workflow runs yet: repos with GitHub Actions or GitLab CI show theirs here'" @activate="page" /></div>
+    <div class="scroll"><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('no workflow runs yet: repos with GitHub Actions or GitLab CI show theirs here', [f.failed && 'only failed'], narrowed())" @activate="page" /></div>
     <EventLog band :repo="current?.id ? current.repo : ''" kind="run" :number="current?.id || ''" :title="current?.id ? `${current.repo} ${current.name}` : ''" />
   </div>
 </template>
