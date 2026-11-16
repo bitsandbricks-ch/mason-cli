@@ -48,6 +48,13 @@ export const post = (path, body = {}) => api('POST', path, body)
 export const put = (path, body = {}) => api('PUT', path, body)
 export const del = (path) => api('DELETE', path)
 
+// Signed out or account gone: what this account typed (console history with comments and titles) and the
+// log of its outputs stay with it, not with the next person on this browser.
+export function forgetLocal() {
+  try { localStorage.removeItem('mason.console.history') } catch { /* private mode */ }
+  state.log.length = 0
+}
+
 export async function loadMe() {
   try { state.me = await get('/me') } catch (e) { state.me = { user: null, providers: [] }; log(e.message, 'error') }
   state.loaded = true

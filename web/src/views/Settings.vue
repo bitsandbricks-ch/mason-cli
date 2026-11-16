@@ -4,7 +4,7 @@ import { safeUrl } from '../links.js'
 // Everything a CLI user keeps in files lives here, per user: nobody else sees or changes yours.
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { del, get, loadMe, log, post, put, state } from '../api.js'
+import { del, forgetLocal, get, loadMe, log, post, put, state } from '../api.js'
 import { deviceSignIn } from '../signin.js'
 import { ago, ask, tellRevoked } from '../ui.js'
 
@@ -80,10 +80,12 @@ async function dropSecret(x) {
 }
 async function deleteAccount() {
   const name = await ask('Delete your account? Type your user name to confirm. Your keys, sessions and secrets go too; your repos stay as they are.', { input: { placeholder: state.me.user.name }, allowDry: false })
-  if (name !== state.me.user.name) return
+  if (name === null) return
+  if (name !== state.me.user.name) { log(`that isn't your user name (${state.me.user.name}): nothing was deleted`, 'error'); return }
   try {
     const got = await del('/me')
     state.me = { user: null, providers: state.me.providers }
+    forgetLocal()
     await tellRevoked(got)
     router.push('/login')
   } catch (e) { log(e.message, 'error') }

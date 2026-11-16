@@ -2,7 +2,7 @@
 import { safeNext } from './links.js'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { get, loadMe, log, post, put, state } from './api.js'
+import { forgetLocal, get, loadMe, log, post, put, state } from './api.js'
 import { THEMES } from './themes.js'
 import { GROUPS, SECTIONS, TABS, sectionOf } from './router.js'
 import { typing } from './keys.js'
@@ -121,6 +121,7 @@ watch(() => state.log[0], (l) => {
 
 async function logout() {
   try { await post('/auth/logout') } catch (e) { log(e.message, 'error') }
+  forgetLocal()
   state.me = { user: null, providers: state.me?.providers || [] }
   router.replace('/login')
 }
