@@ -101,3 +101,7 @@ test('what counts as leaving the page (for unsaved changes)', async () => {
   assert.equal(leaves({ path: '/', query: {} }, list), true)
   assert.equal(leaves({ path: '/defaults', query: { file: 'b' } }, { path: '/defaults', query: { file: 'a' } }), false)
 })
+
+test('a list of mixed kinds (to do) makes the panel follow any kind', () => {
+  assert.deepEqual(follow({ kind: 'pr', repo: 'a/b', number: 1 }, { kind: 'repo', repo: 'a/b' }, true), { kind: 'repo', repo: 'a/b' })
+})

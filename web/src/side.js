@@ -49,8 +49,8 @@ export function useSide() {
     else router.replace(withSide(route, null))
   }
   // the list moved to another row: show it instead (replace: arrowing through a list isn't history)
-  function track(next) {
-    const t = follow(target.value, next)
+  function track(next, any = false) {
+    const t = follow(target.value, next, any)
     if (t) router.replace(withSide(route, t))
   }
   return { target, open, close, track }
@@ -79,7 +79,7 @@ export function usePage(list) {
 export const listKind = ref('') // the kind of the list on screen that follows the panel ('' for none)
 export function useTrack(fn, { sel, key, kind = '' } = {}) {
   const { track, target } = useSide()
-  watch(fn, (t, before) => { if (before) track(t) })
+  watch(fn, (t, before) => { if (before) track(t, kind === '*') })
   if (kind) { listKind.value = kind; onBeforeUnmount(() => { if (listKind.value === kind) listKind.value = '' }) }
   if (sel && key) watch(target, (t) => { const k = t && key(t); if (k != null && k !== sel.value) sel.value = k }, { immediate: true })
 }

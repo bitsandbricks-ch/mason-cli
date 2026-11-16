@@ -69,6 +69,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   too (Enter, or **p** on the list): a PR's page merges, auto-merges, marks ready and shows the diff; an
   issue's page comments, closes and reopens; a run's page lists every job and step with its time and runs
   the failed jobs again (**R**). `Esc` goes back.
+- **to do (`0`) lists what waits for you**, most urgent first: runs to approve, what is broken (CI on the
+  default branch, merge conflicts, failing checks, a failed release run), PRs ready to merge, drift against the
+  defaults and versions not released yet. Enter opens one in the side panel, and ↑↓ walk through them.
 - **ctrl+k (⌘k, or ⌕ jump in the top bar) jumps anywhere:** type a few letters of a repo, a PR or MR, an
   issue or a view; ↑↓ pick, Enter goes there (a repo, PR or issue opens in the side panel on a wide screen).
 - **On a wide screen the page opens in a side panel** on the right, and the list stays where it was. Moving

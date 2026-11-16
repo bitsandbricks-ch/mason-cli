@@ -25,7 +25,7 @@ watch(target, (t) => { sideOpen.value = !!t }, { immediate: true })
 onBeforeUnmount(() => { sideOpen.value = false })
 
 // ‹ › step through the list beside the panel, as ↑↓ in it would (its order, filter and sort)
-const steps = computed(() => !!target.value && listKind.value === target.value.kind)
+const steps = computed(() => !!target.value && (listKind.value === '*' || listKind.value === target.value.kind))
 function step(key) {
   const list = document.querySelector('main table.table[tabindex]')
   list?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))

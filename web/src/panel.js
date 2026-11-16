@@ -88,8 +88,8 @@ export function sideFor(to, from, { wide, first, asPage, popping }) {
 
 // While the panel is open, moving in the list it came from shows the new row in it (like a mail app). Only
 // for the same kind: a repo's panel doesn't turn into a PR because the list moved.
-export function follow(open, next) {
-  if (!open || !next || open.kind !== next.kind) return null
+export function follow(open, next, anyKind = false) {
+  if (!open || !next || (!anyKind && open.kind !== next.kind)) return null
   const s = encodeSide(next)
   return s && s !== encodeSide(open) ? next : null
 }
