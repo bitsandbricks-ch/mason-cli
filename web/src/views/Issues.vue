@@ -96,7 +96,13 @@ async function comment() {
 
 // the new-issue form
 const form = reactive({ open: false, repo: '', title: '', body: '', labels: '', assignees: '' })
-useUnsaved(() => form.open && !!(form.title.trim() || form.body.trim()), 'the new issue')
+const typed = () => form.open && !!(form.title.trim() || form.body.trim())
+useUnsaved(typed, 'the new issue')
+async function cancelNew() {
+  if (typed() && !(await ask('Drop the new issue?', { allowDry: false }))) return
+  Object.assign(form, { open: false, title: '', body: '' })
+  show()
+}
 const repoNames = ref([]) // the picker's repos: those of the filter, read again when it changes
 watch(() => [scope.provider, scope.group], () => { repoNames.value = [] })
 const side = useSide()
@@ -167,7 +173,7 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
           <textarea v-model="form.body" rows="10" placeholder="details (Markdown)" style="margin-top: 8px" />
           <div class="row" style="margin-top: 8px">
             <button class="primary" @click="submit">open issue</button>
-            <button @click="form.open = false; show()">cancel</button>
+            <button @click="cancelNew">cancel</button>
           </div>
         </div>
         <TextPane v-else :text="detail" placeholder="pick an issue; n opens a new one" />
