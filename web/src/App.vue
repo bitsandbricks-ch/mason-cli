@@ -9,6 +9,7 @@ import { typing } from './keys.js'
 import { arrowKey } from './arrows.js'
 import { closeDetail, detailName, keysHelp, phone, prompt } from './ui.js'
 import KeysHelp from './components/KeysHelp.vue'
+import SetupHint from './components/SetupHint.vue'
 import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
 
@@ -157,6 +158,7 @@ window.addEventListener('keydown', (e) => {
       <button v-if="state.dryRun" class="chip on" title="dry run is on: changes only show what they would do" @click="state.dryRun = false">dry run ✕</button>
     </header>
     <main :class="{ detail }">
+      <SetupHint v-if="!detail" />
       <router-view @rate="refreshRate" />
       <div v-if="menu" class="sheet" role="dialog" aria-label="every view">
         <section v-for="g in GROUPS" :key="g">
@@ -234,7 +236,7 @@ window.addEventListener('keydown', (e) => {
         </router-link>
       </nav>
     </div>
-    <main><router-view @rate="refreshRate" /></main>
+    <main><SetupHint /><router-view @rate="refreshRate" /></main>
     <footer class="foot">
       <span v-if="last" class="last" :class="last.kind === 'error' ? 'bad' : last.kind === 'ok' ? 'ok' : 'dim'"
             :title="'the session log (`)'" role="button" :aria-expanded="logOpen" @click="logOpen = !logOpen">
