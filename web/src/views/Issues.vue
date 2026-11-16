@@ -12,7 +12,7 @@ import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
-import { sideOpen, useTrack } from '../side.js'
+import { sideOpen, useSide, useTrack } from '../side.js'
 import { openOut } from '../links.js'
 
 const STATES = { open: 'open', closed: 'closed', all: 'all' }
@@ -73,8 +73,10 @@ async function comment() {
 const form = reactive({ open: false, repo: '', title: '', body: '', labels: '', assignees: '' })
 const repoNames = ref([]) // the picker's repos: those of the filter, read again when it changes
 watch(() => [scope.provider, scope.group], () => { repoNames.value = [] })
+const side = useSide()
 async function newIssue() {
   form.open = true
+  side.close() // the form shows where the panel would cover it
   openDetail()
   if (!form.repo && current.value) form.repo = current.value.repo
   if (!repoNames.value.length) {

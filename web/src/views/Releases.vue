@@ -18,7 +18,7 @@ import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 import { openDetail } from '../ui.js'
-import { useTrack } from '../side.js'
+import { useSide, useTrack } from '../side.js'
 import { openOut } from '../links.js'
 
 const router = useRouter()
@@ -47,8 +47,10 @@ const toggle = () => { problems.value = !problems.value; load() }
 const toggleUnreleased = () => { unreleased.value = !unreleased.value; load() }
 useTrack(() => sel.value && { kind: 'release', repo: sel.value }, { sel, kind: 'release', key: (t) => (t.kind === 'release' ? t.repo : null) })
 const page = (r) => { const repo = r?.repo || sel.value; if (repo) router.push({ path: '/release', query: { repo } }) }
+const side = useSide()
 async function newRelease(mode = 'release') {
   form.value = mode
+  side.close() // the form shows where the panel would cover it
   openDetail()
   output.value = ''
   if (!repoNames.value.length) {
