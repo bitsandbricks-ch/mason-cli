@@ -47,7 +47,7 @@ move it to "Done" when it ships.
 - PR review latency (time to first review), reviewer load, PR size distribution.
 - Flaky workflow detection (same commit, different outcome) and slowest jobs.
 - Long-term history kept in the database so charts go back further than the APIs do.
-- CSV/JSON export and a shareable read-only dashboard link.
+- JSON export and a shareable read-only dashboard link (CSV export of every list is done).
 - Actions cost: minutes, cache and artifact storage per repo and workflow, and the biggest savings.
 - Supply chain per release: SBOM, signed provenance (`gh attestation`), and which releases lack them.
 
