@@ -13,7 +13,12 @@ from mason import repos as R
 from mason.config import Config
 from mason.core import ago, api, newest, say, short, table
 
-SCOPE_HINT = "packages need the read:packages scope: gh auth refresh -s read:packages"
+CLI_HINT = "packages need the read:packages scope: gh auth refresh -s read:packages"
+WEB_HINT = "your GitHub sign-in can't read packages (an org may need to approve Mason, or connect GitHub again)"
+
+
+def scope_hint() -> str:
+    return WEB_HINT if core.SERVING else CLI_HINT  # the web app's users have no gh to refresh
 IMAGE_WORDS = ("image", "docker", "container")
 
 
@@ -71,7 +76,7 @@ def package_infos(cfg: Config, repos: list[str], nodes: dict[str, dict] | None =
     except core.RateLimited:
         raise
     except RuntimeError as err:
-        return [], SCOPE_HINT if _denied(err) else str(err)
+        return [], scope_hint() if _denied(err) else str(err)
     infos = []
     for base, items in found:
         for p in items:
@@ -91,7 +96,7 @@ def package_infos(cfg: Config, repos: list[str], nodes: dict[str, dict] | None =
         except core.RateLimited:
             raise
         except RuntimeError as err:
-            info["error"] = SCOPE_HINT if _denied(err) else str(err)
+            info["error"] = scope_hint() if _denied(err) else str(err)
         return info
 
     def runs_of(repo: str) -> tuple[str, list[dict]]:
