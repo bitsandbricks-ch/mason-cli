@@ -5,6 +5,7 @@ import { get, log, post } from '../api.js'
 import { act, forget } from '../load.js'
 import { useRouter } from 'vue-router'
 import { useKeys } from '../keys.js'
+import { ago } from '../ui.js'
 import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
@@ -26,7 +27,16 @@ const running = ref('')
 const only = ref('')
 const pluginChecks = ref([])
 loadGroups()
+const earlier = ref(0) // when the results shown come from earlier checks (kept a day): the oldest one's time
 onMounted(async () => {
+  // what the last checks found, so the page isn't empty until c runs again
+  try {
+    const kept = Object.entries((await get('/doctor')).repos || {}).map(([repo, d]) => ({ repo, problems: [], ...d }))
+    if (kept.length && !found.value.length) {
+      found.value = kept
+      earlier.value = Math.min(...kept.map((d) => d.checked || Infinity))
+    }
+  } catch { /* nothing kept */ }
   try {
     pluginChecks.value = (await get('/plugins')).plugins.filter((p) => p.on).flatMap((p) => p.checks.map((c) => ({ ...c, plugin: p.name })))
   } catch { /* none */ }
@@ -34,12 +44,13 @@ onMounted(async () => {
 const repos = computed(() => only.value.split(/[\s,]+/).filter(Boolean))
 const where = computed(() => (repos.value.length ? repos.value.join(', ') : scopeLabel()))
 // results of another scope would read as this one's
-watch(() => [scope.provider, scope.group], () => { found.value = []; output.value = '' })
+watch(() => [scope.provider, scope.group], () => { found.value = []; output.value = ''; earlier.value = 0 })
 
 async function doctor() {
   running.value = 'doctor'
   output.value = ''
   found.value = []
+  earlier.value = 0
   try {
     const got = await post('/doctor', { repos: repos.value, ...scoped() })
     output.value = got.text || 'ok'
@@ -50,7 +61,7 @@ async function doctor() {
 }
 async function fix() {
   const t = await act(`Apply the defaults to ${where.value} (settings, security, rulesets, protected branches)?`, '/doctor', { repos: repos.value, ...scoped(), fix: true })
-  if (t !== null) { output.value = t; found.value = [] }
+  if (t !== null) { output.value = t; found.value = []; earlier.value = 0 }
 }
 async function sync() {
   const t = await act(`Open PRs that sync the shared files into ${where.value}?`, '/sync', { repos: repos.value, ...scoped() })
@@ -77,6 +88,7 @@ useKeys({ c: doctor, f: fix, s: sync })
     </div>
     <div class="scroll pad">
       <div v-if="running" class="warn cursor">running {{ running }} </div>
+      <div v-if="earlier && found.length" class="dim" style="margin-bottom: 6px">results of earlier checks, the oldest from {{ ago(new Date(earlier * 1000).toISOString()) }} · c checks again</div>
       <DataTable v-if="found.length" v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.repo" style="margin-bottom: 16px" @activate="page" />
       <TextPane :text="output" placeholder="c checks the repos against the defaults: settings, security, release immutability, rulesets (GitHub), protected branches (GitLab) and files. f fixes what it can, s opens PRs with the files." />
     </div>
