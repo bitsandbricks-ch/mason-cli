@@ -33,6 +33,7 @@ def create_app(op: S.Settings | None = None) -> Flask:
                       PROBLEMS=problems, JSON_SORT_KEYS=False)
     models.init(op.database)
     core.install_context_stdout()
+    core.SERVING = True  # a test runner may swap stdout; a console command's dry run must still stay in its context
     cache.BUDGET.configure(op.cache_size, op.cache_user_size)
     # The operator acts only with each user's own token: never with gh or a token of the server's.
     transport.set_default(NoTransport("sign in first"))
@@ -44,6 +45,7 @@ def create_app(op: S.Settings | None = None) -> Flask:
     @app.before_request
     def _who():
         retention.housekeeping()  # at most every few minutes
+        core.forget_dry_run()  # threads serve many requests: nothing of an earlier one's dry run stays
         auth.resolve()
         if request.path.startswith("/api/"):
             if request.path != "/api/v1/health":
@@ -74,6 +76,19 @@ def create_app(op: S.Settings | None = None) -> Flask:
         if request.path.startswith("/api/"):
             return auth.error_json(err)
         return err
+
+    @app.errorhandler(Exception)
+    def _crash(err):
+        # a bug: the web app gets JSON it can show ("500 INTERNAL SERVER ERROR" in HTML said nothing), the details
+        # go to the server's log only
+        if isinstance(err, HTTPException):
+            return _http_error(err)
+        # without line breaks: a path with %0a in it must not write a made-up line into the log
+        app.logger.exception("unhandled error on %s %s", request.method,
+                             request.path.replace("\r", "").replace("\n", ""))
+        if request.path.startswith("/api/"):
+            return jsonify({"error": f"the server hit a bug ({type(err).__name__}); it is in the server's log"}), 500
+        return "the server hit a bug; it is in the server's log", 500
 
     @app.errorhandler(limits.Limited)
     def _limited(err):

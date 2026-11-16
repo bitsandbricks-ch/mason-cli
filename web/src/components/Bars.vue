@@ -4,6 +4,7 @@ import { computed } from 'vue'
 
 const props = defineProps({ labels: Array, values: Array, bad: { type: Array, default: null }, title: String })
 const top = computed(() => Math.max(1, ...(props.values || [0])))
+const none = computed(() => !(props.values || []).some((v) => v > 0))
 </script>
 
 <template>
@@ -13,7 +14,9 @@ const top = computed(() => Math.max(1, ...(props.values || [0])))
       <div v-for="(v, i) in values" :key="i" class="bar" :style="{ height: `${(100 * v) / top}%` }"
            :title="`${labels[i]}: ${v}${bad ? `, ${bad[i]} failed` : ''}`">
         <div v-if="bad && v" class="bar bad" :style="{ height: `${(100 * bad[i]) / v}%`, position: 'absolute', bottom: 0, left: 0, right: 0 }" />
+        <span v-if="v" class="n" aria-hidden="true">{{ v }}</span>
       </div>
+      <span v-if="none" class="dim bars-none">none in these weeks</span>
     </div>
     <div class="bars-l"><span v-for="(l, i) in labels" :key="i">{{ l.slice(-3) }}</span></div>
   </div>
