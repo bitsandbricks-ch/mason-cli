@@ -29,7 +29,7 @@ a:hover { text-decoration: underline; }
 .warn { color: var(--warn); }
 .bad { color: var(--bad); }
 .accent { color: var(--accent); text-shadow: var(--glow); }
-.right { text-align: right; }
+.right, .table th.right { text-align: right; } /* a number column's header sits over its numbers */
 .nowrap { white-space: nowrap; }
 .grow { flex: 1; min-width: 0; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
