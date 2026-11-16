@@ -92,6 +92,11 @@ def test_me_csrf_settings(op):
     assert r.status_code == 400 and "tool" in r.json["error"]
     assert c.put("/api/v1/settings", json={"orgs": ["acme/web"]}, headers=H).status_code == 400
     assert c.get("/api/v1/settings").json["org_defaults"] is True  # each org's .mason: on unless turned off
+    assert c.get("/api/v1/settings").json["pinned"] == []
+    got = c.put("/api/v1/settings", json={"pinned": ["acme/web", "gitlab:grp/sub/app"]}, headers=H).json
+    assert got["pinned"] == ["acme/web", "gitlab:grp/sub/app"]
+    assert c.put("/api/v1/settings", json={"pinned": ["<script>"]}, headers=H).status_code == 400
+    assert c.get("/api/v1/me").json["settings"]["pinned"] == ["acme/web", "gitlab:grp/sub/app"]
     assert c.put("/api/v1/settings", json={"org_defaults": "no"}, headers=H).status_code == 400
     assert c.put("/api/v1/settings", json={"org_defaults": False}, headers=H).json["org_defaults"] is False
 
@@ -1291,6 +1296,74 @@ def test_protect_written_into_a_repos_file():
     assert config.parse_defaults(off) == {"auto_fix": True, "protect": False, "release": {"version": "x"}}
     assert "protect" not in config.parse_defaults(with_protect(off, None))
     assert with_protect("", {"reviews": 1}) == "[protect]\nreviews = 1\n"
+
+
+def test_protect_written_into_an_org_group():
+    """Only the named [[group]]'s protect changes: other groups, sub tables and comments stay."""
+    from mason import config
+    from mason.server.api.masonfiles import with_group_protect
+
+    text = ('# acme\n[[group]]\nname = "plugins"\nprotect = { reviews = 2 }\n\n[[group]]\nname = "default"  # all\n'
+            # a group whose protect is a sub table
+            'files = "files"\n\n[group.settings]\nhas_wiki = true\n\n[group.protect]\nchecks = ["x"]\n\n'
+            '[[group]]\nname = "last"\nprotect = false\n')
+    out = with_group_protect(text, 1, {"reviews": 1})
+    assert out == ('# acme\n[[group]]\nname = "plugins"\nprotect = { reviews = 2 }\n\n'
+                   '[[group]]\nname = "default"  # all\nfiles = "files"\nprotect = { reviews = 1 }\n\n'
+                   '[group.settings]\nhas_wiki = true\n\n'
+                   '[[group]]\nname = "last"\nprotect = false\n')
+    groups = config.parse_defaults(with_group_protect(out, 2, {"checks": ["test"], "signed_commits": True}))["group"]
+    assert groups[2] == {"name": "last", "protect": {"checks": ["test"], "signed_commits": True}}
+    assert groups[0]["protect"] == {"reviews": 2} and groups[1]["settings"] == {"has_wiki": True}
+    assert "protect" not in config.parse_defaults(with_group_protect(out, 1, None))["group"][1]
+    with pytest.raises(ValueError):
+        with_group_protect('group = [{ name = "inline" }]\n', 0, {"reviews": 1})  # not a [[group]] table
+
+
+def test_protect_an_unprotected_branch_from_the_web(op, monkeypatch, tmp_path):
+    """The fix for "main isn't protected": keep protect in the repo or in its org's .mason group, and make the
+    ruleset on GitHub right away (apply), without waiting for the pull request."""
+    _, c = op
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    monkeypatch.setenv("FAKE_GH_MASON", "1")
+    org = c.get("/api/v1/mason?repo=mike/.mason").json
+    assert org["groups"] == [{"name": "mike:personal", "match": {}, "protect": None}]
+    view = c.get("/api/v1/mason?repo=mike/dotfiles").json
+    assert any(lay["group"] == "mike:personal" for lay in view["layers"])
+
+    r = c.post("/api/v1/mason/protect", json={"repo": "mike/dotfiles", "group": "mike:personal",
+                                              "protect": {"reviews": 1}, "apply": True}, headers=H)
+    assert r.status_code == 200, r.json
+    calls = log.read_text()
+    assert "-X PUT /repos/mike/.mason/contents/mason.toml" in calls and "pr create" in calls
+    assert "-X POST /repos/mike/dotfiles/rulesets" in calls  # the protect ruleset, made now
+    assert r.json["mode"] == "pr" and "default branch is protected now" in r.json["applied"]
+
+    # from the org's own page: the group, no repo to apply to
+    r = c.post("/api/v1/mason/protect", json={"repo": "mike/.mason", "group": "mike:personal",
+                                              "protect": {"reviews": 2}, "dry_run": True, "apply": True},
+               headers=H).json
+    assert r["dry"] and "protect = { reviews = 2 }" in r["text"] and "applied" not in r
+    # only a group of the repo's own org, and one that's there
+    assert c.post("/api/v1/mason/protect", json={"repo": "mike/dotfiles", "group": "acme:default",
+                                                 "protect": {"reviews": 1}}, headers=H).status_code == 400
+    assert c.post("/api/v1/mason/protect", json={"repo": "mike/dotfiles", "group": "mike:nope",
+                                                 "protect": {"reviews": 1}}, headers=H).status_code == 404
+    assert c.post("/api/v1/mason/protect", json={"repo": "mike/.mason", "protect": {"reviews": 1}},
+                  headers=H).status_code == 400
+
+    # the repo's own file, applied: a dry run says both, then it's done
+    dry = c.post("/api/v1/mason/protect", json={"repo": "acme/web", "protect": {"reviews": 1}, "apply": True,
+                                                "dry_run": True}, headers=H).json
+    assert "[dry-run] write .mason/mason.toml" in dry["text"]
+    assert "[dry-run] create (or update) ruleset protect" in dry["text"]
+    log.write_text("")
+    r = c.post("/api/v1/mason/protect", json={"repo": "acme/web", "protect": {"reviews": 1}, "apply": True},
+               headers=H).json
+    calls = log.read_text()
+    assert "-X PUT /repos/acme/web/contents/.mason/mason.toml" in calls and "-X POST /repos/acme/web/rulesets" in calls
+    assert "mason.protect.apply" in json.dumps(c.get("/api/v1/audit").json)
 
 
 def test_repo_settings_view(op, monkeypatch):

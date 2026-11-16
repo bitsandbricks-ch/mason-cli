@@ -25,7 +25,7 @@ GITLAB_REPO = re.compile(rf"^gitlab:{_PART}(/{_PART})+$")
 NAME = re.compile(rf"^({_PART}/)?{_PART}(#\d+)?$")
 SETTING_KEYS = {"defaults": str, "ref": str, "orgs": list, "repos": list, "exclude": list,
                 "gitlab_groups": list, "gitlab_repos": list, "theme": str, "plugins_off": list,
-                "org_defaults": bool}
+                "org_defaults": bool, "pinned": list}
 # The web app's themes (web/src/themes.js). "" is the default: bricks, or mortar on a light system.
 THEMES = ("bricks", "mortar")
 
@@ -92,6 +92,9 @@ def clean_settings(body: dict) -> dict:
                 abort(400, f"{k} must be a short text")
             v = v.strip()
         out[k] = v
+    bad = [x for x in out.get("pinned", []) if not (REPO.match(x) or GITLAB_REPO.match(x))]
+    if bad:  # pinned repos come first in the lists: only repo names, so nothing else ends up in the page
+        abort(400, f"pinned: not a repo name: {bad[0][:80]!r}")
     bad = [x for x in out.get("repos") or [] if not REPO.match(x)]
     if bad:  # a bare name has no owner: every list that asks GitHub about it would fail
         abort(400, f"extra repos are owner/name: {', '.join(bad[:5])}")

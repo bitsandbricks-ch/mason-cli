@@ -4,8 +4,10 @@
 // that write the files back: the protect form, the files themselves (.mason/mason.toml, .mason/rulesets/*.json),
 // and "keep the live rulesets" (.mason/rulesets from what GitHub has). Saving opens a PR, or pushes straight to
 // the default branch when the repo has auto_push (or you pick "commit"). An org's .mason repo shows its
-// mason.toml and rulesets folder instead.
-import { computed, ref, watch } from 'vue'
+// mason.toml and rulesets folder instead, and each group's protect.
+// An unprotected default branch is fixed here in one go: protect kept in the repo or in its org's .mason group,
+// and (apply) the ruleset made on GitHub right away, so it doesn't wait for that pull request to merge.
+import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { forget } from '../load.js'
 import { get, log, post, put, qs, state } from '../api.js'
@@ -21,6 +23,9 @@ const error = ref('')
 const mode = ref('auto')
 const editing = ref(false) // the protect form
 const form = ref({})
+const target = ref('') // where the form saves: '' the repo's own file, or an org .mason group ("acme:default")
+const apply = ref(false) // make the protect ruleset on GitHub right away too
+const root = ref(null)
 const file = ref(null) // {path, text, original, problems, editable, isNew}
 useUnsaved(() => !!file.value?.editable && file.value.text !== file.value.original, () => `your changes to ${props.repo}'s ${file.value?.path}`)
 const BOOLS = [['signed_commits', 'signed commits'], ['linear_history', 'linear history'], ['code_owners', 'code owner review'],
@@ -50,7 +55,8 @@ const status = computed(() => {
   if (d.protected_by?.length) return { cls: 'ok', text: `✓ ${d.default_branch} is protected (${d.protected_by.join(', ')})` }
   return { cls: 'bad', text: `✗ ${d.default_branch} isn't protected` }
 })
-const where = computed(() => (mode.value === 'auto' ? (data.value?.auto_push ? 'straight to the default branch (auto_push)' : 'in a pull request')
+const where = computed(() => (mode.value === 'auto' ? (data.value?.auto_push && !(editing.value && target.value)
+  ? 'straight to the default branch (auto_push)' : 'in a pull request')
   : mode.value === 'pr' ? 'in a pull request' : 'straight to the default branch'))
 
 // a write: ask (y / d dry run / n), then send it with dry_run
@@ -74,18 +80,44 @@ async function send(question, method, path, body) {
 }
 
 // ── protect ──
-function editProtect() {
-  const own = data.value?.own?.protect
-  const base = own && typeof own === 'object' ? own : data.value?.protect || {}
+const unprotected = computed(() => status.value?.cls === 'bad')
+const withApply = computed(() => github.value && !org.value)
+// the org .mason groups the repo is in: protect can be kept there, for every repo of the group
+const orgGroups = computed(() => (org.value ? (data.value?.groups || []).map((x) => ({ ...x, where: props.repo }))
+  : (data.value?.layers || []).filter((l) => l.repo?.endsWith('/.mason') && l.group)
+    .map((l) => ({ name: l.group, where: l.repo, protect: l.protect }))))
+const picked = computed(() => orgGroups.value.find((x) => x.name === target.value))
+const asTable = (p) => (p && typeof p === 'object' ? p : null)
+function fill() {
+  const base = (target.value ? asTable(picked.value?.protect) : asTable(data.value?.own?.protect) || asTable(data.value?.protect))
+    || (unprotected.value || target.value ? { reviews: 1 } : {})
   form.value = { reviews: base.reviews ?? '', checks: (base.checks || []).join?.(', ') ?? base.checks ?? '',
     branches: (base.branches || []).join?.(', ') ?? base.branches ?? '' }
   for (const [k] of BOOLS) form.value[k] = !!base[k]
+}
+function editProtect(group = '') {
+  target.value = group || (org.value ? orgGroups.value[0]?.name || '' : '')
+  apply.value = unprotected.value
+  fill()
   editing.value = true
 }
+// "protect main" (here or on the defaults issue): the form, set up for the fix, in view
+async function protectNow() {
+  if (!data.value) await load()
+  if (!data.value || org.value) return
+  editProtect()
+  await nextTick()
+  const box = root.value?.querySelector('.protect')
+  box?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  box?.querySelector('input, select')?.focus({ preventScroll: true })
+}
 async function saveProtect(value) {
-  const what = value === false ? `Turn branch protection off in ${props.repo}?` : value === null
-    ? `Drop ${props.repo}'s own protect (the groups decide)?` : `Set ${props.repo}'s branch protection?`
-  const got = await send(what, post, '/mason/protect', { repo: props.repo, protect: value })
+  const g = target.value
+  const now = apply.value && withApply.value && !!value
+  const what = value === false ? `Turn branch protection off in ${g ? `group ${g}` : props.repo}?` : value === null
+    ? (g ? `Drop group ${g}'s protect?` : `Drop ${props.repo}'s own protect (the groups decide)?`)
+    : `Set ${g ? `group ${g}'s` : `${props.repo}'s`} branch protection${now ? ` and protect ${data.value.default_branch} now` : ''}?`
+  const got = await send(what, post, '/mason/protect', { repo: props.repo, protect: value, group: g || undefined, apply: now })
   if (got) editing.value = false
 }
 const formValue = () => Object.fromEntries(Object.entries(form.value).filter(([, v]) => v !== '' && v !== false))
@@ -147,16 +179,18 @@ function tab(e) {
   requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = s + 2 })
 }
 const link = (r) => ({ path: '/repo', query: { repo: r } })
-defineExpose({ load })
+defineExpose({ load, protectNow })
 </script>
 
 <template>
-  <div class="mason">
+  <div ref="root" class="mason">
     <h2 style="margin-top: 16px">{{ org ? 'org defaults (.mason)' : 'branch rules' }}</h2>
     <ErrorNote v-if="error" :error="error" what="couldn't read the mason files" />
     <div v-else-if="!data" class="dim">reading…</div>
     <template v-else>
-      <div v-if="status" :class="status.cls">{{ status.text }}</div>
+      <div v-if="status" :class="status.cls">{{ status.text }}
+        <button v-if="unprotected && !editing" class="primary" style="margin-left: 1ch" @click="protectNow">protect {{ data.default_branch }}</button>
+      </div>
       <template v-if="!org">
         <div class="layers">
           <div class="dim">rules come from, least important first:</div>
@@ -179,6 +213,14 @@ defineExpose({ load })
           <span v-if="data.protect_from && data.protect" class="dim">(last set by {{ data.protect_from }})</span>
         </div>
       </template>
+      <div v-else-if="orgGroups.length" class="layers">
+        <div class="dim">its groups:</div>
+        <div v-for="grp in orgGroups" :key="grp.name" class="layer">
+          <span class="src">{{ grp.name }}</span>
+          <span :class="grp.protect ? '' : 'dim'">protect: {{ summary(grp.protect) }}</span>
+          <button v-if="!editing" @click="editProtect(grp.name)">edit protection</button>
+        </div>
+      </div>
 
       <div class="row" style="margin-top: 8px">
         <select v-model="mode" aria-label="how to write">
@@ -186,14 +228,22 @@ defineExpose({ load })
           <option value="pr">as a pull request</option>
           <option value="commit">commit directly</option>
         </select>
-        <button v-if="!org && !editing" @click="editProtect">edit protection</button>
+        <button v-if="!org && !editing" @click="editProtect()">edit protection</button>
         <button v-if="!org" @click="newFile('settings')" :disabled="!!data.settings_file">new .mason/mason.toml</button>
         <button v-if="github || org" @click="newFile('ruleset')">new ruleset file</button>
         <button v-if="!org && github && data.live_rulesets?.length" @click="keepLive">keep live rulesets in .mason</button>
       </div>
 
       <div v-if="editing" class="box protect">
-        <div class="dim">This repo's own protect, on top of its groups' (the repo wins key by key). Saved in
+        <label v-if="!org && orgGroups.length">keep it in
+          <select v-model="target" @change="fill">
+            <option value="">this repo ({{ data.settings_file || '.mason/mason.toml' }})</option>
+            <option v-for="grp in orgGroups" :key="grp.name" :value="grp.name">{{ grp.where }}: group {{ grp.name }}, every repo in it</option>
+          </select>
+        </label>
+        <div v-if="target" class="dim">Group {{ target }}'s protect, in {{ picked?.where }}'s mason.toml: it counts for every
+          repo of the group (a repo's own protect still wins key by key). Saved in a pull request unless you pick "commit directly".</div>
+        <div v-else class="dim">This repo's own protect, on top of its groups' (the repo wins key by key). Saved in
           {{ data.settings_file || '.mason/mason.toml' }}.</div>
         <label>reviews <input v-model="form.reviews" type="number" min="0" max="10" style="width: 6ch"></label>
         <label>checks <input v-model="form.checks" placeholder="test, lint"></label>
@@ -201,10 +251,14 @@ defineExpose({ load })
         <div v-if="github" class="bools">
           <label v-for="[k, label] in BOOLS" :key="k"><input v-model="form[k]" type="checkbox"> {{ label }}</label>
         </div>
+        <label v-if="withApply" class="check">
+          <input v-model="apply" type="checkbox"> protect {{ data.default_branch }} on GitHub now too (the "protect" ruleset),
+          not only once the change is merged</label>
         <div class="row">
           <button class="primary" @click="saveProtect(formValue())">save</button>
-          <button class="danger" @click="saveProtect(false)">off in this repo</button>
-          <button v-if="data.own?.protect !== null && data.own?.protect !== undefined" @click="saveProtect(null)">use the groups'</button>
+          <button class="danger" @click="saveProtect(false)">off {{ target ? 'in the group' : 'in this repo' }}</button>
+          <button v-if="!target && data.own?.protect !== null && data.own?.protect !== undefined" @click="saveProtect(null)">use the groups'</button>
+          <button v-if="target && picked?.protect" @click="saveProtect(null)">drop the group's</button>
           <button @click="editing = false">cancel</button>
         </div>
       </div>
