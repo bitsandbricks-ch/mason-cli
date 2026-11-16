@@ -63,7 +63,6 @@ MUTATIONS = {"markPullRequestReadyForReview", "enablePullRequestAutoMerge", "dis
              "mergePullRequest", "convertPullRequestToDraft"}
 TOKEN = re.compile(r'''
     (?P<skip>[\s,\ufeff]+|\#[^\n\r]*)
-  | (?P<block>"""(?:\\"""|(?!""").)*""")
   | (?P<string>"(?:\\.|[^"\\\n\r])*")
   | (?P<spread>\.\.\.)
   | (?P<name>[_A-Za-z][_0-9A-Za-z]*)
@@ -79,13 +78,25 @@ class BadQuery(ValueError):
 def _tokens(query: str) -> list[str]:
     out, pos = [], 0
     while pos < len(query):
+        if query.startswith('"""', pos):  # a block string, found by hand: as a regex it was slow on many """
+            end = pos + 3
+            while True:
+                end = query.find('"""', end)
+                if end < 0:
+                    raise BadQuery("a \"\"\" string isn't closed")
+                if query[end - 1] != "\\":  # \""" is a quote inside the string
+                    break
+                end += 3
+            out.append("")
+            pos = end + 3
+            continue
         m = TOKEN.match(query, pos)
         if not m:
             raise BadQuery(f"can't read the query at {query[pos:pos + 20]!r}")
         pos = m.end()
         if m.lastgroup == "skip":
             continue
-        out.append("" if m.lastgroup in ("block", "string") else m.group())  # strings are never names
+        out.append("" if m.lastgroup == "string" else m.group())  # strings are never names
     return out
 
 

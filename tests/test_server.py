@@ -1380,3 +1380,16 @@ def test_list_names_are_checked_and_one_bad_repo_doesnt_sink_issues(op):
     assert c.get("/api/v1/repo?repo=../x").status_code == 400
     got = c.get("/api/v1/issues?repo=acme/web&repo=acme/nope").json
     assert got["failed"] and got["failed"][0].startswith("acme/nope: ")
+
+
+def test_graphql_block_strings_read_fast():
+    import contextlib
+    import time
+
+    from mason.server.api.proxy import BadQuery, _tokens
+    assert _tokens('{ a(x: """hi \\""" there""") }') == ["{", "a", "(", "x", ":", "", ")", "}"]
+    start = time.monotonic()
+    for bad in (' """' * 20000, '"' * 50000):
+        with contextlib.suppress(BadQuery):
+            _tokens(bad)
+    assert time.monotonic() - start < 1  # a regex took seconds on these (CodeQL: polynomial regex)
