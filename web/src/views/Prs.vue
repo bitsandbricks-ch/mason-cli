@@ -7,6 +7,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { get, qs } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
+import { alive } from '../pick.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
@@ -68,7 +69,24 @@ async function show() {
 }
 watch([sel, diff], show)
 
+// several PRs at once: space or the boxes pick them, and m / M merge the picked ones instead of the selected one
+const picked = ref([])
+watch(rows, (list) => { picked.value = alive(picked.value, list.map(keyOf)) })
+const pickedRows = computed(() => rows.value.filter((p) => picked.value.includes(keyOf(p))))
+async function mergePicked(now) {
+  const list = pickedRows.value
+  if (!list.length) return
+  const got = await change(`${now ? 'Merge' : 'Auto-merge'} ${list.length} pull request${list.length === 1 ? '' : 's'}?`, '/merge',
+    { targets: list.map(keyOf), now, ready: list.some((p) => p.draft) }, { detail: list.map((p) => `${keyOf(p)} ${p.title}`).join('\n') })
+  if (!got) return
+  detail.value = got.text
+  if (got.dry) return
+  if (got.ok) { for (const p of list) expect(p, now ? { gone: true } : { auto: true, draft: false }); picked.value = [] }
+  follow.now([...new Set(list.map((p) => p.repo))])
+}
+
 async function doMerge(now) {
+  if (picked.value.length) return mergePicked(now)
   const p = current.value
   if (!p) return
   const got = await change(`${now ? 'Merge' : 'Auto-merge'} ${keyOf(p)} ${p.title}?`, '/merge', { targets: [keyOf(p)], now, ready: p.draft })
@@ -116,8 +134,15 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
       <button class="any" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
     </div>
+    <div v-if="picked.length" class="picked-bar" role="status">
+      <span><b>{{ picked.length }}</b> picked</span>
+      <button @click="mergePicked(false)"><span class="k">m</span> auto-merge them</button>
+      <button @click="mergePicked(true)"><span class="k">M</span> merge them now</button>
+      <button @click="picked = []">clear</button>
+      <span class="dim hide-xs">space picks the selected row, shift+click a span</span>
+    </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :picked="filter === 'merged' ? null : picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
     <EventLog band :repo="current?.repo || ''" kind="pr" :number="current?.number || ''" :title="current ? `${current.repo}${current.provider === 'gitlab' ? '!' : '#'}${current.number} ${current.title}` : ''" />

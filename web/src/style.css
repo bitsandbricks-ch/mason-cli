@@ -481,3 +481,13 @@ button.wide { width: 100%; text-align: left; }
 .choices .choice-group { margin: 6px 0 0; font-weight: 400; color: var(--dim); text-shadow: none; }
 .choices .choice-group::before { content: none; }
 .todo-counts { gap: 12px; } .todo-counts b { color: var(--accent); font-weight: 400; }
+
+/* rows picked to act on several at once */
+.table th.pick, .table td.pick { width: 1px; padding-right: 0; cursor: pointer; }
+.table tr.sel td.pick::before { content: none; }
+.table tr.sel td.pick + td::before { content: "▸ "; color: var(--accent); }
+.table tr.picked { background: color-mix(in srgb, var(--sel) 60%, transparent); }
+.table tr.picked.sel { background: var(--sel); }
+.picked-bar { display: flex; gap: 8px; align-items: center; padding: 5px 12px; border-bottom: 1px dashed var(--accent);
+  background: var(--bg2); flex-wrap: wrap; }
+.picked-bar b { color: var(--accent); font-weight: 400; }
