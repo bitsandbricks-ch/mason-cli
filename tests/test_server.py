@@ -368,8 +368,11 @@ def test_market(op, tmp_path):
     pem, pub = market.keygen()
     doc = {"name": "test", "plugins": [{"name": "demo", "package": "demo-pkg", "version": "1.0",
                                         "source": "git+https://example.org/demo@v1"}]}
+    r = c.get("/api/v1/market")  # no index yet: the error doesn't name the server's files
+    assert r.status_code == 502 and str(tmp_path) not in r.json["error"]
     (tmp_path / "index.json").write_text(json.dumps(doc))
     got = c.get("/api/v1/market").json
+    assert str(tmp_path) not in got["index"]
     assert got["status"] == "unverified" and got["plugins"][0]["name"] == "demo" and "can_install" not in got
     (tmp_path / "index.json").write_text(json.dumps(market.sign(doc, pem)))
     app.config["OP"].plugin_index_keys = [pub]

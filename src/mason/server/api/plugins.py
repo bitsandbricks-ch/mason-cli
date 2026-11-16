@@ -166,10 +166,12 @@ def market_list():
     try:
         got = market.listing(op.plugin_index, op.plugin_index_keys)
     except (RuntimeError, OSError) as err:
-        abort(502, f"the plugin index: {err}")
+        # the error names a file or address on the server: only `mason serve --check` and the log show it
+        current_app.logger.warning("plugin index %s: %s", op.plugin_index, err)
+        abort(502, "the plugin index can't be read right now")
     loaded = {p.name for p in plugins.load()}
     for p in got["plugins"]:
         p["loaded"] = p["name"] in loaded
-    got["index"] = op.plugin_index
+    got["index"] = op.plugin_index if op.plugin_index.startswith("https://") else "(a file where Mason runs)"
     return jsonify(got)
 
