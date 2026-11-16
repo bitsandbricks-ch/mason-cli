@@ -10,9 +10,10 @@
   --glow: none; --link: #f27a4f;
 }
 [data-theme="mortar"] {
-  --bg: #f7f7f4; --bg2: #efefea; --bg3: #e6e6df; --line: #cbcbc2; --fg: #151515; --dim: #686862;
-  --accent: #b23b14; --accent2: #15803d; --ok: #15803d; --warn: #9a6200; --bad: #c62828; --sel: #f6e4dc;
-  --glow: none; --link: #b23b14;
+  /* every text colour reads at 4.5:1 or more on each background, the selected row's too (WCAG AA) */
+  --bg: #f7f7f4; --bg2: #efefea; --bg3: #e6e6df; --line: #cbcbc2; --fg: #151515; --dim: #5f5f59;
+  --accent: #a83612; --accent2: #116b32; --ok: #116b32; --warn: #8a5700; --bad: #b42323; --sel: #f6e4dc;
+  --glow: none; --link: #a83612;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
