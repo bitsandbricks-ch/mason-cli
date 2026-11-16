@@ -117,16 +117,17 @@ defineExpose({ focus: () => table.value?.focus(), shown })
         <button v-if="activates && !inSplit && rowKey(r) === modelValue" class="open" @click.stop="emit('activate', r)">open ↗</button>
       </li>
     </ul>
-    <table v-else ref="table" class="table" tabindex="0" @keydown="key">
+    <table v-else ref="table" class="table" tabindex="0" aria-label="list: arrows move, enter opens" @keydown="key">
       <thead>
         <tr>
-          <th v-for="c in columns" :key="c.key" :class="{ right: c.right }" @click="sort(c)">
+          <th v-for="c in columns" :key="c.key" :class="{ right: c.right }"
+              :aria-sort="sortKey === c.key ? (sortDir > 0 ? 'ascending' : 'descending') : undefined" @click="sort(c)">
             {{ c.label }}<span v-if="sortKey === c.key">{{ sortDir > 0 ? ' ↑' : ' ↓' }}</span>
           </th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="r in shown" :key="rowKey(r)" :class="{ sel: rowKey(r) === modelValue }"
+        <tr v-for="r in shown" :key="rowKey(r)" :class="{ sel: rowKey(r) === modelValue }" :aria-selected="rowKey(r) === modelValue"
             @click="emit('update:modelValue', rowKey(r))" @dblclick="emit('activate', r)">
           <td v-for="c in columns" :key="c.key" :class="[cls(c, r), { right: c.right }]"
               :title="String(cell(c, r))"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</td>
