@@ -161,7 +161,7 @@ FIELDS = """
   mergeRequests(state: opened, first: 50, sort: UPDATED_DESC) {
     count
     nodes {
-      iid title webUrl draft conflicts approved autoMergeEnabled sourceBranch detailedMergeStatus createdAt
+      iid title webUrl draft conflicts approved autoMergeEnabled sourceBranch detailedMergeStatus createdAt updatedAt
       author { username }
       reviewers(first: 10) { nodes { username } }
       headPipeline { status }
@@ -241,7 +241,7 @@ def mr_rows(gl: GitLab, repos: list[str]) -> list[dict]:
                                       if r and r.get("username")],
                         "branch": m.get("sourceBranch", ""), "state": (m.get("detailedMergeStatus") or "").lower(),
                         "merge": merge_word(m),
-                        "created": m.get("createdAt")})
+                        "created": m.get("createdAt"), "updated": m.get("updatedAt") or m.get("createdAt")})
     return out
 
 

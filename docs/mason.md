@@ -123,7 +123,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   only from a tab's own list.
 - **Pull request filters:** besides ready, drafts, auto-merge, conflicts and merged, **mine** shows the ones
   opened by your signed-in GitHub or GitLab login, **to review** the ones that ask you for a review (as a
-  person; a team request doesn't count, and the row says "asks you"), and **checks failing** the red ones. `v` cycles them. The
+  person; a team request doesn't count, and the row says "asks you"), **checks failing** the red ones, and **stale**
+  the ones nothing happened to for 30 days. The **updated** column says when each one last changed (it sorts by
+  date). `v` cycles them. The
   filter is in the link (`/prs?show=mine`), so a bookmark opens the same list.
 
 ## Run it

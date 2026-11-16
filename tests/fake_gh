@@ -199,6 +199,8 @@ def node(repo):
             "state": "FAILURE" if repo == "acme/api" else "SUCCESS"}}},
         "releases": {"nodes": [{"tagName": "v1.2.0"}, {"tagName": "v1.10.0"}] if repo == "acme/api" else []},
         "pullRequests": {"totalCount": len(prs), "nodes": [dict(p, reviewDecision=None, headRefName="feat",
+                                                                updatedAt="2026-09-01T09:00:00Z" if p["number"] == 9
+                                                                else "2026-11-05T09:00:00Z",
                                                                 author={"login": "ann"},
                                                                 reviewRequests={"nodes": [{"requestedReviewer": {"login": "mike"}}]
                                                                                 if p["number"] == 7 else
