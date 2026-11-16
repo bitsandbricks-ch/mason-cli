@@ -72,7 +72,7 @@ useKeys({ r: () => load(true), p: () => page() })
         <span v-if="fresh.length" class="accent"><b>{{ fresh.length }}</b> new since your last look</span>
       </span>
       <span class="spacer" />
-      <button class="primary" :disabled="!current" @click="page()"><span class="k">⏎</span> open</button>
+      <button class="primary hide-xs" :disabled="!current" @click="page()"><span class="k">⏎</span> open</button>
     </div>
     <div v-if="missing.length" class="pad warn">couldn't read {{ missing.join(', ') }}: their items may be missing (r tries again)</div>
     <div v-if="repoCount === 0 && !scope.group && scope.provider === 'all' && !loading" class="pad">
