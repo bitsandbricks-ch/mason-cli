@@ -25,7 +25,7 @@ from mason import workflows as W
 from mason.cache import TTLDict
 from mason.config import group_label, orgs_of
 from mason.server import gitlab as GL
-from mason.server.api.account import body
+from mason.server.api.account import body, whole
 from mason.server.auth import audit, can_write, need
 from mason.server.context import as_user, gitlab_projects, load_config, valid_repo
 
@@ -316,7 +316,7 @@ def pr_bypass():
 def ready():
     data = body()
     dry = write_allowed(bool(data.get("dry_run")))
-    repo, number = valid_repo(str(data.get("repo", ""))), int(data.get("number") or 0)
+    repo, number = valid_repo(str(data.get("repo", ""))), whole(data, "number", "the PR number")
     with as_user(dry) as (_gh, gl):
         if is_gl(repo):
             text = capture_rate(GL.mark_ready, gl, repo, number)
@@ -358,9 +358,7 @@ def run_rerun():
     """Run the failed jobs of a GitHub run again, or retry a GitLab pipeline's failed jobs: {repo, id, dry_run?}."""
     data = body()
     dry = write_allowed(bool(data.get("dry_run")))
-    repo, ident = valid_repo(str(data.get("repo", ""))), int(data.get("id") or 0)
-    if not ident:
-        abort(400, "id: the run or pipeline id")
+    repo, ident = valid_repo(str(data.get("repo", ""))), whole(data, "id", "the run or pipeline id")
     with as_user(dry) as (_gh, gl):
         if is_gl(repo):
             if gl is None:
@@ -506,7 +504,7 @@ def approvals():
 def approve():
     data = body()
     dry = write_allowed(bool(data.get("dry_run")))
-    repo, ident = valid_repo(str(data.get("repo", ""))), int(data.get("id") or 0)
+    repo, ident = valid_repo(str(data.get("repo", ""))), whole(data, "id", "the run's id")
     with as_user(dry) as (_gh, gl):
         if is_gl(repo):
             text = capture_rate(GL.approve, gl, repo, str(data.get("kind") or ""), ident)
@@ -824,10 +822,10 @@ def issue_change():
     """close, reopen or comment: {repo, number, action, text?, not_planned?}."""
     data = body()
     repo = valid_repo(str(data.get("repo") or ""))
-    number = int(data.get("number") or 0)
+    number = whole(data, "number", "the issue number")
     action = data.get("action")
-    if number <= 0 or action not in ("close", "reopen", "comment"):
-        abort(400, "number, and action close, reopen or comment")
+    if action not in ("close", "reopen", "comment"):
+        abort(400, "action: close, reopen or comment")
     text = str(data.get("text") or "")[:60000]
     dry = write_allowed(bool(data.get("dry_run")))
     with as_user(dry) as (_gh, gl):

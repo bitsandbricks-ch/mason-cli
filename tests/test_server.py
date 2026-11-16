@@ -313,6 +313,16 @@ def test_graphql_proxy_refuses_hidden_mutations(op):
     assert c.post("/api/v1/github/graphql", json={"query": "fragment F on X { y }"}, headers=H).status_code == 400
 
 
+def test_bad_numbers_are_a_400_not_a_500(op):
+    _, c = op
+    for path, data in (("/api/v1/ready", {"repo": "acme/web", "number": "x"}),
+                       ("/api/v1/run/rerun", {"repo": "acme/web", "id": [1]}),
+                       ("/api/v1/approve", {"repo": "acme/api", "id": True}),
+                       ("/api/v1/issue", {"repo": "acme/web", "number": -3, "action": "close"})):
+        r = c.post(path, json={**data, "dry_run": True}, headers=H)
+        assert r.status_code == 400, (path, r.status_code)
+
+
 def test_sign_in_only_goes_back_to_this_site():
     """next= after a sign-in: browsers drop tabs and newlines, so "/\t/evil.example" would be //evil.example."""
     from mason.server.api.account import safe_next

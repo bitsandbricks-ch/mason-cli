@@ -54,6 +54,14 @@ def body() -> dict:
     return data
 
 
+def whole(data: dict, key: str, what: str = "a number") -> int:
+    """A positive whole number from a JSON body, or a 400 (not a 500) when it is something else."""
+    v = data.get(key)
+    if isinstance(v, bool) or not isinstance(v, (int, str)) or not str(v).strip().isdigit() or int(v) <= 0:
+        abort(400, f"{key}: {what}")
+    return int(v)
+
+
 def iso(dt) -> str | None:
     return dt.isoformat() + "Z" if dt else None
 
