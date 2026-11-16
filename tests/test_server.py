@@ -236,6 +236,8 @@ def test_console(op):
     assert core.dry_run() is False  # the dry run of `merge --dry-run` above ended with the command
     r = c.post("/api/v1/console", json={"line": "mason issue comment web#3 -"}, headers=H)
     assert r.status_code == 400 and "stdin" in r.json["error"]  # the server's stdin would hang the request
+    r = c.post("/api/v1/console", json={"line": "mason release new web v9.9.9 --notes=- --dry-run"}, headers=H)
+    assert r.status_code == 400 and "stdin" in r.json["error"]
 
 
 def test_api_keys_and_device_login(op):
