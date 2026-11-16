@@ -1,6 +1,8 @@
 // Keys like the TUI's: a view registers its own with useKeys while it is shown.
-import { onBeforeUnmount, onMounted } from 'vue'
-import { finder, prompt } from './ui.js'
+import { inject, onBeforeUnmount, onMounted } from 'vue'
+import { prompt } from './ui.js'
+import { SIDE, sideOpen } from './side.js'
+import { listens } from './panel.js'
 
 export function typing(e) {
   const t = e.target
@@ -8,8 +10,11 @@ export function typing(e) {
 }
 
 export function useKeys(map) {
+  const inSide = !!inject(SIDE, null)
   function on(e) {
-    if (prompt.open || finder.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey) return
+    if (prompt.open || typing(e) || e.ctrlKey || e.metaKey || e.altKey) return
+    // a list's own keys (↑↓, j/k, g, Enter) already did their thing; and with a panel open, its page has the keys
+    if (e.defaultPrevented || !listens({ sideOpen: sideOpen.value, inSide })) return
     const fn = map[e.key]
     if (fn) { e.preventDefault(); fn(e) }
   }

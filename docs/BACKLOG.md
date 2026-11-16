@@ -11,9 +11,10 @@ move it to "Done" when it ships.
   operator its commands don't run with the signed-in user's token. Port it to `mason.core`
   (transport-aware `api`/`graphql`), read the Hubra token with `plugins.secret("hubra_token")`, and expose
   `web_secrets()`, `web_actions()` (sign, release, verify) and `web_commands`. Follow-up PR in hubra-cli.
-- **GitLab in the CLI and TUI.** The operator speaks GitLab; `mason status/prs/runs/doctor` on a laptop still
-  only know GitHub. Move `operator/gitlab.py` behind the transport so the CLI can use a GitLab token or the
-  operator.
+- **GitLab in the TUI and through the operator.** The CLI reaches GitLab through glab (see the README's GitLab
+  section); the TUI still lists GitHub only, and `mason login` users have no GitLab: that needs a GitLab proxy in
+  the operator next to the GitHub one (server/api/proxy.py). Also still GitHub only in the CLI: rerun, packages,
+  workflows, auto, bump, release, secrets, settings, branches and new.
 - **Signed official plugin index.** Make the project key, sign `plugins/index.json` in CI, ship the public
   key in `src/mason/keys/`.
 - **Live updates.** GitHub/GitLab webhooks (or a GitHub App) into the operator, pushed to the browser with
@@ -54,6 +55,7 @@ move it to "Done" when it ships.
 
 - Teams and shared workspaces: a team's defaults, repo lists and saved views, with roles.
 - A daily digest (email or chat): PRs waiting for you, failed runs, new alerts, new drift.
+- A command palette (Ctrl+K) in the web UI that searches repos, PRs and commands at once.
 - Repo ownership: an owner per repo (from CODEOWNERS or a topic), last activity, and archive candidates.
 - Saved views and filters (e.g. "my PRs needing review across both providers").
 - Bulk actions with a preview: rerun failed runs, update a file in N repos, archive stale repos.
@@ -91,7 +93,8 @@ move it to "Done" when it ships.
 
 ## Done
 
-- The finder (Ctrl+K, ⌕ on phones): views, repos, pull requests and commands in one box, with your last picks.
+- GitLab in the CLI, through glab: `gitlab_groups` in your config, `gitlab:` names in every command that reads GitLab.
+
 - TUI keyboard: Tab / Shift+Tab through every panel and dialog, F1-F10 for help, search, filter and sort.
 
 - Workflow hardening: `mason workflows [--fix]`, doctor's `workflows` check and the web app's Workflows tab.

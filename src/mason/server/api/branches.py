@@ -38,7 +38,7 @@ def view():
 
 
 @bp.post("/branches/delete")
-@need("write")
+@need("read")  # a read key may dry-run it, like every other change (write_allowed)
 def delete():
     data = body()
     repo = valid_repo(str(data.get("repo", "")))
