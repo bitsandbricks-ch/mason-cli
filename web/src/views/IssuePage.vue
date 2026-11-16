@@ -5,7 +5,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePage } from '../side.js'
 import { get, qs } from '../api.js'
-import { act, forget } from '../load.js'
+import { change, forget } from '../load.js'
 import { useKeys } from '../keys.js'
 import { ask, fieldOf } from '../ui.js'
 import ActionList from '../components/ActionList.vue'
@@ -41,10 +41,10 @@ async function load() {
 }
 watch([repo, number], () => { detail.value = ''; output.value = ''; load() }, { immediate: true })
 
-function changed(text, open) {
+function changed({ text, ok, dry }, open) {
   output.value = text
-  if (text.startsWith('error')) return
-  if (open !== undefined && !/\[dry-run\]/.test(text)) isOpen.value = open
+  if (!ok) return
+  if (open !== undefined && !dry) isOpen.value = open
   forget('/issues')
   load()
   setTimeout(load, 3000)
@@ -52,14 +52,14 @@ function changed(text, open) {
 }
 async function setState(close) {
   if (close !== isOpen.value) return
-  const t = await act(`${close ? 'Close' : 'Reopen'} ${name.value}?`, '/issue', { repo: repo.value, number: number.value, action: close ? 'close' : 'reopen' })
-  if (t !== null) changed(t, !close)
+  const got = await change(`${close ? 'Close' : 'Reopen'} ${name.value}?`, '/issue', { repo: repo.value, number: number.value, action: close ? 'close' : 'reopen' })
+  if (got) changed(got, !close)
 }
 async function comment() {
   const said = await ask(`Comment on ${name.value}`, { input: { placeholder: 'your comment' }, allowDry: false })
   if (!said?.trim()) return
-  const t = await act(`Post the comment on ${name.value}?`, '/issue', { repo: repo.value, number: number.value, action: 'comment', text: said }, { detail: said })
-  if (t !== null) changed(t)
+  const got = await change(`Post the comment on ${name.value}?`, '/issue', { repo: repo.value, number: number.value, action: 'comment', text: said }, { detail: said })
+  if (got) changed(got)
 }
 const visit = () => { const url = detail.value.split('\n')[1]; openOut(url) }
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })

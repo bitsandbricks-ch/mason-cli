@@ -6,7 +6,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePage } from '../side.js'
 import { get, qs } from '../api.js'
-import { act, forget } from '../load.js'
+import { change, forget } from '../load.js'
 import { useKeys } from '../keys.js'
 import ActionList from '../components/ActionList.vue'
 import EventLog from '../components/EventLog.vue'
@@ -64,10 +64,10 @@ watch([repo, number], () => { detail.value = ''; output.value = ''; load(); load
 watch(diff, load)
 
 // after a change: show it now, then ask again (GitHub takes a moment to show auto-merge and merges)
-function changed(text, flip) {
+function changed({ text, ok, dry }, flip) {
   output.value = text
-  if (text.startsWith('error')) return
-  if (flip && !/\[dry-run\]/.test(text)) state.value = { ...state.value, ...flip }
+  if (!ok) return
+  if (flip && !dry) state.value = { ...state.value, ...flip }
   forget('/prs'); forget('/repo'); forget('/status')
   load()
   setTimeout(load, 3000)
@@ -77,20 +77,20 @@ function changed(text, flip) {
 const open = computed(() => !state.value.merged && !state.value.closed && !failed.value) // failed: below
 async function merge_(now) {
   if (!open.value) return
-  const t = await act(`${now ? 'Merge' : 'Auto-merge'} ${ref_.value}?`, '/merge', { targets: [target.value], now, ready: state.value.draft })
-  if (t !== null) changed(t, now ? { merged: true, draft: false } : { auto: true, draft: false })
+  const got = await change(`${now ? 'Merge' : 'Auto-merge'} ${ref_.value}?`, '/merge', { targets: [target.value], now, ready: state.value.draft })
+  if (got) changed(got, now ? { merged: true, draft: false } : { auto: true, draft: false })
 }
 async function mergeBypass() {
   const b = bypass.value
   if (!open.value || !b?.can) return
-  const t = await act(`Merge ${ref_.value} now, bypassing the branch rules?`, '/merge', { targets: [target.value], bypass: true, ready: state.value.draft },
+  const got = await change(`Merge ${ref_.value} now, bypassing the branch rules?`, '/merge', { targets: [target.value], bypass: true, ready: state.value.draft },
     { detail: `Skips what ${b.base} asks for (reviews, checks): ${b.rules.map((r) => `${r.name} (${r.why})`).join(', ')}. The audit log keeps it.` })
-  if (t !== null) changed(t, { merged: true, draft: false })
+  if (got) changed(got, { merged: true, draft: false })
 }
 async function ready() {
   if (!state.value.draft) return
-  const t = await act(`Mark ${ref_.value} ready for review?`, '/ready', { repo: repo.value, number: number.value })
-  if (t !== null) changed(t, { draft: false })
+  const got = await change(`Mark ${ref_.value} ready for review?`, '/ready', { repo: repo.value, number: number.value })
+  if (got) changed(got, { draft: false })
 }
 const url = computed(() => detail.value.split('\n')[1])
 

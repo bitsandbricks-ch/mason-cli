@@ -5,7 +5,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePage } from '../side.js'
 import { get, qs } from '../api.js'
-import { act, cached, change, forget } from '../load.js'
+import { cached, change, forget } from '../load.js'
 import { useKeys } from '../keys.js'
 import ActionList from '../components/ActionList.vue'
 import EventLog from '../components/EventLog.vue'
@@ -59,10 +59,10 @@ onBeforeUnmount(() => clearInterval(timer))
 
 async function rerun() {
   if (!failed.value) return
-  const t = await act(`Run the failed jobs of ${gitlab.value ? 'pipeline' : 'run'} ${id.value} in ${repo.value} again?`, '/run/rerun', { repo: repo.value, id: id.value })
-  if (t === null) return
-  output.value = t
-  if (!t.startsWith('error')) { forget('/runs'); setTimeout(load, 2000); log.value?.burst() }
+  const got = await change(`Run the failed jobs of ${gitlab.value ? 'pipeline' : 'run'} ${id.value} in ${repo.value} again?`, '/run/rerun', { repo: repo.value, id: id.value })
+  if (!got) return
+  output.value = got.text
+  if (got.ok && !got.dry) { forget('/runs'); setTimeout(load, 2000); log.value?.burst() }
 }
 const visit = () => { const url = detail.value.split('\n')[1]; openOut(url) }
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })
