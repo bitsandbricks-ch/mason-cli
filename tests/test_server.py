@@ -658,6 +658,11 @@ def test_proxy_reads_through_the_users_cache_and_writes_make_it_stale(op, monkey
         client.get("/api/v1/github/rest/repos/acme/web/labels")
         got = api.hits("/repos/acme/web/labels")
         assert len(got) == 3 and got[-1][0] == "GET" and got[-1][2].get("If-None-Match") == etag
+        # the path goes on encoded: a space works, and a twice-encoded dot or slash stays text
+        client.get("/api/v1/github/rest/repos/acme/web/contents/my%20file.md")
+        assert api.hits("/repos/acme/web/contents/my%20file.md")
+        client.get("/api/v1/github/rest/repos/acme/web/labels/%252e%252e%252fhooks")
+        assert api.hits("/repos/acme/web/labels/%252e%252e%252fhooks")
     finally:
         api.server.shutdown()
 # ── revoking tokens when a login is disconnected or the account deleted ──────
