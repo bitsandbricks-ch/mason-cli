@@ -11,6 +11,9 @@ test('errors from gh and the API read as plain words, the original kept', () => 
     ['gh api -X GET /repos/acme/web/actions/runs/1: fake gh: no answer for GET', "doesn't exist, or your account can't see it"],
     ['connect GitLab first', 'connect GitLab under setup'],
     ['TypeError: Failed to fetch', "couldn't reach the server"],
+    ["can't reach Mason: check your connection and try again", "couldn't reach the server"],
+    ['HTTP 403: Resource protected by organization SAML enforcement. You must grant your OAuth token access', 'single sign-on'],
+    ['HTTP 403: Although you appear to have the correct authorization credentials, the `acme` organization has enabled OAuth App access restrictions', "hasn't approved Mason"],
   ]
   for (const [raw, want] of cases) {
     const e = explain(`error: ${raw}`)

@@ -49,10 +49,13 @@ export function explain(message, what = '') {
   const say = (t) => ({ title: lead + t, raw })
   if (/bad credentials|\b401\b|token.*(expired|revoked)|sign in again/i.test(raw)) return say('your sign-in has expired. Sign out and in again.')
   if (/rate limit|\b429\b/i.test(raw)) return say('the GitHub rate limit is used up. Try again in a few minutes.')
+  // two 403s with their own way out: an org's SSO, and an org that restricts OAuth apps
+  if (/saml|single sign-on|\bsso\b/i.test(raw)) return say('the org uses single sign-on: authorize your GitHub sign-in for it on GitHub, then try again.')
+  if (/oauth app access restrictions|third-party application access/i.test(raw)) return say("the org hasn't approved Mason yet: an org owner can, in the org's third-party access settings.")
   if (/must have admin|admin rights|\b403\b|resource not accessible|forbidden|permission/i.test(raw)) return say("your account isn't allowed to do this here (it may need admin rights on the repo).")
   if (/no answer for|\b404\b|not found|could not resolve/i.test(raw)) return say("GitHub says it doesn't exist, or your account can't see it.")
   if (/connect gitlab/i.test(raw)) return say('connect GitLab under setup › settings first.')
-  if (/timed? ?out|econn|network|failed to fetch|unreachable/i.test(raw)) return say("couldn't reach the server. Check the connection and try again.")
+  if (/timed? ?out|econn|network|failed to fetch|unreachable|can't reach/i.test(raw)) return say("couldn't reach the server. Check the connection and try again.")
   // no idea: the first line, without the command that printed it
   const first = raw.split('\n')[0].replace(/^(gh|glab) (api )?(-X \w+ )?\S+:\s*/, '').replace(/^[^:]{0,40}: (gh|glab) [^:]+: /, '')
   return { title: lead + (first.length > 160 ? first.slice(0, 157) + '…' : first || 'something went wrong'), raw }
