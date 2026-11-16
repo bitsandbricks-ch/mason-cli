@@ -8,6 +8,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { get, qs, state } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { ago } from '../ui.js'
 import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
@@ -23,20 +24,25 @@ const router = useRouter()
 const sel = ref(null)
 const detail = ref('')
 const diff = ref(false)
-const FILTERS = { all: 'all open', mine: 'mine', failing: 'checks failing', ready: 'ready', drafts: 'drafts', auto: 'auto-merge', conflicts: 'conflicts', merged: 'merged' }
+const FILTERS = { all: 'all open', review: 'to review', mine: 'mine', failing: 'checks failing', stale: 'stale', ready: 'ready', drafts: 'drafts', auto: 'auto-merge', conflicts: 'conflicts', merged: 'merged' }
 if (FILTERS[route.query.show]) filter.value = route.query.show
 watch(filter, (f) => { if ((route.query.show || 'all') !== f) router.replace({ query: { ...route.query, show: f === 'all' ? undefined : f }, hash: route.hash }) })
 // mine: opened by one of your signed-in accounts (GitHub or GitLab login)
+// stale: no change for STALE_DAYS (a push, a comment, a review all count as one at GitHub and GitLab)
+const STALE_DAYS = 30
+const stale = (p) => !!p.updated && Date.now() - new Date(p.updated) > STALE_DAYS * 86400_000
+const asked = (p) => (p.requested || []).some((x) => logins.value.has(String(x).toLowerCase()))
 const logins = computed(() => new Set((state.me?.identities || []).map((i) => String(i.login || '').toLowerCase()).filter(Boolean)))
 
 const keyOf = (p) => `${p.repo}#${p.number}`
 const rows = computed(() => {
   if (filter.value === 'merged') return (data.value?.merged || []).map((p) => ({ ...p, state: `merged ${p.by ? 'by ' + p.by : ''}` }))
   return (data.value?.prs || []).filter((p) => ({
-    all: true, mine: logins.value.has(String(p.author || '').toLowerCase()), failing: /fail/.test(String(p.checks || '')),
+    all: true, review: asked(p), mine: logins.value.has(String(p.author || '').toLowerCase()), failing: /fail/.test(String(p.checks || '')), stale: stale(p),
     ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
   })[filter.value]).map((p) => ({
-    ...p, state: p.draft ? 'draft' : p.conflicts ? 'CONFLICTS' : p.merge || 'ready', flags: [p.auto && 'auto-merge', p.review].filter(Boolean).join(' · '),
+    ...p, state: p.draft ? 'draft' : p.conflicts ? 'CONFLICTS' : p.merge || 'ready',
+    flags: [p.auto && 'auto-merge', p.review, asked(p) && 'asks you'].filter(Boolean).join(' · '),
   }))
 })
 const columns = [
@@ -47,6 +53,8 @@ const columns = [
   { key: 'checks', label: 'checks' },
   { key: 'flags', label: '' },
   { key: 'author', label: 'by', cls: () => 'dim' },
+  { key: 'updated', label: 'updated', fmt: (v) => (v ? ago(v) : ''), cls: (r) => (stale(r) ? 'warn' : 'dim'), mark: false,
+    sortBy: (r) => -(new Date(r.updated || 0)) },
 ]
 const current = computed(() => rows.value.find((p) => keyOf(p) === sel.value))
 
@@ -120,7 +128,7 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <button class="any" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : filter === 'mine' ? `none of the open ones were opened by you (${[...logins].join(', ') || 'no login'})` : 'none match this filter: v cycles the filters'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : filter === 'stale' ? `nothing has waited longer than ${STALE_DAYS} days` : filter === 'review' ? 'nobody asks you for a review right now' : filter === 'mine' ? `none of the open ones were opened by you (${[...logins].join(', ') || 'no login'})` : 'none match this filter: v cycles the filters'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
     <EventLog band :repo="current?.repo || ''" kind="pr" :number="current?.number || ''" :title="current ? `${current.repo}${current.provider === 'gitlab' ? '!' : '#'}${current.number} ${current.title}` : ''" />

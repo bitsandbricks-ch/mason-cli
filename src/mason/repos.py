@@ -124,8 +124,9 @@ REPO_FIELDS = """
   pullRequests(states: OPEN, first: 30, orderBy: {field: UPDATED_AT, direction: DESC}) {
     totalCount
     nodes {
-      number title url isDraft mergeable mergeStateStatus reviewDecision headRefName
+      number title url isDraft mergeable mergeStateStatus reviewDecision headRefName updatedAt
       author { login }
+      reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } } } }
       autoMergeRequest { enabledAt }
       commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
     }

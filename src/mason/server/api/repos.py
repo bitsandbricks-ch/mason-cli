@@ -215,6 +215,13 @@ def repo_detail():
         return jsonify({"text": "\n".join(lines), "info": info})
 
 
+def requested(p: dict) -> list[str]:
+    """The people a PR asks for a review (teams are left out: the web app can't tell whose team it is)."""
+    who = [((n or {}).get("requestedReviewer") or {}).get("login")
+           for n in (p.get("reviewRequests") or {}).get("nodes") or []]
+    return [w for w in who if w]
+
+
 @bp.get("/prs")
 @need("read")
 def prs():
@@ -236,6 +243,7 @@ def prs():
                             "review": (p.get("reviewDecision") or "").lower().replace("_", " "),
                             "auto": bool(p.get("autoMergeRequest")), "merge": R.merge_word(p),
                             "author": (p.get("author") or {}).get("login", ""),
+                            "requested": requested(p), "updated": p.get("updatedAt"),
                             "branch": p.get("headRefName", "")})
             for p in (node.get("merged") or {}).get("nodes") or []:
                 merged.append({"repo": repo, "provider": "github", "number": p["number"], "title": p["title"],
