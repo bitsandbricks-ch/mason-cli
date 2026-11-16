@@ -105,7 +105,8 @@ async function run(q, path, body) {
   if (path === '/doctor') checked.value++
 }
 const r = () => [repo.value]
-const fixFrom = (kind) => actions.value.find((a) => a.k === (kind === 'sync' ? 's' : 'f'))?.fn()
+const fixFrom = (kind) => (kind === 'protect' ? masonPanel.value?.protectNow()
+  : actions.value.find((a) => a.k === (kind === 'sync' ? 's' : 'f'))?.fn())
 const actions = computed(() => [
   { k: 'c', group: 'defaults', label: 'check against the defaults', fn: () => run(`Check ${repo.value} against the defaults?`, '/doctor', { repos: r() }) },
   { k: 'f', group: 'defaults', label: 'fix the drift', fn: () => run(`Fix the drift of ${repo.value} (settings, security, rulesets)?`, '/doctor', { repos: r(), fix: true }) },
