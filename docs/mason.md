@@ -121,6 +121,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` lists the keys. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Pull request filters:** besides ready, drafts, auto-merge, conflicts and merged, **mine** shows the ones
+  opened by your signed-in GitHub or GitLab login, and **checks failing** the red ones. `v` cycles them. The
+  filter is in the link (`/prs?show=mine`), so a bookmark opens the same list.
 
 ## Run it
 

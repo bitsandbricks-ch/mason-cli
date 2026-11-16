@@ -4,8 +4,8 @@
 // A change shows at once: the row changes right away, and its repo is read again (only that one) a moment later
 // and then while a PR of it waits for auto-merge, so a PR that merges by itself leaves the list without r.
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { get, qs } from '../api.js'
+import { useRoute, useRouter } from 'vue-router'
+import { get, qs, state } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
@@ -16,17 +16,25 @@ import TextPane from '../components/TextPane.vue'
 
 const { data, error, loading, load, keep } = useLoad((q) => `/prs${q}`)
 loadGroups()
+// the filter is in the link (?show=mine), so a bookmark or a shared link opens the same list
+const route = useRoute()
 const filter = ref('all')
+const router = useRouter()
 const sel = ref(null)
 const detail = ref('')
 const diff = ref(false)
-const FILTERS = { all: 'all open', ready: 'ready', drafts: 'drafts', auto: 'auto-merge', conflicts: 'conflicts', merged: 'merged' }
+const FILTERS = { all: 'all open', mine: 'mine', failing: 'checks failing', ready: 'ready', drafts: 'drafts', auto: 'auto-merge', conflicts: 'conflicts', merged: 'merged' }
+if (FILTERS[route.query.show]) filter.value = route.query.show
+watch(filter, (f) => { if ((route.query.show || 'all') !== f) router.replace({ query: { ...route.query, show: f === 'all' ? undefined : f }, hash: route.hash }) })
+// mine: opened by one of your signed-in accounts (GitHub or GitLab login)
+const logins = computed(() => new Set((state.me?.identities || []).map((i) => String(i.login || '').toLowerCase()).filter(Boolean)))
 
 const keyOf = (p) => `${p.repo}#${p.number}`
 const rows = computed(() => {
   if (filter.value === 'merged') return (data.value?.merged || []).map((p) => ({ ...p, state: `merged ${p.by ? 'by ' + p.by : ''}` }))
   return (data.value?.prs || []).filter((p) => ({
-    all: true, ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
+    all: true, mine: logins.value.has(String(p.author || '').toLowerCase()), failing: /fail/.test(String(p.checks || '')),
+    ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
   })[filter.value]).map((p) => ({
     ...p, state: p.draft ? 'draft' : p.conflicts ? 'CONFLICTS' : p.merge || 'ready', flags: [p.auto && 'auto-merge', p.review].filter(Boolean).join(' · '),
   }))
@@ -92,7 +100,6 @@ async function ready() {
   follow.now([p.repo])
 }
 const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
-const router = useRouter()
 const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }
 useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, p: () => page(), v: cycle })
@@ -113,7 +120,7 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <button class="any" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : filter === 'mine' ? `none of the open ones were opened by you (${[...logins].join(', ') || 'no login'})` : 'none match this filter: v cycles the filters'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
     <EventLog band :repo="current?.repo || ''" kind="pr" :number="current?.number || ''" :title="current ? `${current.repo}${current.provider === 'gitlab' ? '!' : '#'}${current.number} ${current.title}` : ''" />
