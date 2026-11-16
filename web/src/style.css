@@ -40,6 +40,8 @@ a:hover { text-decoration: underline; }
 .top { display: flex; align-items: center; gap: 14px; padding: 6px 12px; border-bottom: 1px solid var(--line);
   background: var(--bg2); white-space: nowrap; overflow-x: auto; }
 .top .prompt { font-weight: 700; }
+.offline { position: fixed; top: 6px; left: 50%; transform: translateX(-50%); z-index: 45; max-width: calc(100vw - 16px);
+  background: var(--bg); border: 1px solid var(--bad); color: var(--bad); padding: 4px 10px; box-shadow: var(--glow); }
 .tabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); overflow-x: auto;
   background: var(--bg2); }
 .tabs a { padding: 6px 10px; color: var(--dim); border-bottom: 2px solid transparent; white-space: nowrap; }

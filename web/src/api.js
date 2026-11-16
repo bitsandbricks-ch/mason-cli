@@ -9,7 +9,10 @@ export const state = reactive({
   log: [],           // [{at, text, kind, detail, where}] the bottom log (click it for all of them)
   busy: 0,
   rate: null,
+  offline: false,    // the server didn't answer (network down, server restarting): see net.js
 })
+
+const DOWN = [502, 503, 504]
 
 export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status }
@@ -29,9 +32,21 @@ export async function api(method, path, body, { quiet = false } = {}) {
   if (method !== 'GET' && state.me?.csrf) headers['X-CSRF-Token'] = state.me.csrf
   if (!quiet) state.busy++
   try {
-    const res = await fetch(`/api/v1${path}`, {
-      method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    let res
+    try {
+      res = await fetch(`/api/v1${path}`, {
+        method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    } catch {
+      state.offline = true // no answer at all: the network, or the server is down
+      throw new ApiError("couldn't reach the Mason server: check the connection", 0)
+    }
+    // a proxy in front answers for a server that is down or restarting
+    if (DOWN.includes(res.status) && !res.headers.get('content-type')?.includes('json')) {
+      state.offline = true
+      throw new ApiError(`the Mason server isn't answering (${res.status}): it may be restarting`, res.status)
+    }
+    state.offline = false
     const data = res.status === 204 ? {} : await res.json().catch(() => ({}))
     if (!res.ok) {
       if (res.status === 401 && path !== '/me') { state.me = { user: null, providers: state.me?.providers || [] } }
@@ -49,7 +64,11 @@ export const put = (path, body = {}) => api('PUT', path, body)
 export const del = (path) => api('DELETE', path)
 
 export async function loadMe() {
-  try { state.me = await get('/me') } catch (e) { state.me = { user: null, providers: [] }; log(e.message, 'error') }
+  try { state.me = await get('/me') } catch (e) {
+    // unreachable: keep who we were (null on the first load), so the app waits instead of showing the sign-in
+    if (!state.offline) state.me = { user: null, providers: [] }
+    log(e.message, 'error')
+  }
   state.loaded = true
   return state.me
 }

@@ -9,6 +9,7 @@ import { arrowKey } from './arrows.js'
 import { closeDetail, detailName, phone, prompt } from './ui.js'
 import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
+import { net, retry } from './net.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -52,11 +53,21 @@ onMounted(async () => {
   }
 })
 function guard() {
-  if (!state.loaded) return
+  if (!state.loaded || state.offline) return // unreachable is not signed out: wait, then decide
   if (!signedIn.value && !route.meta.public) router.replace({ name: 'login', query: route.path !== '/' ? { next: route.fullPath } : {} })
 }
 watch(() => route.fullPath, guard)
 watch(signedIn, guard)
+watch(() => state.offline, guard)
+// the seconds until the next try, for the offline banner
+const now = ref(Date.now())
+let tick = null
+watch(() => state.offline, (off) => {
+  clearInterval(tick)
+  now.value = Date.now()
+  if (off) tick = setInterval(() => { now.value = Date.now() }, 1000)
+}, { immediate: true })
+const retryIn = computed(() => Math.max(0, Math.ceil((net.retryAt - now.value) / 1000)))
 
 // The desktop tab bar: sections, and the views of the open section as sub-tabs (plugins and the operator
 // page belong to setup).
@@ -141,6 +152,11 @@ window.addEventListener('keydown', (e) => {
 
 <template>
   <div v-if="!state.loaded" class="center"><span class="cursor">connecting</span></div>
+  <div v-else-if="state.offline && !signedIn" class="center" role="alert">
+    <div><Logo :size="28" /><p>Can't reach the Mason server.</p>
+      <p class="dim">Trying again<template v-if="retryIn"> in {{ retryIn }}s</template><span class="cursor" /></p>
+      <button class="primary" @click="retry">try now</button></div>
+  </div>
   <router-view v-else-if="!signedIn || route.meta.public" />
   <div v-else-if="phone" class="screen phone">
     <header class="top">
@@ -250,6 +266,10 @@ window.addEventListener('keydown', (e) => {
         </li>
       </ol>
     </section>
+  </div>
+  <div v-if="state.offline && signedIn" class="offline" role="alert">
+    can't reach the Mason server<span class="dim"> · trying again<template v-if="retryIn"> in {{ retryIn }}s</template></span>
+    <button class="link" @click="retry">try now</button>
   </div>
   <PromptDialog />
 </template>
