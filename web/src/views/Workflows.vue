@@ -47,7 +47,8 @@ useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: 
       <span v-for="(n, k) in counts" :key="k" class="chip">{{ k }} {{ n }}</span>
       <span v-if="clean" class="chip ok">clean {{ clean }}</span>
       <span class="spacer" />
-      <button class="primary" :disabled="!current || current.raw !== 'pinned'" @click="pinOne"><span class="k">p</span> pin repo</button>
+      <button class="primary" :disabled="!current || current.raw !== 'pinned'"
+              :title="current && current.raw !== 'pinned' ? 'Mason pins actions to commits; this finding is fixed by hand in the workflow file (o opens it)' : ''" @click="pinOne"><span class="k">p</span> pin repo</button>
       <button class="any list-only" :disabled="!pinnable.length" @click="pinRepos(pinnable)"><span class="k">A</span> pin all</button>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
