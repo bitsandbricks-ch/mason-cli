@@ -1,6 +1,7 @@
 <script setup>
 // The jump box: ctrl+k (or ⌘k, or the ⌕ button) and a few letters of a repo, PR, issue or view; Enter goes
-// there (a repo, PR or issue opens in the side panel on a wide screen). ↑↓ pick, Esc closes. The lists come
+// there (a repo, PR or issue opens in the side panel on a wide screen); a command (the theme, dry run, the session
+// log, sign out) runs. ↑↓ pick, Esc closes. The lists come
 // from the answers the views already have (remembered for a minute), so opening it costs nothing most times.
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -11,6 +12,7 @@ import { pageRoute } from '../panel.js'
 import { recent } from '../side.js'
 
 const open = defineModel({ type: Boolean, default: false })
+const props = defineProps({ commands: { type: Array, default: () => [] } }) // [{label, hint?, run}]
 const router = useRouter()
 const query = ref('')
 const at = ref(0)
@@ -25,7 +27,8 @@ async function load() {
   data.value = { repos: (s?.rows || []).map((r) => r.repo), prs: p?.prs || [], issues: i?.issues || [] }
   loading.value = false
 }
-const items = computed(() => itemsFrom({ views: TABS, ...data.value }))
+const items = computed(() => [...itemsFrom({ views: TABS, ...data.value }),
+  ...props.commands.map((c) => ({ kind: 'command', label: c.label, hint: c.hint, run: c.run }))])
 const recents = ref([])
 // nothing typed yet: what you opened last, then the views
 const shown = computed(() => (query.value.trim() ? rank(items.value, query.value, 12)
@@ -43,7 +46,8 @@ watch(open, (o) => {
 function go(it) {
   if (!it) return
   open.value = false
-  router.push(it.to)
+  if (it.run) it.run()
+  else router.push(it.to)
 }
 function key(e) {
   const k = e.key
@@ -55,14 +59,14 @@ function key(e) {
   e.preventDefault()
   e.stopPropagation()
 }
-const KIND = { view: 'view', repo: 'repo', pr: 'PR', issue: 'issue', recent: 'recent' }
+const KIND = { view: 'view', repo: 'repo', pr: 'PR', issue: 'issue', recent: 'recent', command: 'do' }
 </script>
 
 <template>
   <div v-if="open" class="modal palette-wrap" @click.self="open = false">
     <div class="palette" role="dialog" aria-label="jump to">
       <div class="row"><span class="accent">⌕</span>
-        <input ref="input" v-model="query" class="grow" placeholder="jump to a repo, PR, issue or view" aria-label="jump to"
+        <input ref="input" v-model="query" class="grow" placeholder="jump to a repo, PR, issue or view, or a command" aria-label="jump to"
                role="combobox" aria-expanded="true" aria-controls="palette-list" :aria-activedescendant="`palette-${at}`" @keydown="key">
         <span v-if="loading" class="dim cursor" aria-label="loading" />
       </div>
