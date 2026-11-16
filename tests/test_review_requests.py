@@ -1,7 +1,15 @@
 """Who a pull or merge request asks for a review: the web app's "to review" filter reads it."""
 
-from mason.server import gitlab as GL
-from mason.server.api.repos import requested
+import sys
+
+import pytest
+
+pytest.importorskip("flask")
+if sys.version_info < (3, 10):  # pragma: no cover
+    pytest.skip("the operator needs Python 3.10+", allow_module_level=True)
+
+from mason.server import gitlab as GL  # noqa: E402
+from mason.server.api.repos import requested  # noqa: E402
 
 
 def test_github_people_only():
