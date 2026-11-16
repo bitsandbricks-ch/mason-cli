@@ -44,6 +44,7 @@ async function saveSettings() {
   try {
     const { theme, plugins_off, ...rest } = s.value // eslint-disable-line no-unused-vars
     await put('/settings', rest)
+    forget() // the lists remembered for the old orgs and repos: the next visit asks again
     log('settings saved', 'ok')
     await loadMe()
     load()
