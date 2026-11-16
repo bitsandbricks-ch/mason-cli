@@ -93,7 +93,7 @@ const fix = () => sel.value && run(`Fix the drift of ${sel.value} (settings, sec
 const sync = () => sel.value && run(`Open a PR that syncs the shared files into ${sel.value}?`, '/sync', { repos: [sel.value] })
 const merge = (now) => sel.value && run(`${now ? 'Merge now' : 'Auto-merge'} the ready PRs of ${sel.value}?`, '/merge', { targets: [sel.value], now })
 const router = useRouter()
-useTrack(() => sel.value && { kind: 'repo', repo: sel.value })
+useTrack(() => sel.value && { kind: 'repo', repo: sel.value }, { sel, key: (t) => (t.kind === 'repo' ? t.repo : null) })
 const page = (r) => router.push({ path: '/repo', query: { repo: r?.repo || sel.value } })
 const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; openOut(url) }
 async function newRepo() {

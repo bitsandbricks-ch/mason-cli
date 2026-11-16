@@ -74,7 +74,10 @@ export function usePage(list) {
 
 // For a list: while the panel is open, it shows the row you move to (fn: the selected row's target, or null).
 // Not the row a list picks by itself when it loads: a link to /prs?side=pr:acme/web#7 keeps showing #7.
-export function useTrack(fn) {
-  const { track } = useSide()
+// sel and key: the other way round, the list selects the row the panel shows (a link, the back button, the
+// jump box), when it has one; key(target) is that row's key, or null when the panel shows something else.
+export function useTrack(fn, { sel, key } = {}) {
+  const { track, target } = useSide()
   watch(fn, (t, before) => { if (before) track(t) })
+  if (sel && key) watch(target, (t) => { const k = t && key(t); if (k != null && k !== sel.value) sel.value = k }, { immediate: true })
 }
