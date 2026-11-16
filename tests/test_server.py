@@ -503,6 +503,7 @@ def test_device_sign_in_is_open_to_anyone(op, monkeypatch):
 
     class Demo:
         name = "demo"
+        web_commands = ("demo",)
         def tui_tabs(self): return []  # noqa: E301,E704
         def tui_checks(self): return []  # noqa: E301,E704
         def status_columns(self): return []  # noqa: E301,E704
@@ -938,6 +939,9 @@ def test_operator_panel(op, monkeypatch, capsys):
     assert not demo["on"] and demo["off_for_all"]
     annc.put("/api/v1/plugins/demo", json={"on": True}, headers=AH)
     assert not annc.get("/api/v1/plugins").json["plugins"][0]["on"]
+    # nor through the console
+    assert "demo" not in annc.get("/api/v1/console/commands").json["plugins"]
+    assert annc.post("/api/v1/console", json={"line": "mason demo"}, headers=AH).status_code == 400
     assert annc.put("/api/v1/operator/plugins/demo", json={"on": True}, headers=AH).status_code == 403
     mike.put("/api/v1/operator/plugins/demo", json={"on": True}, headers=H)
     assert annc.get("/api/v1/plugins").json["plugins"][0]["on"]

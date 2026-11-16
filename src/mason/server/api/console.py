@@ -25,9 +25,12 @@ WRITES = {"merge", "approve", "doctor", "sync", "new", "rerun", "bump", "release
 LOCAL = {"serve", "init", "tui", "open", "config", "login", "logout", "whoami", "market", "key"}
 
 
-def web_commands() -> set[str]:
+def web_commands(only_on: bool = False) -> set[str]:
+    """Plugin commands for the console. only_on: just those of the plugins this user has on (and the operator
+    hasn't switched off for everyone); all of them count when telling whether a line writes."""
+    from mason.server.api.plugins import active
     out = set()
-    for p in plugins.load():
+    for p in (active() if only_on else plugins.load()):
         out |= set(getattr(p, "web_commands", ()) or ())
     return out
 
@@ -61,7 +64,7 @@ def is_write(argv: list[str]) -> bool:
 @bp.get("/console/commands")
 @need("read")
 def commands():
-    plug = sorted(web_commands())
+    plug = sorted(web_commands(only_on=True))
     return jsonify({"reads": sorted(READS), "writes": sorted(WRITES), "plugins": plug,
                     "help": core.capture(cli.main, ["--help"])})
 
@@ -84,7 +87,7 @@ def run():
         return jsonify({"text": core.capture(cli.main, ["--help"]), "write": False})
     if cmd in LOCAL:
         abort(400, f"`mason {cmd}` works on your own machine, not in the operator (Settings has the same)")
-    if cmd not in READS | WRITES | web_commands():
+    if cmd not in READS | WRITES | web_commands(only_on=True):  # a plugin switched off is off here too
         abort(400, f"`mason {cmd}` isn't available in the web console")
     write = is_write(argv)
     if write and not can_write():
