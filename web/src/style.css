@@ -11,7 +11,7 @@
 }
 [data-theme="mortar"] {
   --bg: #f7f7f4; --bg2: #efefea; --bg3: #e6e6df; --line: #cbcbc2; --fg: #151515; --dim: #686862;
-  --accent: #b23b14; --accent2: #15803d; --ok: #15803d; --warn: #9a6200; --bad: #c62828; --sel: #f6e4dc;
+  --accent: #b23b14; --accent2: #15803d; --ok: #136f35; --warn: #8a5700; --bad: #c62828; --sel: #f6e4dc;
   --glow: none; --link: #b23b14;
 }
 * { box-sizing: border-box; }
