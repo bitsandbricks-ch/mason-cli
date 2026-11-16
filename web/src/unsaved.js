@@ -10,7 +10,7 @@ export function useUnsaved(isDirty, what = 'your changes') {
   onBeforeUnmount(() => window.removeEventListener('beforeunload', warn))
   onBeforeRouteLeave(async (to, from) => {
     // the same page with another query or #detail (a phone's detail view) isn't leaving
-    if (to.path === from.path || !isDirty()) return true
+    if (to.path === from.path || to.name === 'login' || !isDirty()) return true // signed out: nothing to keep it for
     return !!(await ask(`Leave this page and drop ${what}?`, { allowDry: false }))
   })
 }
