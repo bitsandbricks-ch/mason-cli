@@ -149,6 +149,13 @@ let pointerAt = null // arrows scroll the pane the pointer is in
 window.addEventListener('pointerover', (e) => { pointerAt = e.target }, { passive: true })
 // ctrl+k / ⌘k: the jump box, from anywhere (even a text field)
 const jump = ref(false)
+// what the jump box can do besides going somewhere
+const commands = computed(() => [
+  { label: 'switch the theme', hint: `now ${theme.value} (t)`, run: () => { theme.value = themes[(themes.indexOf(theme.value) + 1) % themes.length] } },
+  { label: state.dryRun ? 'turn dry run off' : 'turn dry run on', hint: 'changes only show what they would do', run: () => { state.dryRun = !state.dryRun } },
+  { label: 'the session log', hint: 'every line of this session (`)', run: () => { logOpen.value = true } },
+  { label: 'sign out', hint: state.me?.user?.name || '', run: logout },
+])
 const help = ref(false) // the keys sheet (?)
 window.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey) && !e.altKey && signedIn.value && !prompt.open) {
@@ -302,7 +309,7 @@ window.addEventListener('keydown', (e) => {
     can't reach the Mason server<span class="dim"> · trying again<template v-if="retryIn"> in {{ retryIn }}s</template></span>
     <button class="link" @click="retry">try now</button>
   </div>
-  <Palette v-if="signedIn" v-model="jump" />
+  <Palette v-if="signedIn" v-model="jump" :commands="commands" />
   <KeysSheet v-if="signedIn" v-model="help" />
   <PromptDialog />
 </template>

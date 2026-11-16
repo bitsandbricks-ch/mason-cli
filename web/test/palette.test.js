@@ -56,3 +56,11 @@ test('recent: newest first, each once, at most max', async () => {
   assert.equal(recentItem({ kind: 'pr', repo: 'gitlab:g/a', number: 2 }).label, 'gitlab:g/a!2')
   assert.equal(recentItem({ kind: 'run', repo: 'a/b', id: 9 }).label, 'a/b run 9')
 })
+
+test('a command ranks with the rest and comes after a place of the same score', () => {
+  const items = [...itemsFrom({ views: [{ label: 'settings', path: '/settings' }] }),
+    { kind: 'command', label: 'switch the theme' }, { kind: 'command', label: 'sign out' }]
+  assert.equal(rank(items, 'theme')[0].label, 'switch the theme')
+  assert.deepEqual(rank(items, 'sign').map((i) => i.label), ['sign out'])
+  assert.equal(rank([{ kind: 'command', label: 'settings' }, ...items], 'settings')[0].kind, 'view')
+})
