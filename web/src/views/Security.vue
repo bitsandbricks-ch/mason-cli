@@ -39,7 +39,7 @@ useKeys({ r: () => load(true), o: () => open(current.value), p: repoPage })
       <button class="any" :disabled="!current" @click="repoPage"><span class="k">p</span> repo page</button>
     </div>
     <div class="scroll">
-      <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ no open security alerts'" @activate="open" />
+      <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ no open security alerts'" outside @activate="open" />
       <div v-if="unread.length" class="pad dim">
         <div v-for="s in unread" :key="s.repo">couldn't read {{ s.repo }}: {{ s.unread.join('; ') }}</div>
       </div>

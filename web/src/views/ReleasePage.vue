@@ -104,7 +104,7 @@ useKeys({ Escape: () => (form.value ? (form.value = '') : back()), Backspace: ba
     <StatusHeader :title="repo" sub="releases" :url="page?.url || ''" :badges="badges" />
     <div class="split ld">
       <div><DataTable v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.tag"
-                      :empty="loading ? 'loading…' : 'no releases yet: n creates the first'" @activate="open" /></div>
+                      :empty="loading ? 'loading…' : 'no releases yet: n creates the first'" outside @activate="open" /></div>
       <div class="pad">
         <VersionBar v-if="page?.version" :repo="repo" :version="page.version" @done="done" />
         <ReleaseForm v-if="form" :key="form" :mode="form" :repo="repo" :suggest="page?.suggest" :publishes="page?.publishes"

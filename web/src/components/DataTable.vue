@@ -17,6 +17,8 @@ const props = defineProps({
   modelValue: { default: null }, // the selected row's key
   // several rows to act on at once: the keys of the picked rows (v-model:picked); null: no boxes
   picked: { type: Array, default: null },
+  // the phone card's button: › stays in Mason, ↗ (outside: true) leaves for GitHub or GitLab like every ↗ link
+  outside: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue', 'activate', 'update:picked'])
 const filter = ref('')
@@ -133,7 +135,7 @@ defineExpose({ focus: () => table.value?.focus(), shown })
               :class="cls(c, r)"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</span></span>
           </template>
         </div>
-        <button v-if="activates && !inSplit && rowKey(r) === modelValue" class="open" @click.stop="emit('activate', r)">open ↗</button>
+        <button v-if="activates && !inSplit && rowKey(r) === modelValue" class="open" @click.stop="emit('activate', r)">open {{ outside ? '↗' : '›' }}</button>
       </li>
     </ul>
     <table v-else ref="table" class="table" tabindex="0" @keydown="key">
