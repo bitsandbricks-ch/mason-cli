@@ -119,6 +119,9 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 70px; }
 .bars .bar { flex: 1; background: var(--accent); opacity: .85; min-height: 1px; position: relative; }
 .bars .bar.bad { background: var(--bad); }
+.bars .bar .n { position: absolute; bottom: 100%; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--fg); }
+.bars { position: relative; padding-top: 12px; } /* room for the counts */
+.bars-none { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .bars-l { display: flex; gap: 3px; color: var(--dim); font-size: 10px; }
 .bars-l span { flex: 1; text-align: center; overflow: hidden; }
 
