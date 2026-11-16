@@ -15,11 +15,16 @@ const isError = computed(() => /^error:/i.test(String(props.text || '').trim()))
 const lines = computed(() => {
   const all = String(props.text || '').split('\n').slice(props.skip)
   while (all.length && !all[0].trim()) all.shift()
-  return all.map((l) => ({
-    parts: linkify(l),
-    cls: /^\s*(error|.*\bnot merged\b)/i.test(l) ? 'bad' : /^\s*-\s/.test(l) ? 'warn' : /^==/.test(l) ? 'accent'
-      : /\[dry-run\]/.test(l) ? 'dim' : '',
-  }))
+  let notes = false // a release's notes: their "- " lines are bullets, not problems
+  return all.map((l) => {
+    if (/^(notes|description|body)$/.test(l.trim())) notes = true
+    else if (!l.trim()) notes = false
+    return {
+      parts: linkify(l),
+      cls: notes ? '' : /^\s*(error|.*\bnot merged\b)/i.test(l) ? 'bad' : /^\s*-\s/.test(l) ? 'warn' : /^==/.test(l) ? 'accent'
+        : /\[dry-run\]/.test(l) ? 'dim' : '',
+    }
+  })
 })
 </script>
 
