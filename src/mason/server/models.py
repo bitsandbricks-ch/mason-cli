@@ -117,6 +117,7 @@ class DeviceGrant(Base):
     denied: Mapped[bool] = mapped_column(Boolean, default=False)
     key_enc: Mapped[str] = mapped_column(Text, default="")  # the new key until the CLI fetched it once
     last_poll: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ip: Mapped[str] = mapped_column(String(64), default="")  # who asked: the approval page compares it
 
 
 class OAuthState(Base):
@@ -205,7 +206,21 @@ def init(url: str):
     db.configure(bind=engine)
     Base.metadata.create_all(engine)
     forget_admins(engine)
+    add_columns(engine)
     return engine
+
+
+def add_columns(engine) -> None:
+    """Columns added after a table was first made (create_all leaves existing tables as they are)."""
+    from sqlalchemy import inspect, text
+    added = {"device_grants": [("ip", "VARCHAR(64) NOT NULL DEFAULT ''")]}
+    have = inspect(engine)
+    for table, cols in added.items():
+        present = {c["name"] for c in have.get_columns(table)}
+        for name, kind in cols:
+            if name not in present:
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {kind}"))
 
 
 def forget_admins(engine) -> None:

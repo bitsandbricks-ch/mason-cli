@@ -90,3 +90,21 @@ def test_merge_one_reports_merged_now(stub, capsys):
          "isDraft": False, "mergeable": "MERGEABLE", "autoMergeRequest": None}
     R.merge_one("acme/web", p, {}, named=True)
     assert "merged right away" in capsys.readouterr().out
+
+
+def test_merged_branch_with_hash_is_deleted_by_its_whole_name(monkeypatch):
+    from mason import auto
+    calls = []
+
+    def api(method, path, body=None):
+        calls.append((method, path))
+        if path == "/repos/acme/web":
+            return {"default_branch": "main"}
+        if "/pulls?state=closed" in path:
+            return [{"merged_at": "2020-01-01T00:00:00Z",
+                     "head": {"ref": "fix#1", "repo": {"full_name": "acme/web"}}}]
+        return []
+    monkeypatch.setattr(auto, "api", api)
+    monkeypatch.setattr(auto, "open_prs", lambda repo: [])
+    auto.delete_branches(None, "acme/web", 14)
+    assert ("DELETE", "/repos/acme/web/git/refs/heads/fix%231") in calls  # raw, "#1" would be a fragment: "fix"

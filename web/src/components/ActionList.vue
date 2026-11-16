@@ -25,7 +25,7 @@ const sheet = computed(() => phone.value || props.compact)
 async function pick() {
   const live = props.actions.filter((a) => !a.off)
   if (!live.length) return
-  const k = await choose(props.title, live.map((a) => ({ key: a.k, value: a.k, label: a.label })))
+  const k = await choose(props.title, live.map((a) => ({ key: a.k, value: a.k, label: a.label, group: a.group })))
   live.find((a) => a.k === k)?.fn()
 }
 defineExpose({ pick })

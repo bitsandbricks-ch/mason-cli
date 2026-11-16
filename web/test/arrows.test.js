@@ -18,6 +18,7 @@ function el(tag, { cls = '', attrs = {}, kids = [], scroll = null, overflowY = '
         if (s === 'table.table') return tag === 'table' && cls === 'table'
         if (s === 'table.table[tabindex]') return tag === 'table' && cls === 'table' && 'tabindex' in attrs
         if (s.startsWith('[role=')) return attrs.role === s.slice(7, -2)
+        if (s.startsWith('.')) return cls.split(' ').includes(s.slice(1))
         return s === tag
       })
     },
@@ -33,8 +34,8 @@ function el(tag, { cls = '', attrs = {}, kids = [], scroll = null, overflowY = '
   return me
 }
 let doc
-function page(main) {
-  const body = el('body', { kids: [main] })
+function page(main, ...more) {
+  const body = el('body', { kids: [main, ...more] })
   doc = { body, activeElement: body, querySelector: (s) => body.querySelector(s), defaultView: { getComputedStyle: (e) => ({ overflowY: e.overflowY }) } }
   return doc
 }
@@ -111,4 +112,22 @@ test('scrolling stops at both ends', () => {
   assert.equal(nextTop('ArrowUp', 10, 500, 900), 0)
   assert.equal(nextTop('ArrowDown', 890, 500, 900), 900)
   assert.equal(nextTop('PageUp', 100, 500, 900), 0)
+})
+
+test('with the side panel open: the list still gets the keys, unless focus or the pointer is in the panel', () => {
+  const table = el('table', { cls: 'table', attrs: { tabindex: '0' } })
+  const pane = el('div', { scroll: [1500, 500, 600], overflowY: 'auto' })
+  const button = el('button')
+  const side = el('aside', { cls: 'side-panel', kids: [pane, button] })
+  const d = page(el('main', { kids: [table] }), side)
+  assert.equal(arrowKey(new Key('keydown', { key: 'ArrowDown' }), d), true)
+  assert.deepEqual(table.events, ['ArrowDown'])
+  assert.equal(pane.scrollTop, 0)
+  d.activeElement = button // a button in the panel was clicked
+  assert.equal(arrowKey(new Key('keydown', { key: 'ArrowDown' }), d), true)
+  assert.equal(pane.scrollTop, 40)
+  assert.deepEqual(table.events, ['ArrowDown'])
+  d.activeElement = d.body // nothing focused, the pointer over the panel
+  assert.equal(arrowKey(new Key('keydown', { key: 'PageDown' }), d, pane), true)
+  assert.equal(pane.scrollTop, 40 + 450)
 })

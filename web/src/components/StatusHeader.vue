@@ -3,6 +3,7 @@
 // matter as badges, and what to do next, in words and as a button. blockers: why it can't go on (a PR that
 // can't merge: which check fails, which review is missing).
 import { shortLink, stateClass, glyph } from '../ui.js'
+import { safeHref } from '../links.js'
 
 defineProps({
   title: { type: String, default: '' },
@@ -18,13 +19,13 @@ const tone = (b) => b.cls ?? stateClass(b.value)
 <template>
   <header class="status-head">
     <div class="name">
-      <a v-if="url" :href="url" target="_blank" rel="noopener noreferrer" :title="url">{{ title || shortLink(url) }} <span class="dim">↗</span></a>
+      <a v-if="safeHref(url)" :href="safeHref(url)" target="_blank" rel="noopener noreferrer" :title="url">{{ title || shortLink(url) }} <span class="dim">↗</span></a>
       <span v-else>{{ title }}</span>
       <span v-if="sub" class="dim sub">{{ sub }}</span>
     </div>
     <div v-if="badges.length" class="badges">
       <template v-for="b in badges" :key="b.label">
-        <component :is="b.to ? 'router-link' : b.href ? 'a' : 'span'" :to="b.to" :href="b.href" :target="b.href ? '_blank' : undefined"
+        <component :is="b.to ? 'router-link' : b.href ? 'a' : 'span'" :to="b.to" :href="safeHref(b.href) || undefined" :target="b.href ? '_blank' : undefined"
                    :rel="b.href ? 'noopener noreferrer' : undefined" class="badge" :class="tone(b)">
           <span class="l">{{ b.label }}</span>
           <span class="v" :class="tone(b)"><span v-if="glyph(tone(b))" class="mark" aria-hidden="true">{{ glyph(tone(b)) }}</span>{{ b.value }}</span>
