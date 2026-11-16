@@ -63,14 +63,19 @@ async function show() {
   const p = current.value
   if (!p) { detail.value = ''; return }
   detail.value = '…'
-  try { detail.value = (await get(`/pr${qs({ repo: p.repo, number: p.number, diff: diff.value })}`)).text } catch (e) { detail.value = `error: ${e.message}` }
+  const asked = `${keyOf(p)} ${diff.value}`
+  let text
+  try { text = (await get(`/pr${qs({ repo: p.repo, number: p.number, diff: diff.value })}`)).text } catch (e) { text = `error: ${e.message}` }
+  // moving quickly through the list: a slower answer for an earlier row must not replace this one's
+  if (asked === `${sel.value} ${diff.value}`) detail.value = text
 }
 watch([sel, diff], show)
 
 async function doMerge(now) {
   const p = current.value
   if (!p) return
-  const got = await change(`${now ? 'Merge' : 'Auto-merge'} ${keyOf(p)} ${p.title}?`, '/merge', { targets: [keyOf(p)], now, ready: p.draft })
+  const got = await change(`${now ? 'Merge' : 'Auto-merge'} ${keyOf(p)} ${p.title}?`, '/merge', { targets: [keyOf(p)], now, ready: p.draft },
+    { detail: p.draft ? 'It is a draft: it is marked ready for review first.' : '' })
   if (!got) return
   detail.value = got.text
   if (got.dry) return

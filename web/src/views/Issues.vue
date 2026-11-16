@@ -44,7 +44,9 @@ async function show() {
   const i = current.value
   if (!i || form.open) return
   detail.value = '…'
-  try { detail.value = (await get(`/issue${qs({ repo: i.repo, number: i.number })}`)).text } catch (e) { detail.value = `error: ${e.message}` }
+  let text
+  try { text = (await get(`/issue${qs({ repo: i.repo, number: i.number })}`)).text } catch (e) { text = `error: ${e.message}` }
+  if (keyOf(i) === sel.value) detail.value = text // a slower answer for an earlier row must not replace this one's
 }
 watch(sel, show)
 
