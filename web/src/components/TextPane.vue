@@ -10,6 +10,7 @@ const props = defineProps({
   text: { type: String, default: '' },
   placeholder: { type: String, default: '' },
   skip: { type: Number, default: 0 },
+  plain: { type: Boolean, default: false }, // text someone wrote (an issue): its "- " lines are bullets, not problems
 })
 const isError = computed(() => /^error:/i.test(String(props.text || '').trim()))
 const lines = computed(() => {
@@ -21,7 +22,7 @@ const lines = computed(() => {
     else if (!l.trim()) notes = false
     return {
       parts: linkify(l),
-      cls: notes ? '' : /^\s*(error|.*\bnot merged\b)/i.test(l) ? 'bad' : /^\s*-\s/.test(l) ? 'warn' : /^==/.test(l) ? 'accent'
+      cls: notes || props.plain ? '' : /^\s*(error|.*\bnot merged\b)/i.test(l) ? 'bad' : /^\s*-\s/.test(l) ? 'warn' : /^==/.test(l) ? 'accent'
         : /\[dry-run\]/.test(l) ? 'dim' : '',
     }
   })
