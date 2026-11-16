@@ -344,9 +344,18 @@ def test_proxy_graphql_reads_the_document_not_its_text():
     assert operations('mutation { ...F } fragment F on Mutation { deleteRef(input: {}) { a } }') == [("mutation", None)]
     assert [k for k, _ in operations(",mutation { deleteRef(input: {}) { a } }")] == ["mutation"]
     assert len(operations("query { a } mutation { deleteRef(input: {}) { a } }")) == 2
-    for bad in ("", "nonsense { a }", "{ a", 'query { a(b: "open) }'):
+    blocks = 'mutation { mergePullRequest(input: {b: """a \\""" deleteRef(""", c: "\\"x"}) { a } }'
+    assert operations(blocks) == [("mutation", ["mergePullRequest"])]
+    for bad in ("", "nonsense { a }", "{ a", 'query { a(b: "open) }', 'query { a(b: """open) }',
+                'query { a(b: "x\ny") }'):
         with pytest.raises(ValueError):
             operations(bad)
+    import time
+    start = time.monotonic()  # escapes are scanned once, not tried again and again
+    for crafted in ('{ a(b: "' + '\\"' * 50000 + ") }", '{ a(b: """' + '\\"""' * 50000 + ") }"):
+        with pytest.raises(ValueError):
+            operations(crafted)
+    assert time.monotonic() - start < 1
 
 def test_defaults_editor(op):
     _, c = op

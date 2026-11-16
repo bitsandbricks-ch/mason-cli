@@ -63,8 +63,7 @@ MUTATIONS = {"markPullRequestReadyForReview", "enablePullRequestAutoMerge", "dis
 
 # GraphQL tokens. Commas and comments count as space, and a "#" or "(" inside a string is only text: a
 # regex over the raw query could be fooled by `deleteRef, (input: ...)` or a comment before the "(".
-TOKEN = re.compile(r'''"""(?:\\"""|(?!""").)*"""|"(?:\\.|[^"\\\n])*"'''  # block and plain strings
-                   r"|\.\.\.|[A-Za-z_]\w*|-?\d[\w.+-]*|[!$&()\[\]{}:=@|]", re.S)
+TOKEN = re.compile(r"\.\.\.|[A-Za-z_]\w*|-?\d[\w.+-]*|[!$&()\[\]{}:=@|]")  # strings: see _string
 SPACE = re.compile(r"[\s,\ufeff]+|#[^\n\r]*")  # one run at a time: the loop in tokens() takes the next
 
 
@@ -76,12 +75,45 @@ def tokens(text: str) -> list[str] | None:
         if m:
             i = m.end()
             continue
+        if text[i] == '"':
+            end = _string(text, i)
+            if end < 0:
+                return None
+            out.append(text[i:end])
+            i = end
+            continue
         m = TOKEN.match(text, i)
         if not m:
             return None
         out.append(m.group())
         i = m.end()
     return out
+
+
+def _string(text: str, i: int) -> int:
+    """Where the string starting at text[i] ends, or -1 when it doesn't. Scanned by hand, not by a regex: a
+    long run of escapes in a crafted query must not make the proxy slow."""
+    if text.startswith('"""', i):
+        end = i + 3
+        while True:
+            end = text.find('"""', end)
+            if end < 0:
+                return -1
+            if text[end - 1] != "\\":  # \""" is an escaped quote inside the block
+                return end + 3
+            end += 3
+    end = i + 1
+    while end < len(text):
+        c = text[end]
+        if c == "\\":
+            end += 2
+        elif c == '"':
+            return end + 1
+        elif c in "\n\r":
+            return -1
+        else:
+            end += 1
+    return -1
 
 
 def _skip(toks: list[str], i: int, open_: str, close: str) -> int:
