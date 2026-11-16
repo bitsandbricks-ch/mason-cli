@@ -1,15 +1,20 @@
 <script setup>
 // Stats: what moved over the last N days, for all repos, per group and per repo.
-import { computed, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { useLinkFilters } from '../useLink.js'
 import { loadGroups, scope } from '../scope.js'
 import Bars from '../components/Bars.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 
-const days = ref(30)
-const { data, error, loading, load } = useLoad((q) => `/metrics${q}${q ? '&' : '?'}days=${days.value}`)
+const DAYS = [7, 14, 30, 90, 180, 365]
+// in the link (?days=90), so a bookmark or a saved view opens the same span
+const f = reactive({ days: 30 })
+useLinkFilters(f, { days: { def: 30, ok: (v) => DAYS.includes(v) } })
+const { data, error, loading, load } = useLoad((q) => `/metrics${q}${q ? '&' : '?'}days=${f.days}`)
+watch(() => f.days, () => load())
 loadGroups()
 const sel = ref(null)
 const t = computed(() => data.value?.totals)
@@ -40,7 +45,7 @@ useKeys({ r: () => load(true) })
   <div class="view">
     <div class="toolbar">
       <Scope :groups="scope.groups" />
-      <label class="row">last <select v-model.number="days" @change="load()"><option v-for="d in [7, 14, 30, 90, 180, 365]" :key="d" :value="d">{{ d }} days</option></select></label>
+      <label class="row">last <select v-model.number="f.days"><option v-for="d in DAYS" :key="d" :value="d">{{ d }} days</option></select></label>
       <span v-if="loading" class="warn cursor">counting </span>
       <span class="spacer" />
       <span v-if="data" class="dim" title="answers from the cache and 304s cost no rate limit">cache: {{ data.cache.github.cache_hits || 0 }} hits, {{ data.cache.github.not_modified || 0 }} not modified, {{ data.cache.github.requests || 0 }} requests</span>
