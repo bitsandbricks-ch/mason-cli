@@ -57,8 +57,9 @@ onMounted(async () => {
     try { plugins.value = (await get('/plugins')).plugins.filter((p) => p.on && p.tabs.length) } catch { /* none */ }
   }
 })
-function guard() {
+async function guard() {
   if (!state.loaded) return
+  await router.isReady() // before the first page is resolved the route is still "/", and the link was lost
   if (!signedIn.value && !route.meta.public) router.replace({ name: 'login', query: route.path !== '/' ? { next: route.fullPath } : {} })
 }
 watch(() => route.fullPath, guard)
