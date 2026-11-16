@@ -53,3 +53,17 @@ test('drafts, auto-merge on, running checks, a release run going and fine repos 
   assert.ok(!find((i) => i.repo === 'acme/api' && i.what === 'defaults'))
   assert.deepEqual(todoItems(), [])
 })
+
+test('open issues assigned to you come last, old ones marked', () => {
+  const now = Date.parse('2026-11-16T00:00:00Z')
+  const got = todoItems({ issues: [
+    { repo: 'acme/web', number: 3, title: 'Fix it', state: 'open', updated: '2026-11-10T00:00:00Z' },
+    { repo: 'acme/web', number: 4, title: 'Old', state: 'open', updated: '2026-09-01T00:00:00Z' },
+    { repo: 'acme/web', number: 5, title: 'Done', state: 'closed' },
+  ], approvals: [{ repo: 'acme/api', id: 5, name: 'Deploy' }], now })
+  assert.deepEqual(got.map((i) => i.rank), [1, 5, 5])
+  assert.deepEqual(got[1].target, { kind: 'issue', repo: 'acme/web', number: 3 })
+  assert.equal(got[1].why, 'assigned to you')
+  assert.equal(got[2].why, 'assigned to you, untouched 76d')
+  assert.equal(got[2].cls, 'warn')
+})

@@ -4,8 +4,9 @@
 
 const FAILED = /^(failure|failed|error|timed_out|startup_failure)$/i
 
-// rank: lower comes first. 1 something waits for you to act, 2 broken, 3 ready to go, 4 drift and releases
-export function todoItems({ status = null, prs = [], approvals = [], releases = [] } = {}) {
+// rank: lower comes first. 1 something waits for you to act, 2 broken, 3 ready to go, 4 drift and releases,
+// 5 open issues assigned to you (issues: the list of /issues?mine=1; now: for their age, a test passes its own)
+export function todoItems({ status = null, prs = [], approvals = [], releases = [], issues = [], now = Date.now() } = {}) {
   const out = []
   const add = (rank, why, what, target, cls = 'warn') => out.push({ rank, why, what, repo: target.repo, target, cls })
   const ref = (p) => `${p.repo}${p.provider === 'gitlab' ? '!' : '#'}${p.number}`
@@ -49,7 +50,14 @@ export function todoItems({ status = null, prs = [], approvals = [], releases = 
     else if ((r.problems || []).length) add(4, r.problems[0], r.release || 'release', { kind: 'release', repo: r.repo })
   }
 
+  for (const i of issues) {
+    if (!i?.repo || !i.number || (i.state && i.state !== 'open')) continue
+    const days = i.updated ? Math.floor((now - new Date(i.updated)) / 86_400_000) : 0
+    const target = { kind: 'issue', repo: i.repo, number: i.number }
+    add(5, days >= 30 ? `assigned to you, untouched ${days}d` : 'assigned to you', `${i.repo}#${i.number} ${i.title || ''}`.trim(), target, days >= 30 ? 'warn' : '')
+  }
+
   return out.sort((a, b) => a.rank - b.rank || a.repo.localeCompare(b.repo))
 }
 
-export const RANKS = { 1: 'waits for you', 2: 'broken', 3: 'ready to go', 4: 'drift and releases' }
+export const RANKS = { 1: 'waits for you', 2: 'broken', 3: 'ready to go', 4: 'drift and releases', 5: 'your issues' }

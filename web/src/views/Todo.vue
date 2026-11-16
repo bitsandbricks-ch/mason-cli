@@ -1,7 +1,7 @@
 <script setup>
 // To do: everything across your repos that waits for you, most urgent first: runs to approve, what is broken
 // (CI on the default branch, conflicts, failing checks, a failed release run), PRs ready to merge, drift
-// against the defaults and versions not released yet. Enter opens one (in the side panel on a wide screen,
+// against the defaults, versions not released yet and open issues assigned to you. Enter opens one (in the side panel on a wide screen,
 // where ↑↓ then walk through the list); the views it comes from have the rest.
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -16,12 +16,14 @@ import Scope from '../components/Scope.vue'
 
 const missing = ref([]) // lists that couldn't load: the to do may lack their items
 const { data, error, loading, load } = useLoad(async (q, fresh) => {
-  const names = ['status', 'prs', 'approvals', 'releases']
-  const got = await Promise.allSettled(names.map((n) => cached(`/${n}${q}`, fresh, { quiet: true })))
+  const names = ['status', 'prs', 'approvals', 'releases', 'issues']
+  const extra = { issues: 'mine=1&state=open' } // your open issues only
+  const url = (n) => `/${n}${q}${extra[n] ? `${q ? '&' : '?'}${extra[n]}` : ''}`
+  const got = await Promise.allSettled(names.map((n) => cached(url(n), fresh, { quiet: true })))
   missing.value = names.filter((_, i) => got[i].status === 'rejected')
   if (missing.value.length === names.length) throw got[0].reason
-  const [status, prs, approvals, releases] = got.map((g) => (g.status === 'fulfilled' ? g.value : null))
-  return todoItems({ status, prs: prs?.prs, approvals: approvals?.approvals, releases: releases?.releases })
+  const [status, prs, approvals, releases, issues] = got.map((g) => (g.status === 'fulfilled' ? g.value : null))
+  return todoItems({ status, prs: prs?.prs, approvals: approvals?.approvals, releases: releases?.releases, issues: issues?.issues })
 })
 loadGroups()
 const sel = ref(null)

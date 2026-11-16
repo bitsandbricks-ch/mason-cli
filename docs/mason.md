@@ -74,7 +74,7 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   on repos, m and M on pull requests, from the keys or the bar above the list, with one question for the lot.
 - **to do (`0`) lists what waits for you**, most urgent first: runs to approve, what is broken (CI on the
   default branch, merge conflicts, failing checks, a failed release run), PRs ready to merge, drift against the
-  defaults and versions not released yet. Enter opens one in the side panel, and ↑↓ walk through them.
+  defaults, versions not released yet and your open issues (assigned to you; marked after 30 days untouched). Enter opens one in the side panel, and ↑↓ walk through them.
 - **ctrl+k (⌘k, or ⌕ jump in the top bar) jumps anywhere:** type a few letters of a repo, a PR or MR, an
   issue or a view; ↑↓ pick, Enter goes there (a repo, PR or issue opens in the side panel on a wide screen).
   Before you type it offers what you opened last (kept in this browser).
