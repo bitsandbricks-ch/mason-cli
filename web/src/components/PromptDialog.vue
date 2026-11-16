@@ -1,6 +1,6 @@
 <script setup>
 // The y/N prompt every change goes through; "d" runs it as a dry run.
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { answer, prompt } from '../ui.js'
 import { state } from '../api.js'
 
@@ -40,10 +40,13 @@ function key(e) {
     return
   }
   if (e.target.tagName === 'INPUT') { if (e.key === 'Enter') answer(text.value || null); if (e.key === 'Escape') answer(null); return }
-  if (e.key === 'y' || e.key === 'Enter') answer(state.dryRun ? 'dry' : 'yes')
+  if (e.key === 'y' || e.key === 'Enter') answer(yes.value)
   else if (e.key === 'd' && prompt.allowDry) answer('dry')
   else if (e.key === 'n' || e.key === 'Escape') answer(null)
 }
+// the dry-run switch turns yes into a dry run only where there is one: a question without (sign-outs, keys,
+// file names) gets a plain yes, and its button doesn't promise that nothing changes
+const yes = computed(() => (state.dryRun && prompt.allowDry ? 'dry' : 'yes'))
 </script>
 
 <template>
@@ -77,8 +80,8 @@ function key(e) {
           <button @click="answer(null)">cancel</button>
         </template>
         <template v-else>
-          <button class="primary" @click="answer(state.dryRun ? 'dry' : 'yes')">
-            <span class="k">y</span> {{ state.dryRun ? 'yes (dry run is on)' : 'yes' }}</button>
+          <button class="primary" @click="answer(yes.value)">
+            <span class="k">y</span> {{ yes === 'dry' ? 'yes (dry run is on)' : 'yes' }}</button>
           <button v-if="prompt.allowDry" @click="answer('dry')"><span class="k">d</span> dry run</button>
           <button @click="answer(null)"><span class="k">n</span> no</button>
         </template>

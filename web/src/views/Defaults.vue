@@ -56,7 +56,13 @@ async function save(remove = false) {
   if (!path.value) return
   if (!remove && (await check()).length && !(await ask(`${path.value} has problems. Save it anyway?`, { allowDry: false, detail: problems.value.join('\n') }))) return
   const how = mode.value === 'pr' ? 'in a pull request' : 'straight to the branch'
-  if (!(await ask(`${remove ? 'Remove' : 'Save'} ${path.value} ${how}?`, { allowDry: false }))) return
+  const a = await ask(`${remove ? 'Remove' : 'Save'} ${path.value} ${how}?`)
+  if (!a) return
+  if (a === 'dry') { // the server has no dry run for this: nothing is sent
+    result.value = `[dry-run] would ${remove ? 'remove' : 'save'} ${path.value} ${how}`
+    log(result.value, 'ok')
+    return
+  }
   try {
     const got = await put('/defaults/file', { path: path.value, text: text.value, mode: mode.value, delete: remove, force: true })
     result.value = `${remove ? 'removed' : 'saved'} ${path.value}: ${got.url}`
