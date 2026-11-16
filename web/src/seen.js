@@ -28,7 +28,7 @@ export function useSeen(name, keys) {
   const marked = computed(() => fresh(before, keys()))
   function save() {
     const now = keys()
-    if (!now.length && before) return // nothing loaded (an error, a slow answer): keep what we had
+    if (!now.length) return // nothing loaded (an error, left before the answer came): keep what we had
     try { localStorage.setItem(storeKey(name), JSON.stringify(merged(read(name), now))) } catch { /* private mode */ }
   }
   // leaving the view, or closing the tab, counts as having seen what was shown
