@@ -4,13 +4,16 @@ import { onBeforeUnmount, onMounted } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ask } from './ui.js'
 
-export function useUnsaved(isDirty, what = 'your changes') {
+// drop: called when the person chose to leave without saving (to forget a kept draft)
+export function useUnsaved(isDirty, what = 'your changes', drop = null) {
   const warn = (e) => { if (isDirty()) { e.preventDefault(); e.returnValue = '' } }
   onMounted(() => window.addEventListener('beforeunload', warn))
   onBeforeUnmount(() => window.removeEventListener('beforeunload', warn))
   onBeforeRouteLeave(async (to, from) => {
     // the same page with another query or #detail (a phone's detail view) isn't leaving
-    if (to.path === from.path || to.name === 'login' || !isDirty()) return true // signed out: nothing to keep it for
-    return !!(await ask(`Leave this page and drop ${what}?`, { allowDry: false }))
+    if (to.path === from.path || to.name === 'login' || !isDirty()) return true // signed out: no one to ask (the defaults editor keeps a draft)
+    const leave = !!(await ask(`Leave this page and drop ${what}?`, { allowDry: false }))
+    if (leave) drop?.()
+    return leave
   })
 }

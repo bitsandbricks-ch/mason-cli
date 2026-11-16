@@ -1,7 +1,7 @@
 <script setup>
 // The defaults editor: the defaults repo's files, a text editor with validation, templates to start
 // from, and rulesets imported from a live repo. Saving opens a PR (or commits, for those who may).
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ApiError, get, log, post, put, state } from '../api.js'
 import { useKeys } from '../keys.js'
@@ -22,7 +22,7 @@ const templates = ref([])
 const showTemplates = ref(false)
 const editor = ref(null)
 const dirty = computed(() => text.value !== original.value)
-useUnsaved(() => dirty.value, 'your changes to the file')
+useUnsaved(() => dirty.value, 'your changes to the file', () => forgetDraft(path.value))
 
 async function load() {
   missing.value = ''
@@ -34,15 +34,34 @@ async function load() {
     else log(e.message, 'error')
   }
 }
+// Unsaved text outlives a sign-in that ran out mid-edit (the app goes to the sign-in page and back):
+// kept for this tab only, and offered again when the same file opens.
+const draftKey = (p) => `mason.defaults.draft:${info.value?.repo}:${p}`
+function forgetDraft(p) { try { sessionStorage.removeItem(draftKey(p)) } catch { /* private mode */ } }
+function draftOf(p) {
+  try { return sessionStorage.getItem(draftKey(p)) } catch { return null }
+}
+watch([text, path], () => {
+  if (!path.value) return
+  try {
+    if (dirty.value) sessionStorage.setItem(draftKey(path.value), text.value)
+    else sessionStorage.removeItem(draftKey(path.value))
+  } catch { /* private mode */ }
+})
 function open(p, t, probs = []) {
+  const draft = draftOf(p)
   path.value = p
-  text.value = t
+  text.value = draft !== null && draft !== t ? draft : t
+  if (text.value !== t) log(`brought back your unsaved changes to ${p}`, 'warn')
   original.value = info.value?.files?.includes(p) ? t : ''
   problems.value = probs
   result.value = ''
 }
 async function pick(p) {
-  if (dirty.value && !(await ask(`Drop your changes to ${path.value}?`, { allowDry: false }))) return
+  if (dirty.value) {
+    if (!(await ask(`Drop your changes to ${path.value}?`, { allowDry: false }))) return
+    forgetDraft(path.value)
+  }
   try {
     const f = await get(`/defaults/file?path=${encodeURIComponent(p)}`)
     open(f.path, f.text, f.problems)

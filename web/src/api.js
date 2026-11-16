@@ -67,6 +67,9 @@ export const del = (path) => api('DELETE', path)
 // log of its outputs stay with it, not with the next person on this browser.
 export function forgetLocal() {
   try { localStorage.removeItem('mason.console.history') } catch { /* private mode */ }
+  try { // editor drafts kept across an expired sign-in (Defaults.vue)
+    Object.keys(sessionStorage).filter((k) => k.startsWith('mason.defaults.draft:')).forEach((k) => sessionStorage.removeItem(k))
+  } catch { /* private mode */ }
   state.log.length = 0
 }
 
