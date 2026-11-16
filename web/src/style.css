@@ -491,3 +491,5 @@ button.wide { width: 100%; text-align: left; }
 .picked-bar { display: flex; gap: 8px; align-items: center; padding: 5px 12px; border-bottom: 1px dashed var(--accent);
   background: var(--bg2); flex-wrap: wrap; }
 .picked-bar b { color: var(--accent); font-weight: 400; }
+/* the box only shows the pick: the cell takes the click (a box that handled it reverted its own tick) */
+.table .pick input { pointer-events: none; }

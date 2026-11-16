@@ -137,7 +137,7 @@ defineExpose({ focus: () => table.value?.focus(), shown })
     <table v-else ref="table" class="table" tabindex="0" @keydown="key">
       <thead>
         <tr>
-          <th v-if="picks" class="pick"><input type="checkbox" :checked="allShown" aria-label="pick every row shown" @mousedown.prevent @click.prevent="pickAll"></th>
+          <th v-if="picks" class="pick" @mousedown.prevent @click="pickAll(); table?.focus({ preventScroll: true })"><input type="checkbox" :checked="allShown" tabindex="-1" aria-label="pick every row shown"></th>
           <th v-for="c in columns" :key="c.key" :class="{ right: c.right }" @click="sort(c)">
             {{ c.label }}<span v-if="sortKey === c.key">{{ sortDir > 0 ? ' ↑' : ' ↓' }}</span>
           </th>
@@ -147,7 +147,7 @@ defineExpose({ focus: () => table.value?.focus(), shown })
         <tr v-for="r in shown" :key="rowKey(r)" :class="{ sel: rowKey(r) === modelValue, picked: isPicked(r) }"
             @click="emit('update:modelValue', rowKey(r))" @dblclick="emit('activate', r)">
           <td v-if="picks" class="pick" @mousedown.prevent @click.stop="pick(r, $event); emit('update:modelValue', rowKey(r)); table?.focus({ preventScroll: true })"><input type="checkbox" :checked="isPicked(r)" tabindex="-1"
-            :aria-label="`pick ${rowKey(r)}`" @mousedown.prevent @click.prevent></td>
+            :aria-label="`pick ${rowKey(r)}`"></td>
           <td v-for="c in columns" :key="c.key" :class="[cls(c, r), { right: c.right }]"
               :title="String(cell(c, r))"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</td>
         </tr>
