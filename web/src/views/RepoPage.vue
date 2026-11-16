@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // One repo as a page (Enter on Repos): its whole detail, what you can do with it, and what that printed;
 // its drift against the defaults (doctor: the kept check, or checked when the page opens), its open PRs as links to their
 // pages, and its event log at the bottom. After a change, and while a release run is going, the page reads
@@ -128,7 +129,7 @@ async function newRelease(mode) {
   if (!suggest.value) await loadReleases()
 }
 function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); follow.now([repo.value]); log.value?.burst() } }
-const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
+const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) openLink(url) }
 const back = () => (window.history.state?.back ? router.back() : router.push('/'))
 const doctorPanel = ref(null)
 const masonPanel = ref(null)

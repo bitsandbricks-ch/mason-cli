@@ -1,4 +1,5 @@
 <script setup>
+import { safeUrl } from '../links.js'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { state } from '../api.js'
@@ -45,7 +46,7 @@ const origin = window.location.origin
         with your token, so you see and change no more than you could yourself.</p>
       <p v-if="error || route.query.error" class="bad">error: {{ error || route.query.error }}</p>
       <div v-if="device" class="box" style="margin: 18px 0">
-        <p>1. Open <a class="accent" :href="device.verification_uri" target="_blank" rel="noopener">{{ device.verification_uri }}</a></p>
+        <p>1. Open <a class="accent" :href="safeUrl(device.verification_uri)" target="_blank" rel="noopener">{{ device.verification_uri }}</a></p>
         <p>2. Enter this code:</p>
         <p class="row"><span class="banner" style="font-size: 1.6em; letter-spacing: 0.15em" data-test="user-code">{{ device.user_code }}</span>
           <button @click="copy">{{ copied ? 'copied' : 'copy' }}</button></p>

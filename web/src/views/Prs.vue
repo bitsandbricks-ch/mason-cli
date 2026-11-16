@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // Pull and merge requests: all open ones, with checks, review, conflicts and auto-merge. Enter (or page)
 // opens one as its own page, with its event log.
 // A change shows at once: the row changes right away, and its repo is read again (only that one) a moment later
@@ -91,7 +92,7 @@ async function ready() {
   if (got.ok) expect(p, { draft: false })
   follow.now([p.repo])
 }
-const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
+const open = () => current.value && openLink(current.value.url)
 const router = useRouter()
 const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }

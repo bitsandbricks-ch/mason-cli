@@ -1,4 +1,5 @@
 <script setup>
+import { safeUrl } from '../links.js'
 // The top of a detail page (a repo, a PR, an issue, a run): its name once, as a link, the few states that
 // matter as badges, and what to do next, in words and as a button. blockers: why it can't go on (a PR that
 // can't merge: which check fails, which review is missing).
@@ -18,7 +19,7 @@ const tone = (b) => b.cls ?? stateClass(b.value)
 <template>
   <header class="status-head">
     <div class="name">
-      <a v-if="url" :href="url" target="_blank" rel="noopener noreferrer" :title="url">{{ title || shortLink(url) }} <span class="dim">↗</span></a>
+      <a v-if="url" :href="safeUrl(url)" target="_blank" rel="noopener noreferrer" :title="url">{{ title || shortLink(url) }} <span class="dim">↗</span></a>
       <span v-else>{{ title }}</span>
       <span v-if="sub" class="dim sub">{{ sub }}</span>
     </div>

@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // Workflow hardening: unpinned actions, write-all tokens, pull_request_target checkouts and script
 // injection in .github/workflows. p opens a PR that pins the selected repo's actions to commit SHAs.
 import { computed, ref } from 'vue'
@@ -35,7 +36,7 @@ async function pinRepos(repos) {
   if (text !== null) { output.value = text; load(true) }
 }
 const pinOne = () => current.value && pinRepos([current.value.repo])
-const open = (r) => r && window.open(`https://github.com/${r.repo}/blob/HEAD/${r.path}#L${r.line}`, '_blank', 'noopener')
+const open = (r) => r && openLink(`https://github.com/${r.repo}/blob/HEAD/${r.path}#L${r.line}`)
 useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: () => open(current.value) })
 </script>
 

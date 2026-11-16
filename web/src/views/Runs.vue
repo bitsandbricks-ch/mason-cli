@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // Workflow runs and pipelines: the newest per repo, or only the failed ones. Enter opens a run's page.
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -24,7 +25,7 @@ const columns = [
   { key: 'branch', label: 'branch', cls: () => '' },
   { key: 'when', label: 'when', cls: () => 'dim' },
 ]
-const open = (r) => r?.url && window.open(r.url, '_blank', 'noopener')
+const open = (r) => r?.url && openLink(r.url)
 const current = computed(() => rows.value.find((r) => r.key === sel.value))
 const router = useRouter()
 const page = (r) => { const x = r || current.value; if (x?.id) router.push({ path: '/run', query: { repo: x.repo, id: x.id } }) }

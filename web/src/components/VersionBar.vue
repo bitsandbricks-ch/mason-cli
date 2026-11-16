@@ -1,4 +1,5 @@
 <script setup>
+import { safeUrl } from '../links.js'
 // The version file against the latest release, with bump (b: pick patch, minor or major; a PR with the next
 // version and its changelog section) and release (R: push v<version> once the bump is merged). Shown on a repo's
 // and its releases' pages, and under the selected repo in Releases.
@@ -56,7 +57,7 @@ defineExpose({ bump, release })
     </div>
     <div v-if="v.pr" class="row" style="margin-top: 6px">
       <span class="dim">bump PR</span>
-      <a class="accent" :href="v.pr.url" target="_blank" rel="noopener">#{{ v.pr.number }}</a>
+      <a class="accent" :href="safeUrl(v.pr.url)" target="_blank" rel="noopener">#{{ v.pr.number }}</a>
       <span>to {{ v.pr.version }} is open; merge it, then R releases it</span>
     </div>
   </div>

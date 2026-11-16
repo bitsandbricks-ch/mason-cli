@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // One issue as a page (Enter on Issues): its text and comments, comment, close or reopen, and its event
 // log at the bottom.
 import { computed, ref, watch } from 'vue'
@@ -55,7 +56,7 @@ async function comment() {
   const t = await act(`Post the comment on ${name.value}?`, '/issue', { repo: repo.value, number: number.value, action: 'comment', text: said }, { detail: said })
   if (t !== null) changed(t)
 }
-const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
+const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) openLink(url) }
 const back = () => (window.history.state?.back ? router.back() : router.push('/issues'))
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })
 const titleLine = computed(() => (detail.value === '…' ? '' : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))

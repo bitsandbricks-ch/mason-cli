@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // One workflow run (GitHub) or pipeline (GitLab) as a page (Enter on Runs): its jobs and steps with their
 // times, re-run what failed, and its event log at the bottom. While it runs, the page asks again every 10s.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -41,7 +42,7 @@ async function rerun() {
   output.value = t
   if (!t.startsWith('error')) { forget('/runs'); setTimeout(load, 2000); log.value?.burst() }
 }
-const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
+const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) openLink(url) }
 const back = () => (window.history.state?.back ? router.back() : router.push('/runs'))
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })
 // the header: what ran, how it ended, and which jobs failed

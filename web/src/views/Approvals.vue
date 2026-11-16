@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // What waits for you: environments you review, outside contributors' runs, GitLab deployments and manual jobs.
 import { computed, ref } from 'vue'
 import { act, useLoad } from '../load.js'
@@ -29,7 +30,7 @@ async function approve(r = current.value) {
   const text = await act(`Approve ${r.waits_for} for ${r.repo} ${r.branch || ''}?`, '/approve', { repo: r.repo, id: r.id, kind: r.kind })
   if (text !== null) { output.value = text; load(true) }
 }
-const open = (r) => r?.url && window.open(r.url, '_blank', 'noopener')
+const open = (r) => r?.url && openLink(r.url)
 useKeys({ r: () => load(true), a: () => approve(), o: () => open(current.value) })
 </script>
 

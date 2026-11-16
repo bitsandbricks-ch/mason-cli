@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // Issues across GitHub repos and GitLab projects: filter by state, label, mine and age; open, close,
 // reopen and comment; n opens a new issue in any repo. Enter (or page) opens one as its own page.
 import { computed, reactive, ref, watch } from 'vue'
@@ -84,7 +85,7 @@ async function submit() {
   detail.value = text
   if (!text.startsWith('error')) { Object.assign(form, { open: false, title: '', body: '', labels: '', assignees: '' }); load(true) }
 }
-const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
+const open = () => current.value && openLink(current.value.url)
 const router = useRouter()
 const page = (i) => { const r = i || current.value; if (r) router.push({ path: '/issue', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(STATES); f.state = k[(k.indexOf(f.state) + 1) % k.length] }

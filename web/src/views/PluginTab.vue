@@ -1,4 +1,5 @@
 <script setup>
+import { safeUrl } from '../links.js'
 // A plugin's tab, like in the TUI: rows on the left, the selected row's text on the right.
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -36,7 +37,7 @@ watch(sel, async (key) => {
 <template>
   <div class="view">
     <div class="toolbar"><span class="accent">{{ route.params.plugin }}</span><span>{{ tab?.title }}</span>
-      <span class="spacer" /><a v-if="url" :href="url" target="_blank" rel="noopener noreferrer">open ↗</a></div>
+      <span class="spacer" /><a v-if="url" :href="safeUrl(url)" target="_blank" rel="noopener noreferrer">open ↗</a></div>
     <div class="split ld">
       <div class="scroll"><DataTable v-model="sel" :columns="[{ key: 'label', label: 'item' }]" :rows="rows" :row-key="(r) => r.key" /></div>
       <div class="scroll pad"><TextPane :text="text" placeholder="pick a row" /></div>

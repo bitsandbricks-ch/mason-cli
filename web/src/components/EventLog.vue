@@ -1,4 +1,5 @@
 <script setup>
+import { safeUrl } from '../links.js'
 // The event log at the bottom of a detail page: what happened to this repo, PR, issue, release or run on
 // GitHub or GitLab, and your own changes from Mason's audit log, newest first. It asks again every 30s
 // while the page is open, and every few seconds for a while after a change (burst), so a merge, a ready or
@@ -114,7 +115,7 @@ const when = (s) => { try { return new Date(s).toLocaleString() } catch { return
           <span v-if="e.detail" class="detail dim">{{ e.detail }}<template v-if="e.more && !open.has(keyOf(e))"> …</template></span>
           <pre v-if="open.has(keyOf(e))" class="text more">{{ e.more }}</pre>
         </span>
-        <a v-if="e.url" class="go" :href="e.url" target="_blank" rel="noopener noreferrer" :title="e.url" @click.stop>↗</a>
+        <a v-if="e.url" class="go" :href="safeUrl(e.url)" target="_blank" rel="noopener noreferrer" :title="e.url" @click.stop>↗</a>
       </li>
     </ol>
     </template>

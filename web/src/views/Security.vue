@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // Open alerts: Dependabot, secret scanning and code scanning on GitHub, vulnerabilities on GitLab.
 import { computed, ref } from 'vue'
 import { useLoad } from '../load.js'
@@ -17,7 +18,7 @@ const columns = [
   { key: 'severity', label: 'severity' }, { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : ''), card: 'head' },
   { key: 'kind', label: 'kind', cls: () => 'dim' }, { key: 'title', label: 'alert', cls: () => '', card: 'main' }, { key: 'where', label: 'where', cls: () => 'dim' },
 ]
-const open = (r) => r?.url && window.open(r.url, '_blank', 'noopener')
+const open = (r) => r?.url && openLink(r.url)
 useKeys({ r: () => load(true) })
 </script>
 

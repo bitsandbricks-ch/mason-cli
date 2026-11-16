@@ -1,4 +1,5 @@
 <script setup>
+import { safeUrl } from '../links.js'
 // A repo's branches: the default first, then the newest commit first. Each says how far it is ahead of and behind
 // the default branch, whether it is merged, what protects it, and the newest PR (or MR) from it. A branch that
 // isn't the default or protected can be deleted (asked first; a dry run says what would go); "delete the merged
@@ -70,12 +71,12 @@ defineExpose({ load })
         <input v-model="filter" placeholder="find a branch" aria-label="find a branch" style="flex: 1; min-width: 14ch">
         <button v-if="merged.length" class="danger" :disabled="busy" :title="merged.map((r) => r.name).join(', ')" @click="remove(merged, true)">
           delete the merged ones ({{ merged.length }})</button>
-        <a v-if="data.url" :href="data.url" target="_blank" rel="noopener" class="dim hide-xs">on {{ gitlab ? 'GitLab' : 'GitHub' }} ↗</a>
+        <a v-if="data.url" :href="safeUrl(data.url)" target="_blank" rel="noopener" class="dim hide-xs">on {{ gitlab ? 'GitLab' : 'GitHub' }} ↗</a>
       </div>
       <div v-if="!found.length" class="empty dim">{{ q ? 'no branch matches' : 'no branches' }}</div>
       <div v-for="r in shown" :key="r.name" class="branch">
         <div class="name">
-          <a v-if="r.url" :href="r.url" target="_blank" rel="noopener">{{ r.name }}</a><span v-else>{{ r.name }}</span>
+          <a v-if="r.url" :href="safeUrl(r.url)" target="_blank" rel="noopener">{{ r.name }}</a><span v-else>{{ r.name }}</span>
           <span v-if="state(r).text" :class="state(r).cls" :title="state(r).title">{{ state(r).text }}</span>
           <span v-if="r.protected.length" class="chip" :title="r.protected.join(', ')">protected</span>
         </div>

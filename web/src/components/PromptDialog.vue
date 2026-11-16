@@ -1,4 +1,5 @@
 <script setup>
+import { safeUrl } from '../links.js'
 // The y/N prompt every change goes through; "d" runs it as a dry run.
 import { nextTick, ref, watch } from 'vue'
 import { answer, prompt } from '../ui.js'
@@ -52,7 +53,7 @@ function key(e) {
       <div class="q">{{ prompt.question }}</div>
       <pre v-if="prompt.detail" class="text dim" style="margin-top: 8px">{{ prompt.detail }}</pre>
       <div v-for="l in prompt.links" :key="l.href" style="margin-top: 6px">
-        <a class="accent" :href="l.href" target="_blank" rel="noopener">{{ l.label }}</a>
+        <a class="accent" :href="safeUrl(l.href)" target="_blank" rel="noopener">{{ l.label }}</a>
       </div>
       <div v-if="prompt.input" style="margin-top: 10px">
         <input ref="field" v-model="text" :type="prompt.input.password ? 'password' : 'text'" :placeholder="prompt.input.placeholder"

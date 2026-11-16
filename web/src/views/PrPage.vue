@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // One pull or merge request as a page (Enter on Pull requests): its detail, what you can do with it, what
 // that printed, and its event log at the bottom. A change updates the page at once: the state flips right
 // away, then the detail and the events are asked again until GitHub or GitLab shows it.
@@ -140,7 +141,7 @@ const next = computed(() => {
   if (!blockers.value.length && /^(ready|mergeable)/.test(merge.value)) return { text: 'ready to merge.', label: 'merge now', key: 'M', fn: () => merge_(true) }
   return { text: running.value.length ? 'checks are still running.' : "it can't merge yet.", label: 'auto-merge when it can', key: 'm', fn: () => merge_(false) }
 })
-const visit = () => { if (url.value?.startsWith('http')) window.open(url.value, '_blank', 'noopener') }
+const visit = () => { if (url.value?.startsWith('http')) openLink(url.value) }
 const back = () => (window.history.state?.back ? router.back() : router.push('/prs'))
 const actions = computed(() => [
   { k: 'm', group: 'merge', primary: true, label: state.value.auto ? 'auto-merge is on' : 'auto-merge when checks pass', fn: () => merge_(false), off: !open.value || state.value.auto },

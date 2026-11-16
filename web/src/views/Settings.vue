@@ -1,4 +1,5 @@
 <script setup>
+import { safeUrl } from '../links.js'
 // Settings: logins, the defaults repo and which repos to manage, API keys, sessions and plugin secrets.
 // Everything a CLI user keeps in files lives here, per user: nobody else sees or changes yours.
 import { onBeforeUnmount, onMounted, ref } from 'vue'
@@ -109,7 +110,7 @@ onMounted(load)
           </template>
         </div>
         <p v-if="linking">Enter <span class="accent">{{ linking.user_code }}</span> at
-          <a class="accent" :href="linking.verification_uri" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
+          <a class="accent" :href="safeUrl(linking.verification_uri)" target="_blank" rel="noopener">{{ linking.verification_uri }}</a>
           <span class="dim"> (waiting<span class="cursor" />)</span>
           <button @click="cancelLink">cancel</button></p>
       </div>

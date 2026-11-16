@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // Each repo's latest release, its assets, missing assets and the last release run, and its version file against
 // that release: "0.4.0 unreleased" when the version changed but nothing is released yet (u lists only those).
 // Enter opens the repo's releases as a page; n creates a release; b bumps the selected repo in a PR, R releases it,
@@ -82,7 +83,7 @@ function done({ text, ok, repo }) {
   follow.now([repo || sel.value])
 }
 useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n: () => newRelease('release'), T: () => newRelease('tag'), Escape: () => { form.value = '' },
-  o: () => current.value?.url && window.open(current.value.url, '_blank', 'noopener') })
+  o: () => current.value?.url && openLink(current.value.url) })
 </script>
 
 <template>

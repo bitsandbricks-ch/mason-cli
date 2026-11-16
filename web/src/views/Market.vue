@@ -1,4 +1,5 @@
 <script setup>
+import { safeUrl } from '../links.js'
 // The marketplace: the plugin index and its signature. Installing changes the whole server, so it
 // happens where Mason runs (pip install), never from the web.
 import { onMounted, ref } from 'vue'
@@ -32,7 +33,7 @@ onMounted(load)
           <span v-if="p.installed" class="ok">installed {{ p.installed }}{{ p.loaded ? '' : ' (restart to load)' }}</span>
         </div>
         <div>{{ p.description }}</div>
-        <div class="dim">provides: {{ p.provides.join(', ') || '-' }}<template v-if="p.homepage"> · <a :href="p.homepage" target="_blank" rel="noopener noreferrer">{{ p.homepage }}</a></template></div>
+        <div class="dim">provides: {{ p.provides.join(', ') || '-' }}<template v-if="p.homepage"> · <a :href="safeUrl(p.homepage)" target="_blank" rel="noopener noreferrer">{{ p.homepage }}</a></template></div>
       </div>
     </div>
   </div>

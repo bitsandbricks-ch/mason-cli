@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // One repo's releases as a page (Enter on Releases or on a repo's page): every recent release on the
 // left, the picked one in full on the right with its event log (its runs too, live); n creates a release,
 // Esc goes back. After a release, a tag or a bump, and while a release run is going, the page reads the repo
@@ -56,7 +57,7 @@ const badges = computed(() => {
   if (page.value.busy) out.push({ label: 'release run', value: 'running', cls: 'warn' })
   return out
 })
-const open = () => { const url = current.value?.url || page.value?.url; if (url) window.open(url, '_blank', 'noopener') }
+const open = () => { const url = current.value?.url || page.value?.url; if (url) openLink(url) }
 const back = () => (window.history.state?.back ? router.back() : router.push('/releases'))
 
 // A follow-up: the list, the version and whether a release run is going; the text when it is the shown release's.

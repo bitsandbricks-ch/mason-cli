@@ -1,4 +1,5 @@
 <script setup>
+import { safeUrl } from '../links.js'
 // Every GitHub (or GitLab) setting of the repo, by area: what the API reads, changed in place where the API
 // writes it. Changes wait in a bar at the bottom: "apply" sends them to GitHub, "apply and keep" also writes the
 // ones doctor knows into the repo's .mason.toml (a PR, or straight on with auto_push), so the repo is held to
@@ -94,7 +95,7 @@ defineExpose({ load })
       <div class="row">
         <input v-model="filter" placeholder="find a setting: wiki, squash, pages…" aria-label="find a setting" style="flex: 1; min-width: 18ch">
         <button @click="toggleAll">{{ areas.every((a) => open[a.name]) ? 'fold all' : 'open all' }}</button>
-        <a v-if="data.settings_url" :href="data.settings_url" target="_blank" rel="noopener" class="dim hide-xs">on {{ host }} ↗</a>
+        <a v-if="data.settings_url" :href="safeUrl(data.settings_url)" target="_blank" rel="noopener" class="dim hide-xs">on {{ host }} ↗</a>
       </div>
       <div v-for="a in areas" :key="a.name" class="area">
         <button class="head" :aria-expanded="isOpen(a.name)" @click="open[a.name] = !open[a.name]">
@@ -136,7 +137,7 @@ defineExpose({ load })
           <div v-else-if="!l.items.length" class="dim">none</div>
           <div v-for="(it, i) in l.items" :key="i" class="item"><span>{{ it.name }}</span> <span class="dim">{{ it.detail }}</span></div>
           <div class="dim note">
-            <a v-if="l.manage" :href="l.manage" target="_blank" rel="noopener">manage on {{ host }} ↗</a>
+            <a v-if="l.manage" :href="safeUrl(l.manage)" target="_blank" rel="noopener">manage on {{ host }} ↗</a>
             <span v-if="l.keep"> · .mason.toml key: <code>{{ l.keep }}</code></span>
             <span v-if="l.note"> · {{ l.note }}</span>
           </div>

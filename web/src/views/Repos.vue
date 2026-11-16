@@ -1,4 +1,5 @@
 <script setup>
+import { openLink } from '../links.js'
 // Repos: the status table (mason status) and, on the right, a short summary of the selected repo: its state,
 // open PRs and drift. Enter (or "repo page") opens the repo as its own page, where everything else is; the
 // actions on the selected repo sit behind one "actions" button (and their keys).
@@ -92,7 +93,7 @@ const sync = () => sel.value && run(`Open a PR that syncs the shared files into 
 const merge = (now) => sel.value && run(`${now ? 'Merge now' : 'Auto-merge'} the ready PRs of ${sel.value}?`, '/merge', { targets: [sel.value], now })
 const router = useRouter()
 const page = (r) => router.push({ path: '/repo', query: { repo: r?.repo || sel.value } })
-const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
+const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) openLink(url) }
 async function newRepo() {
   const { ask } = await import('../ui.js')
   const name = await ask('New repo (owner/name, or gitlab:group/name)', { input: { placeholder: 'acme/new-service' }, allowDry: false })
