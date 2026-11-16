@@ -47,7 +47,7 @@ function key(e) {
 </script>
 
 <template>
-  <div v-if="prompt.open" class="modal" @click.self="answer(null)">
+  <div v-if="prompt.open" class="modal" :class="{ 'choices-sheet': !!prompt.choices }" @click.self="answer(null)">
     <div ref="box" class="dialog" tabindex="0" role="dialog" aria-modal="true" @keydown="key">
       <div class="q">{{ prompt.question }}</div>
       <pre v-if="prompt.detail" class="text dim" style="margin-top: 8px">{{ prompt.detail }}</pre>
@@ -61,8 +61,11 @@ function key(e) {
       <div class="row" style="margin-top: 12px">
         <template v-if="prompt.choices">
           <div class="choices">
-            <button v-for="(c, i) in prompt.choices" :key="c.value" :class="{ primary: i === 0 }" @click="answer(c.value)">
-              <span class="k">{{ c.key }}</span> {{ c.label }}<span v-if="c.hint" class="dim"> · {{ c.hint }}</span></button>
+            <template v-for="(c, i) in prompt.choices" :key="c.value">
+              <h3 v-if="c.group && c.group !== prompt.choices[i - 1]?.group" class="choice-group">{{ c.group }}</h3>
+              <button :class="{ primary: i === 0 }" @click="answer(c.value)">
+                <span class="k">{{ c.key }}</span> {{ c.label }}<span v-if="c.hint" class="dim"> · {{ c.hint }}</span></button>
+            </template>
             <button @click="answer(null)"><span class="k">esc</span> cancel</button>
           </div>
         </template>

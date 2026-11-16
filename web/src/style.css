@@ -464,3 +464,14 @@ button.wide { width: 100%; text-align: left; }
 .keys-sheet dt { color: var(--accent); white-space: nowrap; }
 .keys-sheet dd { margin: 0; }
 @media (prefers-reduced-motion: reduce) { .keys-sheet { animation: none; } }
+
+/* a list of actions to pick from (the "actions" button, a bump): a sheet on the right on a wide screen, like
+   the side panel, instead of a box in the middle; on a phone it stays the sheet at the bottom */
+@media (min-width: 701px) {
+  .modal.choices-sheet { place-items: stretch end; background: rgba(0, 0, 0, .35); }
+  .modal.choices-sheet .dialog { width: min(440px, 100vw); min-width: 0; max-width: none; height: 100%; overflow: auto; box-sizing: border-box;
+    border-width: 0 0 0 1px; animation: side-in .14s ease-out; }
+  .modal.choices-sheet .choices button { padding: 6px 10px; }
+}
+.choices .choice-group { margin: 6px 0 0; font-weight: 400; color: var(--dim); text-shadow: none; }
+.choices .choice-group::before { content: none; }
