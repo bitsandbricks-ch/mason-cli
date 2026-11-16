@@ -315,7 +315,11 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
 
 /* the tab bar: sections, then the open section's views */
 .navs { display: flex; flex-direction: column; }
-.tabs a.end { margin-left: auto; }
+.tabs a.end { margin-left: auto; order: 2; }
+.tabs a.saved { order: 1; color: var(--accent); opacity: .85; }
+.tabs a.saved.active { opacity: 1; }
+.top .save-view.on { color: var(--accent); border-color: var(--accent); }
+.sheet button.item { width: 100%; text-align: left; border: 0; border-bottom: 1px dotted var(--bg3); background: none; font: inherit; }
 .subtabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); overflow-x: auto; background: var(--bg3); }
 .subtabs a { padding: 4px 10px; color: var(--dim); white-space: nowrap; border-bottom: 2px solid transparent; }
 .subtabs a .k { color: var(--accent); margin-right: 4px; opacity: .8; }

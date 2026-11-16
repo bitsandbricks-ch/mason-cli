@@ -6,7 +6,9 @@ import { THEMES } from './themes.js'
 import { GROUPS, SECTIONS, TABS, sectionOf } from './router.js'
 import { typing } from './keys.js'
 import { arrowKey } from './arrows.js'
-import { closeDetail, detailName, phone, prompt } from './ui.js'
+import { ask, closeDetail, detailName, phone, prompt } from './ui.js'
+import { scope } from './scope.js'
+import { addView, removeView, suggestName, viewPath } from './saved.js'
 import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
 
@@ -122,6 +124,30 @@ async function logout() {
   router.replace('/login')
 }
 
+// Saved views: this page with its filter, under a name, in your settings (every browser has them).
+const views = computed(() => state.me?.settings?.views || [])
+const here = computed(() => viewPath(route, scope))
+const savedHere = computed(() => views.value.find((v) => v.path === here.value))
+const canSave = computed(() => !!TABS.find((t) => t.name === route.name) || !!route.meta.tab)
+async function storeViews(list, done) {
+  const before = views.value
+  state.me.settings = { ...state.me.settings, views: list }
+  try {
+    state.me.settings = { ...state.me.settings, views: (await put('/settings', { views: list })).views }
+    log(done, 'ok')
+  } catch (e) { state.me.settings = { ...state.me.settings, views: before }; log(`saved views: ${e.message}`, 'error') }
+}
+async function saveView() {
+  if (savedHere.value) {
+    const v = savedHere.value
+    if (await ask(`Remove the saved view "${v.name}"?`, { allowDry: false })) await storeViews(removeView(views.value, v.path), `removed the saved view ${v.name}`)
+    return
+  }
+  const label = TABS.find((t) => t.name === current.value)?.label || route.name
+  const name = await ask('Save this view (the page, its filter and group) as', { input: { placeholder: suggestName(label, route, scope) }, allowDry: false })
+  if (name) await storeViews(addView(views.value, name, here.value), `saved the view ${name.trim()}: it is in the tab bar`)
+}
+
 let pointerAt = null // arrows scroll the pane the pointer is in
 window.addEventListener('pointerover', (e) => { pointerAt = e.target }, { passive: true })
 window.addEventListener('keydown', (e) => {
@@ -153,6 +179,15 @@ window.addEventListener('keydown', (e) => {
     <main :class="{ detail }">
       <router-view @rate="refreshRate" />
       <div v-if="menu" class="sheet" role="dialog" aria-label="every view">
+        <section>
+          <h2>saved views</h2>
+          <router-link v-for="v in views" :key="v.path" :to="v.path" class="item" :class="{ active: here === v.path }">
+            <span>★ {{ v.name }}</span><span class="dim">{{ v.path }}</span>
+          </router-link>
+          <button v-if="canSave" class="item" @click="menu = false; saveView()">
+            <span>{{ savedHere ? 'remove' : 'save this view' }}</span><span class="dim">{{ savedHere ? savedHere.name : 'the page you were on, with its filter' }}</span>
+          </button>
+        </section>
         <section v-for="g in GROUPS" :key="g">
           <h2>{{ g }}</h2>
           <router-link v-for="t in TABS.filter((x) => x.group === g)" :key="t.name" :to="t.path" class="item"
@@ -207,6 +242,8 @@ window.addEventListener('keydown', (e) => {
       <Logo :size="18" /><span class="prompt accent">{{ state.me.user.name.toLowerCase().replace(/\s+/g, '') }}@mason</span><span class="dim hide-xs">:~$</span>
       <span class="dim hide-sm">{{ who }}</span>
       <span class="spacer" />
+      <button v-if="canSave" class="save-view" :class="{ on: savedHere }" :title="savedHere ? `saved as ${savedHere.name}: click to remove it` : 'save this page with its filter and group'"
+              @click="saveView">{{ savedHere ? '★' : '☆' }}<span class="hide-sm">&nbsp;{{ savedHere ? 'saved' : 'save view' }}</span></button>
       <span v-if="state.busy" class="warn">working…</span>
       <span class="dim hide-sm" :title="'API calls left at GitHub'">{{ rate }}</span>
       <label class="check" title="every change only shows what it would do">
@@ -221,6 +258,7 @@ window.addEventListener('keydown', (e) => {
                      :title="sct.views.length > 1 ? sct.views.map((v) => v.label).join(', ') : ''">
           <span class="k">{{ sct.key }}</span>{{ sct.label }}
         </router-link>
+        <router-link v-for="v in views" :key="v.path" :to="v.path" class="saved" :class="{ active: here === v.path }" :title="v.path">★ {{ v.name }}</router-link>
       </nav>
       <nav v-if="subtabs.length > 1" class="subtabs" :aria-label="`${section} views`">
         <router-link v-for="t in subtabs" :key="t.to" :to="t.to" :class="{ active: t.active }" :title="t.hint">

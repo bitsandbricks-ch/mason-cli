@@ -85,6 +85,17 @@ def test_me_csrf_settings(op):
     assert c.put("/api/v1/settings", json={"defaults": "/etc"}, headers=H).status_code == 400  # no server folders
     assert c.put("/api/v1/settings", json={"orgs": "acme, mike"}, headers=H).json["orgs"] == ["acme", "mike"]
     assert c.get("/api/v1/settings").json["org_defaults"] is True  # each org's .mason: on unless turned off
+    # saved views: a name and a page of the web app, nothing else
+    assert c.get("/api/v1/settings").json["views"] == []
+    mine = [{"name": "my PRs", "path": "/prs?show=mine&group=acme/"}, {"name": "repos", "path": "/"}]
+    assert c.put("/api/v1/settings", json={"views": mine}, headers=H).json["views"] == mine
+    for bad in ("https://evil.example/", "//evil.example", "/x\\y", "/prs?<script>", "javascript:alert(1)"):
+        r = c.put("/api/v1/settings", json={"views": [{"name": "x", "path": bad}]}, headers=H)
+        assert r.status_code == 400, bad
+    assert c.put("/api/v1/settings", json={"views": [{"name": "", "path": "/"}]}, headers=H).status_code == 400
+    assert c.put("/api/v1/settings", json={"views": [mine[0], mine[0]]}, headers=H).status_code == 400
+    assert c.put("/api/v1/settings", json={"views": "/prs"}, headers=H).status_code == 400
+    assert c.get("/api/v1/settings").json["views"] == mine
     assert c.put("/api/v1/settings", json={"org_defaults": "no"}, headers=H).status_code == 400
     assert c.put("/api/v1/settings", json={"org_defaults": False}, headers=H).json["org_defaults"] is False
 

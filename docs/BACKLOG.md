@@ -56,7 +56,6 @@ move it to "Done" when it ships.
 - A daily digest (email or chat): PRs waiting for you, failed runs, new alerts, new drift.
 - A command palette (Ctrl+K) in the web UI that searches repos, PRs and commands at once.
 - Repo ownership: an owner per repo (from CODEOWNERS or a topic), last activity, and archive candidates.
-- Saved views and filters (e.g. "my PRs needing review across both providers").
 - Bulk actions with a preview: rerun failed runs, update a file in N repos, archive stale repos.
 - OIDC / SAML sign-in for the operator itself in companies, next to GitHub and GitLab.
 - GitHub App mode (installation tokens, fine-grained permissions) as an alternative to OAuth apps.
@@ -92,6 +91,7 @@ move it to "Done" when it ships.
 
 ## Done
 
+- Saved views: a page with its filter and group under a name, in the tab bar (settings.views).
 - TUI keyboard: Tab / Shift+Tab through every panel and dialog, F1-F10 for help, search, filter and sort.
 
 - Workflow hardening: `mason workflows [--fix]`, doctor's `workflows` check and the web app's Workflows tab.
