@@ -36,7 +36,7 @@ export function rank(items, query, limit = 12) {
   out.sort((a, b) => b.s - a.s || (KIND_ORDER[a.it.kind] ?? 9) - (KIND_ORDER[b.it.kind] ?? 9))
   return out.slice(0, limit).map((x) => x.it)
 }
-const KIND_ORDER = { view: 0, repo: 1, pr: 2, issue: 3 }
+const KIND_ORDER = { view: 0, repo: 1, pr: 2, issue: 3, command: 4 }
 
 // what the API's lists hold, as jump targets
 export function itemsFrom({ views = [], repos = [], prs = [], issues = [] }) {
