@@ -5,11 +5,12 @@ import { get, log, post } from '../api.js'
 import { act, forget } from '../load.js'
 import { useRouter } from 'vue-router'
 import { useKeys } from '../keys.js'
-import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
+import { loadGroups, scope, scopeLabel, scoped, scopedRepos } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import { useTrack } from '../side.js'
+import { ago } from '../ui.js'
 
 const output = ref('')
 const found = ref([]) // doctor's result per repo: the table on top, the full output below it
@@ -20,6 +21,7 @@ const columns = [
   { key: 'result', label: 'result', fmt: (_, r) => (r.error ? 'error' : r.ok ? 'ok' : `${r.problems.length} issue${r.problems.length === 1 ? '' : 's'}`),
     cls: (r) => (r.error ? 'bad' : r.ok ? 'ok' : 'warn') },
   { key: 'first', label: 'first issue', card: 'main', fmt: (_, r) => r.error || r.problems[0] || r.where || '', cls: () => '' },
+  { key: 'checked', label: 'checked', fmt: (v) => (v ? ago(new Date(v * 1000).toISOString()) : 'now'), cls: () => 'dim' },
 ]
 const rows = computed(() => found.value.slice().sort((a, b) => (a.ok - b.ok) || (b.problems.length - a.problems.length) || a.repo.localeCompare(b.repo)))
 const page = (r) => router.push({ path: '/repo', query: { repo: r.repo } })
@@ -35,8 +37,20 @@ onMounted(async () => {
 })
 const repos = computed(() => only.value.split(/[\s,]+/).filter(Boolean))
 const where = computed(() => (repos.value.length ? repos.value.join(', ') : scopeLabel()))
-// results of another scope would read as this one's
-watch(() => [scope.provider, scope.group], () => { found.value = []; output.value = '' })
+// The last check of each repo in the filter, kept by the server (it checks nothing): the page opens with
+// what is known instead of empty. Results of another scope would read as this one's, so a new filter reads again.
+const fromKept = ref(false)
+async function kept() {
+  const asked = `${scope.provider}|${scope.group}`
+  try {
+    const [all, names] = await Promise.all([get('/doctor', { quiet: true }), scopedRepos()])
+    if (asked !== `${scope.provider}|${scope.group}` || running.value) return
+    found.value = names.map((n) => all.repos?.[n]).filter(Boolean)
+    fromKept.value = found.value.length > 0
+  } catch { /* the button still checks */ }
+}
+onMounted(kept)
+watch(() => [scope.provider, scope.group], () => { found.value = []; output.value = ''; kept() })
 
 async function doctor() {
   running.value = 'doctor'
@@ -46,6 +60,7 @@ async function doctor() {
     const got = await post('/doctor', { repos: repos.value, ...scoped() })
     output.value = got.text || 'ok'
     found.value = got.repos || []
+    fromKept.value = false
     forget('/status') // the repo list's doctor column
   } catch (e) { output.value = `error: ${e.message}`; log(e.message, 'error') }
   running.value = ''
@@ -79,6 +94,7 @@ useKeys({ c: doctor, f: fix, s: sync })
     </div>
     <div class="scroll pad">
       <div v-if="running" class="warn cursor">running {{ running }} </div>
+      <p v-if="fromKept && !running" class="dim">the last check of each repo; <span class="accent">c</span> checks them again</p>
       <DataTable v-if="found.length" v-model="sel" :columns="columns" :rows="rows" :row-key="(r) => r.repo" style="margin-bottom: 16px" @activate="page" />
       <TextPane :text="output" placeholder="c checks the repos against the defaults: settings, security, release immutability, rulesets (GitHub), protected branches (GitLab) and files. f fixes what it can, s opens PRs with the files." />
     </div>
