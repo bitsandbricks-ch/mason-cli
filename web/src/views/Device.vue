@@ -4,6 +4,7 @@ import ErrorNote from '../components/ErrorNote.vue'
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { get, log, post } from '../api.js'
+import { ago } from '../ui.js'
 
 const route = useRoute()
 const code = ref(String(route.query.code || ''))
@@ -41,7 +42,11 @@ onMounted(lookup)
       <ErrorNote v-if="error" :error="error" />
       <div v-if="done" class="box ok">{{ done }}</div>
       <div v-else-if="info" class="box">
-        <div><span class="accent">{{ info.client }}</span> asks for an API key ({{ info.user_code }}).</div>
+        <div><span class="accent">{{ info.client }}</span> asks for an API key ({{ info.user_code }}), {{ ago(info.created_at) }}<template v-if="info.ip"> from {{ info.ip }}</template>.</div>
+        <p v-if="info.ip && !info.same_address" class="warn">That isn't the address this browser comes from. Fine if your
+          terminal runs on another machine or network; if you didn't start it, deny.</p>
+        <!-- anyone can start a device login and send you its link: the code must be the one your own terminal shows -->
+        <p class="warn">Approve only if your own terminal shows {{ info.user_code }} right now. If someone sent you this link, deny it.</p>
         <div class="row" style="margin-top: 8px">
           <label class="check"><input v-model="scope" type="radio" value="read"> read only</label>
           <label class="check"><input v-model="scope" type="radio" value="write"> read and change repos</label>

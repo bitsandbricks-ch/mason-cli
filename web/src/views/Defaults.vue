@@ -7,6 +7,7 @@ import { ApiError, get, log, post, put } from '../api.js'
 import { useKeys } from '../keys.js'
 import { ask } from '../ui.js'
 import TextPane from '../components/TextPane.vue'
+import { useUnsaved } from '../unsaved.js'
 
 const info = ref(null)
 const TOML = computed(() => info.value?.path || 'mason.toml')
@@ -21,6 +22,7 @@ const templates = ref([])
 const showTemplates = ref(false)
 const editor = ref(null)
 const dirty = computed(() => text.value !== original.value)
+useUnsaved(() => dirty.value, () => `your changes to ${path.value}`)
 
 async function load() {
   missing.value = ''
@@ -54,9 +56,22 @@ async function save(remove = false) {
   if (!path.value) return
   if (!remove && (await check()).length && !(await ask(`${path.value} has problems. Save it anyway?`, { allowDry: false, detail: problems.value.join('\n') }))) return
   const how = mode.value === 'pr' ? 'in a pull request' : 'straight to the branch'
-  if (!(await ask(`${remove ? 'Remove' : 'Save'} ${path.value} ${how}?`, { allowDry: false }))) return
+  const a = await ask(`${remove ? 'Remove' : 'Save'} ${path.value} ${how}?`)
+  if (!a) return
+  if (a === 'dry') { // the server has no dry run for this: nothing is sent
+    result.value = `[dry-run] would ${remove ? 'remove' : 'save'} ${path.value} ${how}`
+    log(result.value, 'ok')
+    return
+  }
   try {
-    const got = await put('/defaults/file', { path: path.value, text: text.value, mode: mode.value, delete: remove, force: true })
+    const body = { path: path.value, text: text.value, mode: mode.value, delete: remove, force: true, base: original.value }
+    let got
+    try { got = await put('/defaults/file', body) } catch (e) {
+      // someone changed the file since it opened here: theirs is lost if this goes on, so ask
+      if (!(e instanceof ApiError) || e.status !== 409) throw e
+      if (!(await ask(`${e.message}. Save yours over it?`, { allowDry: false, detail: 'No keeps your text here: copy it, then open the file again to see the new version.' }))) return
+      got = await put('/defaults/file', { ...body, base: undefined })
+    }
     result.value = `${remove ? 'removed' : 'saved'} ${path.value}: ${got.url}`
     log(result.value, 'ok')
     original.value = text.value

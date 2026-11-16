@@ -19,8 +19,13 @@ const busy = ref(false)
 async function load(fresh = false) {
   busy.value = true
   error.value = ''
-  try { result.value = await get(`/doctor${qs({ repo: props.repo, fresh })}`); emit('result', result.value) } catch (e) { error.value = e.message }
-  finally { busy.value = false }
+  const asked = props.repo // a late answer for the repo shown before is dropped
+  try {
+    const got = await get(`/doctor${qs({ repo: asked, fresh })}`)
+    if (asked !== props.repo) return
+    result.value = got; emit('result', got)
+  } catch (e) { if (asked === props.repo) error.value = e.message }
+  finally { if (asked === props.repo) busy.value = false }
 }
 watch(() => props.repo, () => { result.value = null; load() }, { immediate: true })
 watch(() => props.stamp, () => load())

@@ -218,10 +218,32 @@ def sign_in(name: str, got: dict, link_user: User | None) -> User:
     return user
 
 
+_refreshing: dict[int, threading.Lock] = {}
+_refreshing_guard = threading.Lock()
+
+
+def _soon(ident: Identity) -> bool:
+    return bool(ident.expires_at and ident.expires_at - utcnow() < timedelta(minutes=2) and ident.refresh_enc)
+
+
 def access_token(ident: Identity) -> str:
     """The identity's token, refreshed first when it is about to expire."""
     vault = current_app.config["VAULT"]
-    if ident.expires_at and ident.expires_at - utcnow() < timedelta(minutes=2) and ident.refresh_enc:
+    if not _soon(ident):
+        return vault.decrypt(ident.access_enc)
+    # One refresh per login at a time: two requests at once would both spend the same refresh token,
+    # and GitLab (which rotates them) turns the second one down as an expired login.
+    with _refreshing_guard:
+        lock = _refreshing.setdefault(ident.id, threading.Lock())
+    with lock:
+        db.refresh(ident)  # another request may have refreshed it while this one waited
+        _refresh(ident)
+    return vault.decrypt(ident.access_enc)
+
+
+def _refresh(ident: Identity) -> None:
+    vault = current_app.config["VAULT"]
+    if _soon(ident):
         p = provider(ident.provider)
         data = {"client_id": p.client_id, "grant_type": "refresh_token",
                 "refresh_token": vault.decrypt(ident.refresh_enc)}
@@ -239,7 +261,6 @@ def access_token(ident: Identity) -> str:
             db.commit()
         else:
             raise RuntimeError(f"your {ident.provider} login expired: sign in with {ident.provider} again")
-    return vault.decrypt(ident.access_enc)
 
 
 def connections_url(ident: Identity) -> str:
@@ -329,7 +350,7 @@ def github(user: User):
 
 
 def gitlab(user: User):
-    from mason.server.gitlab import GitLab
+    from mason.gitlab import GitLab
     ident = user.identity("gitlab")
     if ident is None:
         return None
