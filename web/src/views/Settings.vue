@@ -163,7 +163,7 @@ onMounted(load)
         <div class="accent">sessions</div>
         <table class="table">
           <tr v-for="x in sessions" :key="x.id">
-            <td :class="x.current ? 'ok' : ''">{{ x.current ? 'this browser' : x.id }}</td><td class="dim">{{ x.ip }}</td>
+            <td :class="x.current ? 'ok' : ''">{{ x.current ? 'this browser' : `another browser · ${String(x.id).slice(0, 8)}` }}</td><td class="dim">{{ x.ip }}</td>
             <td class="dim" :title="x.user_agent">{{ (x.user_agent || '').slice(0, 60) }}</td><td class="dim">seen {{ ago(x.seen_at) }}</td>
             <td class="right"><button v-if="!x.current" @click="endSession(x)">sign out</button></td>
           </tr>
