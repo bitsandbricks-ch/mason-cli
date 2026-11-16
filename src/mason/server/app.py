@@ -88,7 +88,9 @@ def create_app(op: S.Settings | None = None) -> Flask:
     @app.errorhandler(Exception)
     def _crash(err):
         # a bug: logged with its traceback; the API answers in JSON like every other error, without the details
-        app.logger.exception("unhandled error on %s %s", request.method, request.path)
+        # without line breaks: a path with %0a in it must not write a made-up line into the log
+        app.logger.exception("unhandled error on %s %s", request.method,
+                             request.path.replace("\r", "").replace("\n", ""))
         if request.path.startswith("/api/"):
             return jsonify({"error": "something went wrong in Mason; it is in the server log"}), 500
         return "Internal Server Error", 500
