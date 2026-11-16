@@ -1393,3 +1393,9 @@ def test_graphql_block_strings_read_fast():
         with contextlib.suppress(BadQuery):
             _tokens(bad)
     assert time.monotonic() - start < 1  # a regex took seconds on these (CodeQL: polynomial regex)
+
+
+def test_web_hints_dont_say_gh(op):
+    _, c = op
+    from mason import core, packages
+    assert core.SERVING and "gh auth" not in packages.scope_hint()
