@@ -67,3 +67,12 @@ test('open issues assigned to you come last, old ones marked', () => {
   assert.equal(got[2].why, 'assigned to you, untouched 76d')
   assert.equal(got[2].cls, 'warn')
 })
+
+test('a PR that asks you for a review waits for you', () => {
+  const got = todoItems({ prs: [
+    { repo: 'acme/web', number: 7, title: 'Add login', reviewers: ['Mike', 'team:ops'], merge: 'blocked', checks: 'success' },
+    { repo: 'acme/web', number: 8, title: 'Other', reviewers: ['ann'], merge: 'blocked', checks: 'success' },
+    { repo: 'acme/web', number: 9, title: 'Draft', draft: true, reviewers: ['mike'] },
+  ], me: ['mike'] })
+  assert.deepEqual(got.map((i) => [i.rank, i.why, i.target.number]), [[1, 'asks for your review', 7]])
+})

@@ -1,11 +1,12 @@
 <script setup>
-// To do: everything across your repos that waits for you, most urgent first: runs to approve, what is broken
-// (CI on the default branch, conflicts, failing checks, a failed release run), PRs ready to merge, drift
-// against the defaults, versions not released yet and open issues assigned to you. Enter opens one (in the side panel on a wide screen,
-// where ↑↓ then walk through the list); the views it comes from have the rest.
+// To do: everything across your repos that waits for you, most urgent first: runs to approve and PRs that ask
+// you for a review, what is broken (CI on the default branch, conflicts, failing checks, a failed release run),
+// PRs ready to merge, drift against the defaults, versions not released yet and open issues assigned to you.
+// Enter opens one (in the side panel on a wide screen, where ↑↓ then walk through the list).
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { cached, useLoad } from '../load.js'
+import { state } from '../api.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
 import { pageRoute, encodeSide } from '../panel.js'
@@ -23,7 +24,8 @@ const { data, error, loading, load } = useLoad(async (q, fresh) => {
   missing.value = names.filter((_, i) => got[i].status === 'rejected')
   if (missing.value.length === names.length) throw got[0].reason
   const [status, prs, approvals, releases, issues] = got.map((g) => (g.status === 'fulfilled' ? g.value : null))
-  return todoItems({ status, prs: prs?.prs, approvals: approvals?.approvals, releases: releases?.releases, issues: issues?.issues })
+  return todoItems({ status, prs: prs?.prs, approvals: approvals?.approvals, releases: releases?.releases, issues: issues?.issues,
+    me: (state.me?.identities || []).filter((i) => i.provider === 'github').map((i) => i.login) })
 })
 loadGroups()
 const sel = ref(null)

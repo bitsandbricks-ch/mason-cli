@@ -130,6 +130,8 @@ def test_lists(op):
     prs = c.get("/api/v1/prs").json["prs"]
     assert {p["number"] for p in prs if p["repo"] == "acme/web"} == {7, 8, 9}
     assert next(p for p in prs if p["number"] == 9)["conflicts"]
+    seven = next(p for p in prs if p["repo"] == "acme/web" and p["number"] == 7)
+    assert seven["reviewers"] == ["mike", "team:ops"]  # who it waits on for a review (to do: "asks for your review")
     assert "blocked: required checks" in c.get("/api/v1/pr?repo=acme/web&number=7").json["text"]
     assert any(r["repo"] == "acme/web" for r in c.get("/api/v1/runs?repo=web").json["runs"])
     waits = c.get("/api/v1/approvals").json["approvals"]

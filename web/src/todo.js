@@ -6,7 +6,8 @@ const FAILED = /^(failure|failed|error|timed_out|startup_failure)$/i
 
 // rank: lower comes first. 1 something waits for you to act, 2 broken, 3 ready to go, 4 drift and releases,
 // 5 open issues assigned to you (issues: the list of /issues?mine=1; now: for their age, a test passes its own)
-export function todoItems({ status = null, prs = [], approvals = [], releases = [], issues = [], now = Date.now() } = {}) {
+// me: your logins (a PR that asks one of them for a review waits for you)
+export function todoItems({ status = null, prs = [], approvals = [], releases = [], issues = [], me = [], now = Date.now() } = {}) {
   const out = []
   const add = (rank, why, what, target, cls = 'warn') => out.push({ rank, why, what, repo: target.repo, target, cls })
   const ref = (p) => `${p.repo}${p.provider === 'gitlab' ? '!' : '#'}${p.number}`
@@ -28,6 +29,11 @@ export function todoItems({ status = null, prs = [], approvals = [], releases = 
   for (const p of prs) {
     if (!p?.repo || !p.number || p.draft) continue
     const target = { kind: 'pr', repo: p.repo, number: p.number }
+    const mine = new Set(me.map((x) => String(x).toLowerCase()))
+    if ((p.reviewers || []).some((r) => mine.has(String(r).toLowerCase()))) {
+      add(1, 'asks for your review', `${ref(p)} ${p.title || ''}`.trim(), target)
+      continue
+    }
     if (p.conflicts) add(2, 'has merge conflicts', `${ref(p)} ${p.title || ''}`.trim(), target, 'bad')
     else if (FAILED.test(String(p.checks || ''))) add(2, 'checks fail', `${ref(p)} ${p.title || ''}`.trim(), target, 'bad')
     else if (/changes requested/i.test(String(p.review || ''))) add(2, 'changes requested', `${ref(p)} ${p.title || ''}`.trim(), target, 'warn')

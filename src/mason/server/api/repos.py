@@ -236,6 +236,7 @@ def prs():
                             "review": (p.get("reviewDecision") or "").lower().replace("_", " "),
                             "auto": bool(p.get("autoMergeRequest")), "merge": R.merge_word(p),
                             "author": (p.get("author") or {}).get("login", ""),
+                            "reviewers": reviewers(p),
                             "branch": p.get("headRefName", "")})
             for p in (node.get("merged") or {}).get("nodes") or []:
                 merged.append({"repo": repo, "provider": "github", "number": p["number"], "title": p["title"],
@@ -260,6 +261,18 @@ def pr():
                 abort(409, "connect GitLab first")
             return jsonify({"text": capture_rate(GL.mr_detail, gl, repo, number, diff)})
         return jsonify({"text": capture_rate(R.pr_detail, repo, number, diff, request.args.get("body") == "1")})
+
+
+def reviewers(p: dict) -> list[str]:
+    """Who the PR waits on for a review: logins, and teams as team:slug."""
+    out = []
+    for n in (p.get("reviewRequests") or {}).get("nodes") or []:
+        r = (n or {}).get("requestedReviewer") or {}
+        if r.get("login"):
+            out.append(r["login"])
+        elif r.get("slug"):
+            out.append(f"team:{r['slug']}")
+    return out
 
 
 @bp.post("/merge")

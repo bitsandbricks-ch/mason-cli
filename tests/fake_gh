@@ -200,6 +200,11 @@ def node(repo):
         "releases": {"nodes": [{"tagName": "v1.2.0"}, {"tagName": "v1.10.0"}] if repo == "acme/api" else []},
         "pullRequests": {"totalCount": len(prs), "nodes": [dict(p, reviewDecision=None, headRefName="feat",
                                                                 author={"login": "ann"},
+                                                                **({"reviewRequests": {"nodes": [
+                                                                    {"requestedReviewer": {"login": "mike"}},
+                                                                    {"requestedReviewer": {"slug": "ops"}}]}}
+                                                                   if repo == "acme/web" and p["number"] == 7
+                                                                   and "reviewRequests" in QUERY else {}),
                                                                 commits={"nodes": [{"commit": {"statusCheckRollup": {
                                                                     "state": "PENDING"}}}]}) for p in prs]},
         "merged": {"nodes": []},
