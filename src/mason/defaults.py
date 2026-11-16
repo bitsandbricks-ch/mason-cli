@@ -74,7 +74,7 @@ RULESET_DIRS = (".github/rulesets", ".mason/rulesets")  # a repo's own rulesets;
 def ruleset_files(repo: str, ref: str | None = None) -> dict[str, tuple[str, dict]]:
     """The repo's own rulesets, .github/rulesets/*.json and .mason/rulesets/*.json, by ruleset name:
     {name: (path, ruleset)}."""
-    q = f"?ref={ref}" if ref else ""
+    q = f"?ref={urllib.parse.quote(ref, safe='')}" if ref else ""
     out = {}
     for folder in RULESET_DIRS:
         try:
@@ -95,7 +95,7 @@ def ruleset_files(repo: str, ref: str | None = None) -> dict[str, tuple[str, dic
 
 def blob_shas(repo: str, ref: str = "HEAD") -> dict[str, str]:
     """{path: blob sha} of every file on `ref`, in one call."""
-    t = api("GET", f"/repos/{repo}/git/trees/{ref}?recursive=1") or {}
+    t = api("GET", f"/repos/{repo}/git/trees/{urllib.parse.quote(ref)}?recursive=1") or {}
     return {e["path"]: e["sha"] for e in t.get("tree") or [] if e.get("type") == "blob"}
 
 

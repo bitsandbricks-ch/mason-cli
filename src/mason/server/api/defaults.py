@@ -146,7 +146,7 @@ def validate(path: str, text: str) -> list[str]:
 def read_tree(gl, repo: str, ref: str | None) -> list[str]:
     if repo.startswith(GL.PREFIX):
         return sorted(gl.blobs(repo, ref)) if gl else []
-    t = core.api("GET", f"/repos/{repo}/git/trees/{ref or 'HEAD'}?recursive=1") or {}
+    t = core.api("GET", f"/repos/{repo}/git/trees/{urllib.parse.quote(ref or 'HEAD')}?recursive=1") or {}
     return sorted(e["path"] for e in t.get("tree") or [] if e.get("type") == "blob")
 
 
