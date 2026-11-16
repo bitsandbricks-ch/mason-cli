@@ -128,6 +128,7 @@ def test_lists(op):
     assert next(p for p in prs if p["number"] == 9)["conflicts"]
     # who a PR asks for a review: people only (a team, or a reviewer the token can't see, is left out)
     assert {p["number"]: p["requested"] for p in prs if p["repo"] == "acme/web"} == {7: ["mike"], 8: [], 9: []}
+    assert next(p for p in prs if p["number"] == 9)["updated"] == "2026-09-01T09:00:00Z"  # the PR list's age
     assert "blocked: required checks" in c.get("/api/v1/pr?repo=acme/web&number=7").json["text"]
     assert any(r["repo"] == "acme/web" for r in c.get("/api/v1/runs?repo=web").json["runs"])
     waits = c.get("/api/v1/approvals").json["approvals"]
