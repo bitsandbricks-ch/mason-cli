@@ -28,6 +28,8 @@ const { query, back } = usePage('/')
 const router = useRouter()
 const repo = computed(() => String(query.value.repo || ''))
 const gitlab = computed(() => repo.value.startsWith('gitlab:'))
+// no GitLab (or GitHub) account to read it with: one card that says how, instead of an error in every panel
+const needs = computed(() => (/^error: connect (GitLab|GitHub)\b/i.exec(detail.value) || [])[1] || '')
 const detail = ref('')
 const output = ref('')
 const form = ref('') // '', 'release' or 'tag'
@@ -152,11 +154,17 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
       <button class="hide-xs" @click="back"><span class="k">esc</span> back</button>
       <span class="dim hide-xs">repos ›</span>
       <span class="spacer" />
-      <ActionList ref="sheet" class="show-compact" :actions="actions" :title="repo" compact />
+      <ActionList v-if="!needs" ref="sheet" class="show-compact" :actions="actions" :title="repo" compact />
       <button class="any" @click="reload"><span class="k">r</span> reload</button>
     </div>
     <StatusHeader :title="repo" :url="info?.url" :badges="badges" :next="next" />
-    <div class="split page">
+    <div v-if="needs" class="pad">
+      <div class="box">
+        <p>Mason reads {{ repo }} with your {{ needs }} account, and none is connected yet.</p>
+        <router-link class="btn primary" to="/settings">connect {{ needs }} in settings</router-link>
+      </div>
+    </div>
+    <div v-else class="split page">
       <div class="pad">
         <div class="hide-xs"><h2>actions</h2><ActionList :actions="actions" /></div>
         <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" @result="(d) => (doctor = d)" @run="fixFrom" />
@@ -184,6 +192,6 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
         <TextPane v-if="rest || !info" :text="info ? rest : detail" placeholder="loading…" />
       </div>
     </div>
-    <EventLog ref="log" band :repo="repo" kind="repo" :title="repo" />
+    <EventLog v-if="!needs" ref="log" band :repo="repo" kind="repo" :title="repo" />
   </div>
 </template>
