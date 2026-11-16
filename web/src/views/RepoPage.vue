@@ -114,8 +114,10 @@ const actions = computed(() => [
   { k: 'o', group: 'elsewhere', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: open },
 ])
 async function loadReleases(fresh = false, quiet = false) {
+  const name = repo.value
   try {
-    const p = await cached(`/release${qs({ repo: repo.value, fresh })}`, fresh, { quiet })
+    const p = await cached(`/release${qs({ repo: name, fresh })}`, fresh, { quiet })
+    if (name !== repo.value) return // the panel moved on to another repo
     suggest.value = p.suggest; publishes.value = p.publishes || ''; version.value = p.version || null; busy.value = !!p.busy
   } catch { suggest.value = suggest.value || 'v0.1.0' }
 }

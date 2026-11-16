@@ -18,7 +18,8 @@ const also = ref({})
 const id = (r) => `${r.env || ''}/${r.name}`
 async function load() {
   error.value = ''
-  try { rows.value = (await get(`/repo/secrets${qs({ repo: props.repo })}`)).secrets || [] } catch (e) { error.value = e.message; rows.value = [] }
+  const asked = props.repo // a late answer for the repo shown before is dropped
+  try { const got = (await get(`/repo/secrets${qs({ repo: asked })}`)).secrets || []; if (asked === props.repo) rows.value = got } catch (e) { if (asked === props.repo) { error.value = e.message; rows.value = [] } }
 }
 watch(() => props.repo, () => { values.value = {}; also.value = {}; load() }, { immediate: true })
 

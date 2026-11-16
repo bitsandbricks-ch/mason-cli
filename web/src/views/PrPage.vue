@@ -40,18 +40,25 @@ function parse(text) {
 async function load() {
   if (!repo.value || !number.value) return
   if (!detail.value) detail.value = '…'
+  // the panel can move on to another PR while this one is asked: its late answer is dropped
+  const asked = `${repo.value}#${number.value}:${diff.value}`
+  const still = () => asked === `${repo.value}#${number.value}:${diff.value}`
   try {
     const t = (await get(`/pr${qs({ repo: repo.value, number: number.value, diff: diff.value })}`)).text
+    if (!still()) return
     detail.value = t
     state.value = parse(t)
-  } catch (e) { detail.value = `error: ${e.message}` }
+  } catch (e) { if (still()) detail.value = `error: ${e.message}` }
 }
 // whether you may merge past the base branch's rules (GitHub's bypass), rule by rule
 const bypass = ref(null)
 async function loadBypass() {
   bypass.value = null
   if (gitlab.value || !repo.value || !number.value) return
-  try { bypass.value = await get(`/pr/bypass${qs({ repo: repo.value, number: number.value })}`, { quiet: true }) } catch { bypass.value = null }
+  const asked = `${repo.value}#${number.value}`
+  let got = null
+  try { got = await get(`/pr/bypass${qs({ repo: repo.value, number: number.value })}`, { quiet: true }) } catch { got = null }
+  if (asked === `${repo.value}#${number.value}`) bypass.value = got
 }
 watch([repo, number], () => { detail.value = ''; output.value = ''; load(); loadBypass() }, { immediate: true })
 watch(diff, load)

@@ -23,7 +23,8 @@ const gitlab = computed(() => props.repo.startsWith('gitlab:'))
 const mark = computed(() => (gitlab.value ? '!' : '#'))
 async function load() {
   error.value = ''
-  try { data.value = await get(`/repo/branches${qs({ repo: props.repo })}`) } catch (e) { error.value = e.message; data.value = null }
+  const asked = props.repo // a late answer for the repo shown before is dropped
+  try { const got = await get(`/repo/branches${qs({ repo: asked })}`); if (asked === props.repo) data.value = got } catch (e) { if (asked === props.repo) { error.value = e.message; data.value = null } }
 }
 watch(() => props.repo, () => { data.value = null; filter.value = ''; all.value = false; load() }, { immediate: true })
 

@@ -24,7 +24,8 @@ const busy = ref(false)
 
 async function load() {
   error.value = ''
-  try { data.value = await get(`/repo/settings${qs({ repo: props.repo })}`) } catch (e) { error.value = e.message; data.value = null }
+  const asked = props.repo // a late answer for the repo shown before is dropped
+  try { const got = await get(`/repo/settings${qs({ repo: asked })}`); if (asked === props.repo) data.value = got } catch (e) { if (asked === props.repo) { error.value = e.message; data.value = null } }
 }
 watch(() => props.repo, () => { data.value = null; edits.value = {}; open.value = {}; load() }, { immediate: true })
 

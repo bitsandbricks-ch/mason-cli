@@ -31,7 +31,9 @@ const failed = computed(() => ['failure', 'failed', 'timed_out', 'cancelled', 'c
 async function load() {
   if (!repo.value || !id.value) return
   if (!detail.value) detail.value = '…'
-  try { detail.value = (await get(`/run${qs({ repo: repo.value, id: id.value })}`)).text } catch (e) { detail.value = `error: ${e.message}` }
+  const asked = `${repo.value}@${id.value}`
+  const still = () => asked === `${repo.value}@${id.value}` // the panel moved on to another run
+  try { const t = (await get(`/run${qs({ repo: repo.value, id: id.value })}`)).text; if (still()) detail.value = t } catch (e) { if (still()) detail.value = `error: ${e.message}` }
 }
 watch([repo, id], () => { detail.value = ''; output.value = ''; load() }, { immediate: true })
 const timer = setInterval(() => { if (running.value && !document.hidden) { load(); log.value?.refresh() } }, 10_000)
