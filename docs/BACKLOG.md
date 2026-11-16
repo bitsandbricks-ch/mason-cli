@@ -11,9 +11,10 @@ move it to "Done" when it ships.
   operator its commands don't run with the signed-in user's token. Port it to `mason.core`
   (transport-aware `api`/`graphql`), read the Hubra token with `plugins.secret("hubra_token")`, and expose
   `web_secrets()`, `web_actions()` (sign, release, verify) and `web_commands`. Follow-up PR in hubra-cli.
-- **GitLab in the CLI and TUI.** The operator speaks GitLab; `mason status/prs/runs/doctor` on a laptop still
-  only know GitHub. Move `operator/gitlab.py` behind the transport so the CLI can use a GitLab token or the
-  operator.
+- **GitLab in the TUI and through the operator.** The CLI reaches GitLab through glab (see the README's GitLab
+  section); the TUI still lists GitHub only, and `mason login` users have no GitLab: that needs a GitLab proxy in
+  the operator next to the GitHub one (server/api/proxy.py). Also still GitHub only in the CLI: rerun, packages,
+  workflows, auto, bump, release, secrets, settings, branches and new.
 - **Signed official plugin index.** Make the project key, sign `plugins/index.json` in CI, ship the public
   key in `src/mason/keys/`.
 - **Live updates.** GitHub/GitLab webhooks (or a GitHub App) into the operator, pushed to the browser with
@@ -91,6 +92,8 @@ move it to "Done" when it ships.
 - The same F3/F4/F6 search, filter and sort in the web app's lists.
 
 ## Done
+
+- GitLab in the CLI, through glab: `gitlab_groups` in your config, `gitlab:` names in every command that reads GitLab.
 
 - TUI keyboard: Tab / Shift+Tab through every panel and dialog, F1-F10 for help, search, filter and sort.
 

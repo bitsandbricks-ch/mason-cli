@@ -6,6 +6,7 @@ const v = (name) => () => import(`./views/${name}.vue`)
 // keys stay the same, so links and muscle memory still work. group and hint: the phone menu, which lists
 // every view by group with what it is for.
 export const TABS = [
+  { path: '/todo', name: 'todo', label: 'to do', key: '0', section: 'todo', group: 'work', hint: 'what waits for you, most urgent first' },
   { path: '/', name: 'repos', label: 'repos', key: '1', section: 'repos', group: 'work', hint: 'every repo: drift, PRs, CI' },
   { path: '/prs', name: 'prs', label: 'pull requests', key: '2', section: 'prs', group: 'work', hint: 'open pull and merge requests' },
   { path: '/issues', name: 'issues', label: 'issues', key: 'I', section: 'issues', group: 'work', hint: 'issues across your repos' },
@@ -30,6 +31,7 @@ export const GROUPS = ['work', 'health', 'setup']
 // The tab bar: one entry per section, opening its first view. Detail pages (a repo, a PR, a run) light up
 // their section through meta.tab.
 export const SECTIONS = [
+  { name: 'todo', label: 'to do' },
   { name: 'repos', label: 'repos' },
   { name: 'prs', label: 'pull requests' },
   { name: 'issues', label: 'issues' },
@@ -44,7 +46,7 @@ export const SECTIONS = [
 export const sectionOf = (tab) => TABS.find((t) => t.name === tab)?.section || (tab === 'plugin-tab' || tab === 'operator' ? 'setup' : '')
 
 const VIEWS = {
-  repos: 'Repos', prs: 'Prs', issues: 'Issues', runs: 'Runs', approvals: 'Approvals', releases: 'Releases', packages: 'Packages',
+  todo: 'Todo', repos: 'Repos', prs: 'Prs', issues: 'Issues', runs: 'Runs', approvals: 'Approvals', releases: 'Releases', packages: 'Packages',
   security: 'Security', checks: 'Checks', workflows: 'Workflows', stats: 'Stats', defaults: 'Defaults', console: 'Console',
   plugins: 'Plugins', market: 'Market', settings: 'Settings', audit: 'Audit',
 }
@@ -65,3 +67,4 @@ export const router = createRouter({
     { path: '/:rest(.*)*', redirect: '/' },
   ],
 })
+

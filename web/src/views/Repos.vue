@@ -15,7 +15,10 @@ import DoctorPanel from '../components/DoctorPanel.vue'
 import TextPane from '../components/TextPane.vue'
 import ActionList from '../components/ActionList.vue'
 import StatusHeader from '../components/StatusHeader.vue'
-import { stateClass } from '../ui.js'
+import { ask, choose, stateClass } from '../ui.js'
+import { alive } from '../pick.js'
+import { useTrack } from '../side.js'
+import { openOut } from '../links.js'
 
 const emit = defineEmits(['rate'])
 const { data, error, loading, load } = useLoad((q) => `/status${q}`)
@@ -85,20 +88,30 @@ watch(sel, async (repo) => {
 })
 watch(() => data.value, () => emit('rate'))
 
-const run = async (q, path, body) => { const t = await act(q, path, body); if (t !== null) { output.value = t; load(true) } }
-const doctor = () => sel.value && run(`Check ${sel.value} against the defaults?`, '/doctor', { repos: [sel.value] })
-const fix = () => sel.value && run(`Fix the drift of ${sel.value} (settings, security, rulesets)?`, '/doctor', { repos: [sel.value], fix: true })
-const sync = () => sel.value && run(`Open a PR that syncs the shared files into ${sel.value}?`, '/sync', { repos: [sel.value] })
-const merge = (now) => sel.value && run(`${now ? 'Merge now' : 'Auto-merge'} the ready PRs of ${sel.value}?`, '/merge', { targets: [sel.value], now })
+const run = async (q, path, body, opts) => { const t = await act(q, path, body, opts); if (t !== null) { output.value = t; load(true) } }
+// what c f s m M act on: the picked repos when there are any (space or the boxes), else the selected one
+const picked = ref([])
+watch(rows, (list) => { picked.value = alive(picked.value, list.map((r) => r.repo)) })
+const them = () => (picked.value.length ? picked.value.slice() : sel.value ? [sel.value] : [])
+const named = (list) => (list.length === 1 ? list[0] : `${list.length} repos`)
+const many = (list) => (list.length > 1 ? { detail: list.join('\n') } : {})
+const runOn = (q, path, body) => { const list = them(); if (list.length) run(q(named(list)), path, body(list), many(list)) }
+const doctor = () => runOn((n) => `Check ${n} against the defaults?`, '/doctor', (repos) => ({ repos }))
+const fix = () => runOn((n) => `Fix the drift of ${n} (settings, security, rulesets)?`, '/doctor', (repos) => ({ repos, fix: true }))
+const sync = () => runOn((n) => `Open a PR that syncs the shared files into ${n}?`, '/sync', (repos) => ({ repos }))
+const merge = (now) => runOn((n) => `${now ? 'Merge now' : 'Auto-merge'} the ready PRs of ${n}?`, '/merge', (targets) => ({ targets, now }))
 const router = useRouter()
+useTrack(() => sel.value && { kind: 'repo', repo: sel.value }, { sel, kind: 'repo', key: (t) => (t.kind === 'repo' ? t.repo : null) })
 const page = (r) => router.push({ path: '/repo', query: { repo: r?.repo || sel.value } })
-const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
+const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; openOut(url) }
 async function newRepo() {
-  const { ask } = await import('../ui.js')
   const name = await ask('New repo (owner/name, or gitlab:group/name)', { input: { placeholder: 'acme/new-service' }, allowDry: false })
   if (!name) return
-  const vis = await ask(`Make ${name} public? (n: private)`, { allowDry: false })
-  await run(`Create ${name} the way its group wants it?`, '/new', { repo: name, public: vis === 'yes' })
+  // a choice, not y/n: "n" meant private, and Esc made a private repo instead of stopping
+  const vis = await choose(`Who may see ${name}?`, [{ key: 'p', value: 'private', label: 'private', hint: 'only those you add' },
+    { key: 'P', value: 'public', label: 'public', hint: 'everyone' }])
+  if (!vis) return
+  await run(`Create ${name} (${vis}) the way its group wants it?`, '/new', { repo: name, public: vis === 'public' })
 }
 const sheet = ref(null)
 const releases = () => sel.value && router.push({ path: '/release', query: { repo: sel.value } })
@@ -125,9 +138,17 @@ useKeys({ '.': () => sheet.value?.pick(), l: () => sel.value && router.push({ pa
       <ActionList ref="sheet" :actions="actions" :title="sel || 'actions'" :disabled="!sel" compact />
       <button class="primary" :disabled="!sel" @click="page()"><span class="k">⏎</span> repo page</button>
     </div>
+    <div v-if="picked.length" class="picked-bar" role="status">
+      <span><b>{{ picked.length }}</b> picked</span>
+      <button @click="doctor"><span class="k">c</span> check them</button>
+      <button @click="fix"><span class="k">f</span> fix their drift</button>
+      <button @click="sync"><span class="k">s</span> sync their files</button>
+      <button @click="merge(false)"><span class="k">m</span> auto-merge their ready PRs</button>
+      <button @click="picked = []">clear</button>
+    </div>
     <div class="split ld">
       <div>
-        <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo"
+        <DataTable v-model="sel" v-model:picked="picked" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo"
                    :empty="loading ? 'loading…' : 'no repos yet: add your orgs or a defaults repo under setup › settings'" @activate="page" />
       </div>
       <div class="preview">

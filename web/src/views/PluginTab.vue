@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 import { get, log } from '../api.js'
 import DataTable from '../components/DataTable.vue'
 import TextPane from '../components/TextPane.vue'
+import { safeHref } from '../links.js'
 
 const route = useRoute()
 const tab = ref(null)
@@ -27,7 +28,7 @@ watch(sel, async (key) => {
   url.value = ''
   if (key == null) return
   try {
-    const got = await get(`/plugins/${route.params.plugin}/tabs/${route.params.tab}?key=${encodeURIComponent(key)}`)
+    const got = await get(`/plugins/${encodeURIComponent(route.params.plugin)}/tabs/${encodeURIComponent(route.params.tab)}?key=${encodeURIComponent(key)}`)
     if (sel.value === key) { text.value = got.text; url.value = got.url || '' }
   } catch (e) { text.value = `error: ${e.message}` }
 })
@@ -36,7 +37,7 @@ watch(sel, async (key) => {
 <template>
   <div class="view">
     <div class="toolbar"><span class="accent">{{ route.params.plugin }}</span><span>{{ tab?.title }}</span>
-      <span class="spacer" /><a v-if="url" :href="url" target="_blank" rel="noopener noreferrer">open ↗</a></div>
+      <span class="spacer" /><a v-if="safeHref(url)" :href="safeHref(url)" target="_blank" rel="noopener noreferrer">open ↗</a></div>
     <div class="split ld">
       <div class="scroll"><DataTable v-model="sel" :columns="[{ key: 'label', label: 'item' }]" :rows="rows" :row-key="(r) => r.key" /></div>
       <div class="scroll pad"><TextPane :text="text" placeholder="pick a row" /></div>

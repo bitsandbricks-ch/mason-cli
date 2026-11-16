@@ -192,9 +192,10 @@ class Source:
         return file_on(self.where, path, self.ref)
 
     def _gitlab(self):
-        gl = GITLAB.get()
+        from mason import glab
+        gl = glab.client()
         if gl is None:
-            raise RuntimeError(f"{self.where}: GitLab defaults need a GitLab login (the operator)")
+            raise RuntimeError(f"{self.where}: GitLab defaults need a GitLab login (connect GitLab in Mason)")
         return gl
 
     def tree(self, folder: str) -> list[str]:
@@ -751,7 +752,11 @@ def org_defaults(where: str) -> OrgDefaults | None:
     one user's lookup is never served to another, and a repo you can't read is simply absent."""
     gitlab = where.startswith("gitlab:")
     if gitlab:
-        gl = GITLAB.get()
+        from mason import glab
+        try:
+            gl = glab.client()
+        except RuntimeError:  # no glab, or not signed in: like a repo you can't read
+            gl = None
         if gl is None:
             return None
         cache = gl.caches.space("org_defaults") if hasattr(gl.caches, "space") else gl.caches.setdefault(
