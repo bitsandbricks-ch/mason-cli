@@ -1428,3 +1428,38 @@ def test_old_database_gets_the_device_ip_column(tmp_path):
     assert "ip" in {c["name"] for c in inspect(engine).get_columns("device_grants")}
     models.db.remove()
     engine.dispose()
+
+
+def test_one_token_refresh_at_a_time(op, monkeypatch):
+    app, _ = op
+    import threading
+    import time
+    from datetime import timedelta
+
+    from mason.server import oauth
+    from mason.server.models import Identity, db, utcnow
+    with app.app_context():
+        ident = db.query(Identity).first()
+        ident.refresh_enc = app.config["VAULT"].encrypt("r1")
+        ident.expires_at = utcnow() + timedelta(seconds=30)  # about to expire
+        ident_id = ident.id
+        db.commit()
+    calls = []
+
+    def fake(method, url, data=None, token=None, headers=None):
+        calls.append(data["refresh_token"])
+        time.sleep(0.2)  # the other request arrives meanwhile
+        return 200, {"access_token": f"new-{len(calls)}", "refresh_token": f"r{len(calls) + 1}", "expires_in": 7200}
+    monkeypatch.setattr(oauth, "_http", fake)
+    got = []
+
+    def use():
+        with app.app_context():
+            got.append(oauth.access_token(db.get(Identity, ident_id)))
+            db.remove()
+    threads = [threading.Thread(target=use) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert calls == ["r1"] and got == ["new-1"] * 3  # one refresh; the others use its token
