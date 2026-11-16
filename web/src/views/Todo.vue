@@ -16,6 +16,7 @@ import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 
 const missing = ref([]) // lists that couldn't load: the to do may lack their items
+const repoCount = ref(null) // no repos at all (and no filter): the first visit, so say how to start
 const { data, error, loading, load } = useLoad(async (q, fresh) => {
   const names = ['status', 'prs', 'approvals', 'releases', 'issues']
   const extra = { issues: 'mine=1&state=open' } // your open issues only
@@ -24,6 +25,7 @@ const { data, error, loading, load } = useLoad(async (q, fresh) => {
   missing.value = names.filter((_, i) => got[i].status === 'rejected')
   if (missing.value.length === names.length) throw got[0].reason
   const [status, prs, approvals, releases, issues] = got.map((g) => (g.status === 'fulfilled' ? g.value : null))
+  repoCount.value = status ? (status.rows || []).length : null
   return todoItems({ status, prs: prs?.prs, approvals: approvals?.approvals, releases: releases?.releases, issues: issues?.issues,
     me: (state.me?.identities || []).filter((i) => i.provider === 'github').map((i) => i.login) })
 })
@@ -57,7 +59,17 @@ useKeys({ r: () => load(true), p: () => page() })
       <button class="primary" :disabled="!current" @click="page()"><span class="k">⏎</span> open</button>
     </div>
     <div v-if="missing.length" class="pad warn">couldn't read {{ missing.join(', ') }}: their items may be missing (r tries again)</div>
-    <div class="scroll">
+    <div v-if="repoCount === 0 && !scope.group && scope.provider === 'all' && !loading" class="pad">
+      <div class="box" style="max-width: 72ch">
+        <div class="accent">nothing to look after yet</div>
+        <ol>
+          <li>Under <router-link to="/settings">setup › settings</router-link>, name your GitHub orgs (or single repos) and GitLab groups.</li>
+          <li>Optionally a defaults repo with <span class="accent">mason.toml</span>, so checks can tell drift.</li>
+          <li>Come back here: what waits for you shows up, most urgent first.</li>
+        </ol>
+      </div>
+    </div>
+    <div v-else class="scroll">
       <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.key"
                  :empty="loading ? 'loading…' : '✓ nothing waits for you: no approvals, nothing broken, no drift'" @activate="page" />
     </div>
