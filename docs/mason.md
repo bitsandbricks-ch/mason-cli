@@ -117,7 +117,8 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   checks, fix the drift, sync) and the repo pickers of new releases and issues follow it too.
 - **Approvals** leave out runs nobody needs any more: a run of a PR that was closed or got newer commits, a run
   a newer one of the same workflow and branch replaced, and on GitLab manual jobs of older pipelines and older
-  blocked deployments of an environment.
+  blocked deployments of an environment. Enter opens the run (beside the list on a wide screen), and a run
+  page that waits for your review has **a** approve on it too.
 - **Caching:** a tab you go back to shows its last answer at once and asks again after a minute; `r` and
   every change ask again right away.
 - **Follow-ups:** a change shows without `r`. Marking a PR ready or turning on auto-merge changes its row at

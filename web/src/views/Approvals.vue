@@ -1,6 +1,8 @@
 <script setup>
 // What waits for you: environments you review, outside contributors' runs, GitLab deployments and manual jobs.
+// Enter opens the run (beside the list on a wide screen) like the other lists do; a approves.
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
 import { loadGroups, scope } from '../scope.js'
@@ -9,6 +11,8 @@ import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import { openOut } from '../links.js'
+import { encodeSide, pageRoute } from '../panel.js'
+import { useTrack } from '../side.js'
 
 const { data, error, loading, load } = useLoad((q) => `/approvals${q}`)
 loadGroups()
@@ -31,7 +35,13 @@ async function approve(r = current.value) {
   if (text !== null) { output.value = text; load(true) }
 }
 const open = (r) => openOut(r?.url)
-useKeys({ r: () => load(true), a: () => approve(), o: () => open(current.value) })
+// a GitLab deployment or manual job has no page of its own: its repo's
+const targetOf = (r) => (!r.kind || r.kind === 'run' ? { kind: 'run', repo: r.repo, id: r.id } : { kind: 'repo', repo: r.repo })
+const router = useRouter()
+const page = (r) => { const x = r || current.value; if (x) router.push(pageRoute(targetOf(x))) }
+useTrack(() => current.value && targetOf(current.value),
+  { sel, kind: '*', key: (t) => rows.value.find((r) => encodeSide(targetOf(r)) === encodeSide(t))?.key ?? null })
+useKeys({ r: () => load(true), a: () => approve(), o: () => open(current.value), p: () => page() })
 </script>
 
 <template>
@@ -41,10 +51,11 @@ useKeys({ r: () => load(true), a: () => approve(), o: () => open(current.value) 
       <span class="spacer" />
       <button class="primary" :disabled="!current" @click="approve()"><span class="k">a</span> approve</button>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
+      <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ no run waits for your approval'" @activate="approve" /></div>
-      <div class="pad"><TextPane :text="output" placeholder="a approves the selected run; Enter does too" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ no run waits for your approval'" @activate="page" /></div>
+      <div class="pad"><TextPane :text="output" placeholder="a approves the selected run; Enter opens it" /></div>
     </div>
   </div>
 </template>

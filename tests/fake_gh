@@ -502,6 +502,12 @@ if argv[0] == "api":
     if rest == "/actions/runs/7":
         out({"id": 7, "name": "Release", "head_branch": "v0.3.0", "conclusion": "failure",
              "created_at": "2026-11-05T09:00:00Z", "html_url": f"{WEB}/{repo}/actions/runs/7"})
+    if rest == "/actions/runs/5" and repo == "acme/api":  # waits for the production environment's review
+        out({"id": 5, "name": "Deploy", "run_number": 12, "event": "push", "head_branch": "main", "head_sha": "abc1230000",
+             "status": "waiting", "conclusion": None, "path": ".github/workflows/deploy.yml",
+             "actor": {"login": "ann"}, "head_commit": {"message": "Ship it"}, "created_at": "2026-11-05T09:00:00Z",
+             "run_started_at": "2026-11-05T09:00:00Z", "updated_at": "2026-11-05T09:01:00Z",
+             "html_url": f"{WEB}/{repo}/actions/runs/5"})
     if rest == "/actions/runs/5/pending_deployments":
         out([{"environment": {"id": 77, "name": "production"}, "current_user_can_approve": True}])
     if rest == "/dependabot/alerts":

@@ -5,7 +5,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePage } from '../side.js'
 import { get, qs } from '../api.js'
-import { act, forget } from '../load.js'
+import { act, cached, forget } from '../load.js'
 import { useKeys } from '../keys.js'
 import ActionList from '../components/ActionList.vue'
 import EventLog from '../components/EventLog.vue'
@@ -22,6 +22,7 @@ const id = computed(() => Number(query.value.id) || 0)
 const gitlab = computed(() => repo.value.startsWith('gitlab:'))
 const detail = ref('')
 const output = ref('')
+const waits = ref(null) // the approval this run waits for: approve it here too, not only on the approvals list
 const log = ref(null)
 const sheet = ref(null)
 const word = computed(() => (detail.value.split('\n').find((l) => /^\s+state\s/.test(l)) || '').trim().split(/\s+/)[1] || '')
@@ -35,7 +36,24 @@ async function load() {
   const still = () => asked === `${repo.value}@${id.value}` // the panel moved on to another run
   try { const t = (await get(`/run${qs({ repo: repo.value, id: id.value })}`)).text; if (still()) detail.value = t } catch (e) { if (still()) detail.value = `error: ${e.message}` }
 }
-watch([repo, id], () => { detail.value = ''; output.value = ''; load() }, { immediate: true })
+watch([repo, id], () => { detail.value = ''; output.value = ''; waits.value = null; load() }, { immediate: true })
+
+watch(word, async (w) => {
+  if (w !== 'waiting' || gitlab.value) { waits.value = null; return }
+  const asked = `${repo.value}@${id.value}`
+  try {
+    const got = (await cached(`/approvals${qs({ repo: repo.value })}`, false, { quiet: true })).approvals || []
+    if (asked === `${repo.value}@${id.value}`) waits.value = got.find((a) => Number(a.id) === id.value && (!a.kind || a.kind === 'run')) || null
+  } catch { waits.value = null }
+})
+async function approve() {
+  const w = waits.value
+  if (!w || w.blocked) return
+  const t = await act(`Approve ${w.waits_for} for ${repo.value} ${w.branch || ''}?`, '/approve', { repo: repo.value, id: id.value, kind: w.kind })
+  if (t === null) return
+  output.value = t
+  if (!t.startsWith('error')) { forget('/approvals'); waits.value = null; setTimeout(load, 2000); log.value?.burst() }
+}
 const timer = setInterval(() => { if (running.value && !document.hidden) { load(); log.value?.refresh() } }, 10_000)
 onBeforeUnmount(() => clearInterval(timer))
 
@@ -62,11 +80,14 @@ const badges = computed(() => {
 })
 const next = computed(() => {
   if (!word.value) return null
+  if (waits.value && !waits.value.blocked) return { text: `it waits for your approval: ${waits.value.waits_for}.`, label: 'approve', key: 'a', fn: approve }
+  if (waits.value?.blocked) return { text: `it waits for ${waits.value.waits_for}, but you can't approve it: ${waits.value.blocked}`, cls: 'bad' }
   if (running.value) return { text: 'still running: this page updates by itself.', cls: 'warn' }
   if (failed.value) return { text: 'it failed.', label: 'run the failed jobs again', key: 'R', fn: rerun }
   return { text: 'nothing to do.', cls: 'ok' }
 })
 const actions = computed(() => [
+  ...(waits.value ? [{ k: 'a', primary: true, label: `approve ${waits.value.waits_for}`, fn: approve, off: !!waits.value.blocked }] : []),
   { k: 'R', primary: true, label: 'run the failed jobs again', fn: rerun, off: !failed.value },
   { k: 'o', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: visit },
   { k: 'g', label: 'the repo page', fn: () => router.push({ path: '/repo', query: { repo: repo.value } }) },
