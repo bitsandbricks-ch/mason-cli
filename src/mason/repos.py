@@ -126,6 +126,7 @@ REPO_FIELDS = """
     nodes {
       number title url isDraft mergeable mergeStateStatus reviewDecision headRefName
       author { login }
+      reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } } } }
       autoMergeRequest { enabledAt }
       commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
     }
