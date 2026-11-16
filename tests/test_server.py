@@ -384,6 +384,12 @@ def test_defaults_editor(op):
                headers=H).json
     assert "a ruleset needs a name" in rs["problems"]
     assert c.put("/api/v1/defaults/file", json={"path": "../etc/passwd", "text": "x"}, headers=H).status_code == 400
+    # saving over a file that changed since the editor opened it asks first (409), the same text goes on
+    now = c.get("/api/v1/defaults/file?path=mason.toml").json["text"]
+    put = {"path": "mason.toml", "text": now + "\n", "mode": "commit", "force": True}
+    r = c.put("/api/v1/defaults/file", json={**put, "base": "an older text"}, headers=H)
+    assert r.status_code == 409 and "changed in acme/defaults since you opened it" in r.json["error"]
+    assert c.put("/api/v1/defaults/file", json={**put, "base": now}, headers=H).status_code != 409
     assert any(t["kind"] == "ruleset" for t in c.get("/api/v1/defaults/templates").json)
     got = c.post("/api/v1/defaults/ruleset-from", json={"repo": "acme/api"}, headers=H).json
     assert got[0]["path"] == "rulesets/default/main.json" and json.loads(got[0]["text"])["name"] == "main"
@@ -1173,6 +1179,9 @@ def test_mason_files_write(op, monkeypatch, tmp_path):
     ok = c.put("/api/v1/mason/file", json={"repo": "acme/web", "path": ".mason.toml", "text": "auto_fix = true\n",
                                            "mode": "commit"}, headers=H).json
     assert ok["mode"] == "commit" and "pushed to the default branch" in ok["text"]
+    r = c.put("/api/v1/mason/file", json={"repo": "acme/web", "path": ".mason.toml", "text": "auto_fix = false\n",
+                                          "base": "not what is there", "mode": "commit"}, headers=H)
+    assert r.status_code == 409 and "since you opened it" in r.json["error"]
     saved = c.post("/api/v1/mason/save-live", json={"repo": "acme/api"}, headers=H).json
     assert saved["mode"] == "pr" and "-X PUT /repos/acme/api/contents/.mason/rulesets/main.json" in log.read_text()
     audit = json.dumps(c.get("/api/v1/audit").json)

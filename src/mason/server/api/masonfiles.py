@@ -419,6 +419,15 @@ def put_file():
     if problems and not data.get("force"):
         return jsonify({"problems": problems}), 422
     message = str(data.get("message") or f"{'Remove' if delete else 'Update'} {path} (Mason)")[:200]
+    base = data.get("base")  # the text the editor started from: someone else's change since isn't overwritten
+    if isinstance(base, str):
+        with as_user() as (_gh, gl):
+            try:
+                now = read(gl, repo, path)
+            except RuntimeError as err:
+                abort(502, str(err))
+        if (now or "") != base:
+            abort(409, f"{path} changed in {repo} since you opened it: open it again to see the new version")
     return commit(repo, {path: None if delete else text}, str(data.get("mode") or "auto"), message, "mason.write",
                   write_allowed(bool(data.get("dry_run"))))
 

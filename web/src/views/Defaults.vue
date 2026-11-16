@@ -77,8 +77,15 @@ async function save(remove = false) {
   const how = mode.value === 'pr' ? 'in a pull request' : 'straight to the branch'
   if (!(await ask(`${remove ? 'Remove' : 'Save'} ${path.value} ${how}?`,
     { allowDry: false, detail: state.dryRun ? "Dry run doesn't cover the defaults editor: this saves for real." : '' }))) return
+  const body = { path: path.value, text: text.value, mode: mode.value, delete: remove, force: true, base: original.value }
   try {
-    const got = await put('/defaults/file', { path: path.value, text: text.value, mode: mode.value, delete: remove, force: true })
+    let got
+    try { got = await put('/defaults/file', body) } catch (e) {
+      // someone changed the file since it opened here: theirs is lost if this goes on, so ask
+      if (!(e instanceof ApiError) || e.status !== 409) throw e
+      if (!(await ask(`${e.message}. Save yours over it?`, { allowDry: false, detail: 'No keeps your text here: copy it, then open the file again to see the new version.' }))) return
+      got = await put('/defaults/file', { ...body, base: undefined })
+    }
     result.value = `${remove ? 'removed' : 'saved'} ${path.value}: ${got.url}`
     log(result.value, 'ok')
     original.value = text.value

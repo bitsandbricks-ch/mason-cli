@@ -214,7 +214,15 @@ def put_file():
     if problems and not data.get("force"):
         return jsonify({"problems": problems}), 422
     message = str(data.get("message") or f"{'Remove' if delete else 'Update'} {path} (Mason)")[:200]
+    base = data.get("base")  # the text the editor started from: a change since then isn't overwritten unasked
     with as_user() as (_gh, gl):
+        if isinstance(base, str):
+            try:
+                now, _ = read_file(gl, repo, path, ref)
+            except RuntimeError as err:
+                abort(502, str(err))
+            if (now or "") != base:
+                abort(409, f"{path} changed in {repo} since you opened it")
         try:
             url = (write_gitlab(gl, repo, ref, path, text, delete, mode, message) if repo.startswith(GL.PREFIX)
                    else write_github(repo, ref, path, text, delete, mode, message))
