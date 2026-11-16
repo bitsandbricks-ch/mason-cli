@@ -5,7 +5,7 @@
 // and then while a PR of it waits for auto-merge, so a PR that merges by itself leaves the list without r.
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { get, qs } from '../api.js'
+import { get, qs, state } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { alive } from '../pick.js'
 import { useKeys } from '../keys.js'
@@ -23,15 +23,18 @@ const filter = ref('all')
 const sel = ref(null)
 const detail = ref('')
 const diff = ref(false)
-const FILTERS = { all: 'all open', ready: 'ready', drafts: 'drafts', auto: 'auto-merge', conflicts: 'conflicts', merged: 'merged' }
+const FILTERS = { all: 'all open', review: 'asks you', ready: 'ready', drafts: 'drafts', auto: 'auto-merge', conflicts: 'conflicts', merged: 'merged' }
 
 const keyOf = (p) => `${p.repo}#${p.number}`
+const myLogins = computed(() => new Set((state.me?.identities || []).map((i) => String(i.login).toLowerCase())))
+const asksMe = (p) => (p.reviewers || []).some((r) => myLogins.value.has(String(r).toLowerCase()))
 const rows = computed(() => {
   if (filter.value === 'merged') return (data.value?.merged || []).map((p) => ({ ...p, state: `merged ${p.by ? 'by ' + p.by : ''}` }))
   return (data.value?.prs || []).filter((p) => ({
-    all: true, ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
+    all: true, review: asksMe(p), ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
   })[filter.value]).map((p) => ({
-    ...p, state: p.draft ? 'draft' : p.conflicts ? 'CONFLICTS' : p.merge || 'ready', flags: [p.auto && 'auto-merge', p.review].filter(Boolean).join(' · '),
+    ...p, state: p.draft ? 'draft' : p.conflicts ? 'CONFLICTS' : p.merge || 'ready',
+    flags: [asksMe(p) && 'asks you to review', p.auto && 'auto-merge', p.review].filter(Boolean).join(' · '),
   }))
 })
 const columns = [
