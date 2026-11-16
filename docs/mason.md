@@ -121,6 +121,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` lists the keys. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Rerun failed runs at once:** **R** (or **rerun failed**) on the runs list runs the failed jobs of every
+  failed run in the list again, after one question that lists them (`d` for a dry run). Only the newest run
+  of each repo and workflow counts, so a failure a later run already fixed is left alone; at most 30 per go.
 
 ## Run it
 

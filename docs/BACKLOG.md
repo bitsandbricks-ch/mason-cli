@@ -57,7 +57,7 @@ move it to "Done" when it ships.
 - A command palette (Ctrl+K) in the web UI that searches repos, PRs and commands at once.
 - Repo ownership: an owner per repo (from CODEOWNERS or a topic), last activity, and archive candidates.
 - Saved views and filters (e.g. "my PRs needing review across both providers").
-- Bulk actions with a preview: rerun failed runs, update a file in N repos, archive stale repos.
+- Bulk actions with a preview: update a file in N repos, archive stale repos (rerunning failed runs is done).
 - OIDC / SAML sign-in for the operator itself in companies, next to GitHub and GitLab.
 - GitHub App mode (installation tokens, fine-grained permissions) as an alternative to OAuth apps.
 - Passkeys as a second factor for risky actions (deleting the account, new API keys).
