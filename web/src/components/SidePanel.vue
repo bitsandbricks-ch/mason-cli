@@ -5,7 +5,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { clampWidth, encodeSide } from '../panel.js'
-import { SIDE, openAsPage, sideOpen, useSide } from '../side.js'
+import { SIDE, listKind, openAsPage, sideOpen, useSide } from '../side.js'
 
 const PAGES = {
   repo: defineAsyncComponent(() => import('../views/RepoPage.vue')),
@@ -23,6 +23,13 @@ const target = side.target
 const label = computed(() => target.value && encodeSide(target.value).replace(/^\w+:/, ''))
 watch(target, (t) => { sideOpen.value = !!t }, { immediate: true })
 onBeforeUnmount(() => { sideOpen.value = false })
+
+// ‹ › step through the list beside the panel, as ↑↓ in it would (its order, filter and sort)
+const steps = computed(() => !!target.value && listKind.value === target.value.kind)
+function step(key) {
+  const list = document.querySelector('main table.table[tabindex]')
+  list?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+}
 
 const KEY = 'mason-side-width'
 function saved() { try { return Number(localStorage.getItem(KEY)) || NaN } catch { return NaN } }
@@ -66,6 +73,10 @@ function nudge(e) {
       <span class="dim">{{ LABEL[target.kind] }}</span>
       <span class="side-title" :title="label">{{ label }}</span>
       <span class="spacer" />
+      <template v-if="steps">
+        <button title="the one above in the list (↑)" aria-label="previous in the list" @click="step('ArrowUp')">↑</button>
+        <button title="the one below in the list (↓)" aria-label="next in the list" @click="step('ArrowDown')">↓</button>
+      </template>
       <button title="open as its own page" @click="openAsPage(router, target)">⤢ page</button>
       <button title="close (esc)" aria-label="close the panel" @click="side.close()"><span class="k">esc</span> ✕</button>
     </div>

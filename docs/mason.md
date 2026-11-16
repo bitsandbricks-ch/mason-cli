@@ -72,7 +72,7 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
 - **ctrl+k (⌘k, or ⌕ jump in the top bar) jumps anywhere:** type a few letters of a repo, a PR or MR, an
   issue or a view; ↑↓ pick, Enter goes there (a repo, PR or issue opens in the side panel on a wide screen).
 - **On a wide screen the page opens in a side panel** on the right, and the list stays where it was. Moving
-  in the list (↑↓, j/k, a click) shows the new row in the panel; `Esc` or ✕ closes it; **⤢ page** opens it as
+  in the list (↑↓, j/k, a click, or ↑ ↓ in the panel's header) shows the new row in the panel, and the list selects the row the panel shows; `Esc` or ✕ closes it; **⤢ page** opens it as
   its own page; its left edge drags it wider or narrower (←→ on the edge too), kept on that device. A link in
   the panel (a repo's PR, a run's repo) opens in the panel too. The URL holds it as `?side=` (`pr:acme/web#7`,
   `run:acme/web@123`, `release:acme/web@v1.2.0`, `repo:acme/web`, `issue:acme/web#3`), so a reload or a

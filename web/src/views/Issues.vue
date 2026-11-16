@@ -89,7 +89,7 @@ async function submit() {
 const open = () => openOut(current.value?.url)
 const router = useRouter()
 useTrack(() => current.value && { kind: 'issue', repo: current.value.repo, number: current.value.number },
-  { sel, key: (t) => (t.kind === 'issue' ? `${t.repo}#${t.number}` : null) })
+  { sel, kind: 'issue', key: (t) => (t.kind === 'issue' ? `${t.repo}#${t.number}` : null) })
 const page = (i) => { const r = i || current.value; if (r) router.push({ path: '/issue', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(STATES); f.state = k[(k.indexOf(f.state) + 1) % k.length] }
 useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => setState(false), m: comment, o: open, p: () => page(), v: cycle, i: () => { f.mine = !f.mine } })

@@ -45,7 +45,7 @@ const current = computed(() => rows.value.find((r) => r.repo === sel.value))
 const relTag = computed(() => { const m = String(current.value?.url || '').match(/\/releases\/tag\/([^/?#]+)$/); return m ? decodeURIComponent(m[1]) : '' })
 const toggle = () => { problems.value = !problems.value; load() }
 const toggleUnreleased = () => { unreleased.value = !unreleased.value; load() }
-useTrack(() => sel.value && { kind: 'release', repo: sel.value }, { sel, key: (t) => (t.kind === 'release' ? t.repo : null) })
+useTrack(() => sel.value && { kind: 'release', repo: sel.value }, { sel, kind: 'release', key: (t) => (t.kind === 'release' ? t.repo : null) })
 const page = (r) => { const repo = r?.repo || sel.value; if (repo) router.push({ path: '/release', query: { repo } }) }
 async function newRelease(mode = 'release') {
   form.value = mode

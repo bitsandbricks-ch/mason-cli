@@ -30,7 +30,7 @@ const open = (r) => openOut(r?.url)
 const current = computed(() => rows.value.find((r) => r.key === sel.value))
 const router = useRouter()
 useTrack(() => current.value?.id && { kind: 'run', repo: current.value.repo, id: current.value.id },
-  { sel, key: (t) => (t.kind === 'run' ? `${t.repo}|${t.id}` : null) })
+  { sel, kind: 'run', key: (t) => (t.kind === 'run' ? `${t.repo}|${t.id}` : null) })
 const page = (r) => { const x = r || current.value; if (x?.id) router.push({ path: '/run', query: { repo: x.repo, id: x.id } }) }
 const toggle = () => { failed.value = !failed.value; load() }
 useKeys({ r: () => load(true), f: toggle, o: () => open(current.value), p: () => page() })

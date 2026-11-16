@@ -96,7 +96,7 @@ async function ready() {
 const open = () => openOut(current.value?.url)
 const router = useRouter()
 useTrack(() => current.value && { kind: 'pr', repo: current.value.repo, number: current.value.number },
-  { sel, key: (t) => (t.kind === 'pr' ? `${t.repo}#${t.number}` : null) })
+  { sel, kind: 'pr', key: (t) => (t.kind === 'pr' ? `${t.repo}#${t.number}` : null) })
 const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }
 useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, p: () => page(), v: cycle })

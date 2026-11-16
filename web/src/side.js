@@ -1,7 +1,7 @@
 // The side panel's state and navigation (the rules are in panel.js, which tests can run). On a wide screen a
 // navigation to a detail page turns into ?side= on the page you are on (see installSide); a detail page shown
 // in the panel reads its query from the panel instead of the route (usePage), and its back closes the panel.
-import { computed, inject, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { decodeSide, follow, pageRoute, queryOf, sideFor, withSide } from './panel.js'
 import { phone, replaceQuery } from './ui.js'
@@ -76,8 +76,10 @@ export function usePage(list) {
 // Not the row a list picks by itself when it loads: a link to /prs?side=pr:acme/web#7 keeps showing #7.
 // sel and key: the other way round, the list selects the row the panel shows (a link, the back button, the
 // jump box), when it has one; key(target) is that row's key, or null when the panel shows something else.
-export function useTrack(fn, { sel, key } = {}) {
+export const listKind = ref('') // the kind of the list on screen that follows the panel ('' for none)
+export function useTrack(fn, { sel, key, kind = '' } = {}) {
   const { track, target } = useSide()
   watch(fn, (t, before) => { if (before) track(t) })
+  if (kind) { listKind.value = kind; onBeforeUnmount(() => { if (listKind.value === kind) listKind.value = '' }) }
   if (sel && key) watch(target, (t) => { const k = t && key(t); if (k != null && k !== sel.value) sel.value = k }, { immediate: true })
 }
