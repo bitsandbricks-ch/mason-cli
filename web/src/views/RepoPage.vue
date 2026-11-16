@@ -20,6 +20,7 @@ import SettingsPanel from '../components/SettingsPanel.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 import { stateClass } from '../ui.js'
+import { pinned, togglePin } from '../pins.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -108,6 +109,7 @@ const actions = computed(() => [
   { k: 'n', group: 'releases', primary: true, label: 'create a release', fn: () => newRelease('release') },
   { k: 'T', group: 'releases', label: 'push a tag (its workflow releases)', fn: () => newRelease('tag') },
   { k: 'l', group: 'releases', label: 'all its releases', fn: () => router.push({ path: '/release', query: { repo: repo.value } }) },
+  { k: '*', group: 'elsewhere', label: pinned.value.has(repo.value) ? 'unpin from the top of the lists' : 'pin to the top of the lists', fn: () => togglePin(repo.value) },
   { k: 'o', group: 'elsewhere', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: open },
 ])
 async function loadReleases(fresh = false, quiet = false) {
@@ -151,7 +153,7 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
       <ActionList ref="sheet" class="show-compact" :actions="actions" :title="repo" compact />
       <button class="any" @click="reload"><span class="k">r</span> reload</button>
     </div>
-    <StatusHeader :title="repo" :url="info?.url" :badges="badges" :next="next" />
+    <StatusHeader :title="pinned.has(repo) ? `★ ${repo}` : repo" :url="info?.url" :badges="badges" :next="next" />
     <div class="split page">
       <div class="pad">
         <div class="hide-xs"><h2>actions</h2><ActionList :actions="actions" /></div>

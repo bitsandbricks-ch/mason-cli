@@ -20,7 +20,7 @@ REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 GITLAB_REPO = re.compile(r"^gitlab:[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+$")
 SETTING_KEYS = {"defaults": str, "ref": str, "orgs": list, "repos": list, "exclude": list,
                 "gitlab_groups": list, "gitlab_repos": list, "theme": str, "plugins_off": list,
-                "org_defaults": bool}
+                "org_defaults": bool, "pinned": list}
 # The web app's themes (web/src/themes.js). "" is the default: bricks, or mortar on a light system.
 THEMES = ("bricks", "mortar")
 
@@ -76,6 +76,9 @@ def clean_settings(body: dict) -> dict:
                 abort(400, f"{k} must be a short text")
             v = v.strip()
         out[k] = v
+    bad = [x for x in out.get("pinned", []) if not (REPO.match(x) or GITLAB_REPO.match(x))]
+    if bad:  # pinned repos come first in the lists: only repo names, so nothing else ends up in the page
+        abort(400, f"pinned: not a repo name: {bad[0][:80]!r}")
     if out.get("theme") and out["theme"] not in THEMES:
         abort(400, f"theme is one of {', '.join(THEMES)}")
     if out.get("defaults") and not (REPO.match(out["defaults"]) or GITLAB_REPO.match(out["defaults"])):

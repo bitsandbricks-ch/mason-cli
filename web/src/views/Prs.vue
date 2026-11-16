@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router'
 import { get, qs } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { pinned, pinnedFirst } from '../pins.js'
 import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
@@ -25,14 +26,14 @@ const FILTERS = { all: 'all open', ready: 'ready', drafts: 'drafts', auto: 'auto
 const keyOf = (p) => `${p.repo}#${p.number}`
 const rows = computed(() => {
   if (filter.value === 'merged') return (data.value?.merged || []).map((p) => ({ ...p, state: `merged ${p.by ? 'by ' + p.by : ''}` }))
-  return (data.value?.prs || []).filter((p) => ({
+  return pinnedFirst(data.value?.prs || [], pinned.value).filter((p) => ({
     all: true, ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
   })[filter.value]).map((p) => ({
     ...p, state: p.draft ? 'draft' : p.conflicts ? 'CONFLICTS' : p.merge || 'ready', flags: [p.auto && 'auto-merge', p.review].filter(Boolean).join(' · '),
   }))
 })
 const columns = [
-  { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
+  { key: 'repo', label: 'repo', fmt: (v) => (pinned.value.has(v) ? `★ ${v}` : v), cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
   { key: 'number', label: '#', right: true, fmt: (v, r) => (r.provider === 'gitlab' ? `!${v}` : `#${v}`), card: 'head' },
   { key: 'title', label: 'title', cls: () => '', card: 'main' },
   { key: 'state', label: 'state', card: 'head' },
