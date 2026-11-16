@@ -15,6 +15,7 @@ import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import { sideOpen, useSide, useTrack } from '../side.js'
 import { openOut } from '../links.js'
+import { useUnsaved } from '../unsaved.js'
 
 const STATES = { open: 'open', closed: 'closed', all: 'all' }
 const f = reactive({ state: 'open', mine: false, label: '', stale: 0 })
@@ -95,6 +96,7 @@ async function comment() {
 
 // the new-issue form
 const form = reactive({ open: false, repo: '', title: '', body: '', labels: '', assignees: '' })
+useUnsaved(() => form.open && !!(form.title.trim() || form.body.trim()), 'the new issue')
 const repoNames = ref([]) // the picker's repos: those of the filter, read again when it changes
 watch(() => [scope.provider, scope.group], () => { repoNames.value = [] })
 const side = useSide()

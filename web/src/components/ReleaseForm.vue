@@ -4,6 +4,7 @@
 import { reactive, watch } from 'vue'
 import { log } from '../api.js'
 import { change } from '../load.js'
+import { useUnsaved } from '../unsaved.js'
 
 const props = defineProps({
   repo: { type: String, default: '' },
@@ -17,6 +18,7 @@ const f = reactive({ repo: props.repo, tag: props.suggest, title: '', notes: '',
 watch(() => props.suggest, (t) => { if (!f.tag) f.tag = t })
 watch(() => props.repo, (r) => { if (r) f.repo = r })
 const gitlab = () => f.repo.startsWith('gitlab:')
+useUnsaved(() => !!(f.title.trim() || f.notes.trim()), () => `the notes for ${f.tag || 'the new release'}`)
 
 async function submit() {
   if (!f.repo || !f.tag.trim()) { log('a repo and a tag, please', 'warn'); return }
