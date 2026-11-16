@@ -226,6 +226,8 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
   main.detail .view:has(> .split.ld) > .toolbar > .spacer ~ * { display: inline-flex; align-items: center; justify-content: center; }
   main.detail .view:has(> .split.ld) > .toolbar > button { flex: 1 1 auto; }
   main.detail .view:has(> .split.ld) > .toolbar:not(:has(.spacer)) { display: none; }
+  /* a detail is about one row: actions on the whole list (auto-merge all, release all) stay with the list */
+  main.detail .view:has(> .split.ld) > .toolbar > .list-only { display: none; }
   main.detail .split.ld { flex: 1; }
 
   /* other splits (the defaults editor, plugins, a repo's page) stack and scroll as one */

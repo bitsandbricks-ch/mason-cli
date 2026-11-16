@@ -96,7 +96,7 @@ useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n:
       <span class="spacer" />
       <button class="primary any" @click="newRelease('release')"><span class="k">n</span> new release</button>
       <button class="any" @click="newRelease('tag')"><span class="k">T</span> new tag</button>
-      <button v-if="fresh.length" class="any" @click="releaseAll"><span class="k">A</span> release all new ({{ fresh.length }})</button>
+      <button v-if="fresh.length" class="any list-only" @click="releaseAll"><span class="k">A</span> release all new ({{ fresh.length }})</button>
       <button :disabled="!sel" @click="page()"><span class="k">⏎</span> releases of the repo</button>
     </div>
     <div class="split ld">

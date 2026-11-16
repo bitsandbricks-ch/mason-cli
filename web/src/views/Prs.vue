@@ -111,7 +111,7 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <button :disabled="!current?.draft" @click="ready"><span class="k">y</span> ready</button>
       <button :class="{ primary: diff }" @click="diff = !diff"><span class="k">d</span> diff</button>
       <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
-      <button class="any" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
+      <button class="any list-only" @click="mergeAll"><span class="k">A</span> auto-merge all ready</button>
     </div>
     <div class="split ld">
       <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>

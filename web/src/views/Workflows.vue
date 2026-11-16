@@ -48,7 +48,7 @@ useKeys({ r: () => load(true), p: pinOne, A: () => pinRepos(pinnable.value), o: 
       <span v-if="clean" class="chip ok">clean {{ clean }}</span>
       <span class="spacer" />
       <button class="primary" :disabled="!current || current.raw !== 'pinned'" @click="pinOne"><span class="k">p</span> pin repo</button>
-      <button class="any" :disabled="!pinnable.length" @click="pinRepos(pinnable)"><span class="k">A</span> pin all</button>
+      <button class="any list-only" :disabled="!pinnable.length" @click="pinRepos(pinnable)"><span class="k">A</span> pin all</button>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
     <div class="split ld">
