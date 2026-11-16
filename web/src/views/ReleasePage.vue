@@ -4,7 +4,8 @@
 // Esc goes back. After a release, a tag or a bump, and while a release run is going, the page reads the repo
 // again by itself until the run is done.
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { usePage } from '../side.js'
 import { qs } from '../api.js'
 import { cached, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
@@ -14,11 +15,12 @@ import StatusHeader from '../components/StatusHeader.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
-import { openDetail, replaceQuery } from '../ui.js'
+import { openDetail } from '../ui.js'
 
-const route = useRoute()
+// the route's query, or the side panel's when it shows in one (and then back closes the panel)
+const { query, back, setQuery } = usePage('/releases')
 const router = useRouter()
-const repo = computed(() => String(route.query.repo || ''))
+const repo = computed(() => String(query.value.repo || ''))
 const page = ref(null)
 const text = ref('')
 const sel = ref(null)
@@ -38,8 +40,8 @@ async function load(tag = '', fresh = false) {
     sel.value = got.selected || null
   } catch (e) { text.value = `error: ${e.message}` } finally { loading.value = false }
 }
-watch(repo, () => { page.value = null; form.value = ''; output.value = ''; waitFor = ''; load(String(route.query.tag || '')) }, { immediate: true })
-watch(sel, (tag, before) => { if (tag && before && tag !== before) { replaceQuery({ tag }); load(tag) } })
+watch(repo, () => { page.value = null; form.value = ''; output.value = ''; waitFor = ''; load(String(query.value.tag || '')) }, { immediate: true })
+watch(sel, (tag, before) => { if (tag && before && tag !== before) { setQuery({ tag }); load(tag) } })
 
 const rows = computed(() => page.value?.releases || [])
 const columns = [
@@ -57,7 +59,6 @@ const badges = computed(() => {
   return out
 })
 const open = () => { const url = current.value?.url || page.value?.url; if (url) window.open(url, '_blank', 'noopener') }
-const back = () => (window.history.state?.back ? router.back() : router.push('/releases'))
 
 // A follow-up: the list, the version and whether a release run is going; the text when it is the shown release's.
 async function refresh() {

@@ -16,6 +16,7 @@ import TextPane from '../components/TextPane.vue'
 import ActionList from '../components/ActionList.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import { stateClass } from '../ui.js'
+import { useTrack } from '../side.js'
 
 const emit = defineEmits(['rate'])
 const { data, error, loading, load } = useLoad((q) => `/status${q}`)
@@ -91,6 +92,7 @@ const fix = () => sel.value && run(`Fix the drift of ${sel.value} (settings, sec
 const sync = () => sel.value && run(`Open a PR that syncs the shared files into ${sel.value}?`, '/sync', { repos: [sel.value] })
 const merge = (now) => sel.value && run(`${now ? 'Merge now' : 'Auto-merge'} the ready PRs of ${sel.value}?`, '/merge', { targets: [sel.value], now })
 const router = useRouter()
+useTrack(() => sel.value && { kind: 'repo', repo: sel.value })
 const page = (r) => router.push({ path: '/repo', query: { repo: r?.repo || sel.value } })
 const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
 async function newRepo() {

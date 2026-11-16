@@ -400,3 +400,37 @@ button.wide { width: 100%; text-align: left; }
   .view:has(> .split.page) > .events.band { height: auto; min-height: 0; overflow: visible; }
   .view:has(> .split.page) > .events.band .events-head { position: static; }
 }
+
+/* the side panel (wide screens): a repo, PR, issue, run or release next to the list it came from */
+.screen > .body { display: flex; min-height: 0; min-width: 0; }
+.screen > .body > main { flex: 1; min-width: 0; }
+.side-panel { position: relative; flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  border-left: 1px solid var(--accent); background: var(--bg); box-shadow: -8px 0 18px -14px var(--accent);
+  animation: side-in .14s ease-out; }
+@keyframes side-in { from { transform: translateX(24px); opacity: .4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .side-panel { animation: none; } }
+.side-grip { position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 5; touch-action: none; }
+.side-grip:hover, .side-grip:focus-visible, .side-panel.dragging .side-grip { background: var(--accent); opacity: .35; outline: none; }
+.side-panel.dragging { user-select: none; animation: none; }
+.side-head { display: flex; align-items: center; gap: 8px; padding: 5px 10px 5px 12px; border-bottom: 1px solid var(--line);
+  background: var(--bg2); white-space: nowrap; }
+.side-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--accent); font-weight: 700; }
+.side-body { flex: 1; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; }
+.side-body > .view { flex: 1; }
+/* the panel has its own close and title: the page's back button and breadcrumbs would say it twice */
+.side-body .toolbar > .hide-xs { display: none; }
+/* narrow: the page's two columns one under the other, scrolling as one */
+.side-body .split.page { display: block; overflow: auto; }
+.side-body .split.page > * { overflow: visible; border-right: 0; }
+.side-body .split.page > :first-child { border-bottom: 1px dashed var(--line); }
+@container (min-width: 880px) {
+  .side-body .split.page { display: grid; overflow: hidden; }
+  .side-body .split.page > * { overflow: auto; }
+  .side-body .split.page > :first-child { border-right: 1px solid var(--line); border-bottom: 0; }
+}
+.side-body .events.band { height: 28vh; }
+/* with the panel open the list takes the rest: its own preview and event log move into the panel */
+.side-open main .split.ld { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.side-open main .split.ld > :nth-child(2) { display: none; }
+.side-open main .split.ld > :first-child { border-right: 0; }
+.side-open main .view > .events.band { display: none; }

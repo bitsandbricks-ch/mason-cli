@@ -38,7 +38,9 @@ export function arrowKey(e, doc, last = null) {
   if (!MOVE.has(e.key) || e.shiftKey) return false
   const at = doc.activeElement
   if (at && at !== doc.body && ownsArrows(at)) return false
-  const root = doc.querySelector('main') || doc.body
+  // the side panel, when that is where you are (focus or pointer in it): its page scrolls, not the list beside it
+  const side = (n) => (n && n !== doc.body && n.closest?.('.side-panel')) || null
+  const root = side(at) || side(last) || doc.querySelector('main') || doc.body
   const list = root.querySelector('table.table[tabindex]')
   if (list) {
     list.focus({ preventScroll: true })

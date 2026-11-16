@@ -18,6 +18,7 @@ import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 import { openDetail } from '../ui.js'
+import { useTrack } from '../side.js'
 
 const router = useRouter()
 const problems = ref(false)
@@ -43,6 +44,7 @@ const current = computed(() => rows.value.find((r) => r.repo === sel.value))
 const relTag = computed(() => { const m = String(current.value?.url || '').match(/\/releases\/tag\/([^/?#]+)$/); return m ? decodeURIComponent(m[1]) : '' })
 const toggle = () => { problems.value = !problems.value; load() }
 const toggleUnreleased = () => { unreleased.value = !unreleased.value; load() }
+useTrack(() => sel.value && { kind: 'release', repo: sel.value })
 const page = (r) => { const repo = r?.repo || sel.value; if (repo) router.push({ path: '/release', query: { repo } }) }
 async function newRelease(mode = 'release') {
   form.value = mode

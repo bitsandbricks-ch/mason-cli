@@ -3,7 +3,8 @@
 // that printed, and its event log at the bottom. A change updates the page at once: the state flips right
 // away, then the detail and the events are asked again until GitHub or GitLab shows it.
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { usePage } from '../side.js'
 import { get, qs } from '../api.js'
 import { act, forget } from '../load.js'
 import { useKeys } from '../keys.js'
@@ -12,10 +13,11 @@ import EventLog from '../components/EventLog.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import TextPane from '../components/TextPane.vue'
 
-const route = useRoute()
+// the route's query, or the side panel's when it shows in one (and then back closes the panel)
+const { query, back } = usePage('/prs')
 const router = useRouter()
-const repo = computed(() => String(route.query.repo || ''))
-const number = computed(() => Number(route.query.number) || 0)
+const repo = computed(() => String(query.value.repo || ''))
+const number = computed(() => Number(query.value.number) || 0)
 const gitlab = computed(() => repo.value.startsWith('gitlab:'))
 const ref_ = computed(() => `${repo.value}${gitlab.value ? '!' : '#'}${number.value}`)
 const target = computed(() => `${repo.value}#${number.value}`) // what /merge and the audit log call it
@@ -141,7 +143,6 @@ const next = computed(() => {
   return { text: running.value.length ? 'checks are still running.' : "it can't merge yet.", label: 'auto-merge when it can', key: 'm', fn: () => merge_(false) }
 })
 const visit = () => { if (url.value?.startsWith('http')) window.open(url.value, '_blank', 'noopener') }
-const back = () => (window.history.state?.back ? router.back() : router.push('/prs'))
 const actions = computed(() => [
   { k: 'm', group: 'merge', primary: true, label: state.value.auto ? 'auto-merge is on' : 'auto-merge when checks pass', fn: () => merge_(false), off: !open.value || state.value.auto },
   { k: 'M', group: 'merge', label: 'merge now', fn: () => merge_(true), off: !open.value },

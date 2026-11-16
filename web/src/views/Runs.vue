@@ -9,6 +9,7 @@ import { ago } from '../ui.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
+import { useTrack } from '../side.js'
 
 const failed = ref(false)
 const limit = ref(3)
@@ -27,6 +28,7 @@ const columns = [
 const open = (r) => r?.url && window.open(r.url, '_blank', 'noopener')
 const current = computed(() => rows.value.find((r) => r.key === sel.value))
 const router = useRouter()
+useTrack(() => current.value?.id && { kind: 'run', repo: current.value.repo, id: current.value.id })
 const page = (r) => { const x = r || current.value; if (x?.id) router.push({ path: '/run', query: { repo: x.repo, id: x.id } }) }
 const toggle = () => { failed.value = !failed.value; load() }
 useKeys({ r: () => load(true), f: toggle, o: () => open(current.value), p: () => page() })

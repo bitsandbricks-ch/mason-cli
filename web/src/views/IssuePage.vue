@@ -2,7 +2,8 @@
 // One issue as a page (Enter on Issues): its text and comments, comment, close or reopen, and its event
 // log at the bottom.
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { usePage } from '../side.js'
 import { get, qs } from '../api.js'
 import { act, forget } from '../load.js'
 import { useKeys } from '../keys.js'
@@ -12,10 +13,11 @@ import StatusHeader from '../components/StatusHeader.vue'
 import EventLog from '../components/EventLog.vue'
 import TextPane from '../components/TextPane.vue'
 
-const route = useRoute()
+// the route's query, or the side panel's when it shows in one (and then back closes the panel)
+const { query, back } = usePage('/issues')
 const router = useRouter()
-const repo = computed(() => String(route.query.repo || ''))
-const number = computed(() => Number(route.query.number) || 0)
+const repo = computed(() => String(query.value.repo || ''))
+const number = computed(() => Number(query.value.number) || 0)
 const name = computed(() => `${repo.value}#${number.value}`)
 const detail = ref('')
 const output = ref('')
@@ -56,7 +58,6 @@ async function comment() {
   if (t !== null) changed(t)
 }
 const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
-const back = () => (window.history.state?.back ? router.back() : router.push('/issues'))
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })
 const titleLine = computed(() => (detail.value === '…' ? '' : (detail.value.split('\n')[0] || '').replace(/^[#!]\d+\s*/, '')))
 const badges = computed(() => {

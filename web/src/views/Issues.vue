@@ -12,6 +12,7 @@ import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
+import { useTrack } from '../side.js'
 
 const STATES = { open: 'open', closed: 'closed', all: 'all' }
 const f = reactive({ state: 'open', mine: false, label: '', stale: 0 })
@@ -86,6 +87,7 @@ async function submit() {
 }
 const open = () => current.value && window.open(current.value.url, '_blank', 'noopener')
 const router = useRouter()
+useTrack(() => current.value && { kind: 'issue', repo: current.value.repo, number: current.value.number })
 const page = (i) => { const r = i || current.value; if (r) router.push({ path: '/issue', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(STATES); f.state = k[(k.indexOf(f.state) + 1) % k.length] }
 useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => setState(false), m: comment, o: open, p: () => page(), v: cycle, i: () => { f.mine = !f.mine } })

@@ -2,7 +2,8 @@
 // One workflow run (GitHub) or pipeline (GitLab) as a page (Enter on Runs): its jobs and steps with their
 // times, re-run what failed, and its event log at the bottom. While it runs, the page asks again every 10s.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { usePage } from '../side.js'
 import { get, qs } from '../api.js'
 import { act, forget } from '../load.js'
 import { useKeys } from '../keys.js'
@@ -12,10 +13,11 @@ import StatusHeader from '../components/StatusHeader.vue'
 import { fieldOf } from '../ui.js'
 import TextPane from '../components/TextPane.vue'
 
-const route = useRoute()
+// the route's query, or the side panel's when it shows in one (and then back closes the panel)
+const { query, back } = usePage('/runs')
 const router = useRouter()
-const repo = computed(() => String(route.query.repo || ''))
-const id = computed(() => Number(route.query.id) || 0)
+const repo = computed(() => String(query.value.repo || ''))
+const id = computed(() => Number(query.value.id) || 0)
 const gitlab = computed(() => repo.value.startsWith('gitlab:'))
 const detail = ref('')
 const output = ref('')
@@ -42,7 +44,6 @@ async function rerun() {
   if (!t.startsWith('error')) { forget('/runs'); setTimeout(load, 2000); log.value?.burst() }
 }
 const visit = () => { const url = detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
-const back = () => (window.history.state?.back ? router.back() : router.push('/runs'))
 const url = computed(() => { const u = detail.value.split('\n')[1] || ''; return u.startsWith('http') ? u : '' })
 // the header: what ran, how it ended, and which jobs failed
 const failedJobs = computed(() => detail.value.split('\n').map((l) => l.match(/^\s{2}(failure|failed|timed_out|cancelled|canceled|startup_failure)\s+(.+?)(\s{2}\(.*\))?$/))

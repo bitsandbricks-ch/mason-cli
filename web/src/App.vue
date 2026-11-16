@@ -9,6 +9,8 @@ import { arrowKey } from './arrows.js'
 import { closeDetail, detailName, phone, prompt } from './ui.js'
 import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
+import SidePanel from './components/SidePanel.vue'
+import { sideOpen } from './side.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -228,13 +230,16 @@ window.addEventListener('keydown', (e) => {
         </router-link>
       </nav>
     </div>
-    <main><router-view @rate="refreshRate" /></main>
+    <div class="body" :class="{ 'side-open': sideOpen }">
+      <main><router-view @rate="refreshRate" /></main>
+      <SidePanel />
+    </div>
     <footer class="foot">
       <span v-if="last" class="last" :class="last.kind === 'error' ? 'bad' : last.kind === 'ok' ? 'ok' : 'dim'"
             :title="'the session log (`)'" role="button" :aria-expanded="logOpen" @click="logOpen = !logOpen">
         {{ logOpen ? '▾' : '▸' }} [{{ last.at }}] {{ last.text }}<span v-if="state.log.length > 1" class="dim"> (+{{ state.log.length - 1 }})</span></span>
       <span v-else class="last dim">ready</span>
-      <span class="keys"><b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b>?</b> help</span>
+      <span class="keys"><template v-if="sideOpen"><b>esc</b> close panel </template><b>1-9</b> views <b>↑↓</b> move <b>⏎</b> open <b>/</b> filter <b>r</b> reload <b>t</b> theme <b>:</b> console <b>`</b> log <b>?</b> help</span>
     </footer>
     <section v-if="logOpen" class="session-log" aria-label="the session log">
       <div class="row"><h2 style="margin: 0">log <span class="dim">({{ state.log.length }}, this session)</span></h2><span class="spacer" />

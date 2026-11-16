@@ -4,7 +4,8 @@
 // pages, and its event log at the bottom. After a change, and while a release run is going, the page reads
 // the repo again by itself (see useFollow).
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { usePage } from '../side.js'
 import { qs } from '../api.js'
 import { act, cached, forget, useFollow } from '../load.js'
 import { useKeys } from '../keys.js'
@@ -21,9 +22,10 @@ import TextPane from '../components/TextPane.vue'
 import VersionBar from '../components/VersionBar.vue'
 import { stateClass } from '../ui.js'
 
-const route = useRoute()
+// the route's query, or the side panel's when it shows in one (and then back closes the panel)
+const { query, back } = usePage('/')
 const router = useRouter()
-const repo = computed(() => String(route.query.repo || ''))
+const repo = computed(() => String(query.value.repo || ''))
 const gitlab = computed(() => repo.value.startsWith('gitlab:'))
 const detail = ref('')
 const output = ref('')
@@ -129,7 +131,6 @@ async function newRelease(mode) {
 }
 function done({ text, ok }) { output.value = text; if (ok) { form.value = ''; forget('/release'); forget('/releases'); follow.now([repo.value]); log.value?.burst() } }
 const open = () => { const url = info.value?.url || detail.value.split('\n')[1]; if (url?.startsWith('http')) window.open(url, '_blank', 'noopener') }
-const back = () => (window.history.state?.back ? router.back() : router.push('/'))
 const doctorPanel = ref(null)
 const masonPanel = ref(null)
 const settingsPanel = ref(null)
