@@ -12,7 +12,7 @@ import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
-import { useTrack } from '../side.js'
+import { sideOpen, useTrack } from '../side.js'
 import { openOut } from '../links.js'
 
 const STATES = { open: 'open', closed: 'closed', all: 'all' }
@@ -45,9 +45,14 @@ async function show() {
   const i = current.value
   if (!i || form.open) return
   detail.value = '…'
-  try { detail.value = (await get(`/issue${qs({ repo: i.repo, number: i.number })}`)).text } catch (e) { detail.value = `error: ${e.message}` }
+  // the side panel shows it (and the preview is hidden): don't ask twice; shown again when the panel closes
+  if (sideOpen.value) { detail.value = ''; return }
+  try {
+    const text = (await get(`/issue${qs({ repo: i.repo, number: i.number })}`)).text
+    if (current.value === i) detail.value = text // an older answer after you moved on is dropped
+  } catch (e) { if (current.value === i) detail.value = `error: ${e.message}` }
 }
-watch(sel, show)
+watch([sel, sideOpen], show)
 
 async function setState(close) {
   const i = current.value

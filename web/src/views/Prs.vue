@@ -14,7 +14,7 @@ import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
-import { useTrack } from '../side.js'
+import { sideOpen, useTrack } from '../side.js'
 import { openOut } from '../links.js'
 
 const { data, error, loading, load, keep } = useLoad((q) => `/prs${q}`)
@@ -65,9 +65,14 @@ async function show() {
   const p = current.value
   if (!p) { detail.value = ''; return }
   detail.value = '…'
-  try { detail.value = (await get(`/pr${qs({ repo: p.repo, number: p.number, diff: diff.value })}`)).text } catch (e) { detail.value = `error: ${e.message}` }
+  // the side panel shows it (and the preview is hidden): don't ask twice; shown again when the panel closes
+  if (sideOpen.value) { detail.value = ''; return }
+  try {
+    const text = (await get(`/pr${qs({ repo: p.repo, number: p.number, diff: diff.value })}`)).text
+    if (current.value === p) detail.value = text // an older answer after you moved on is dropped
+  } catch (e) { if (current.value === p) detail.value = `error: ${e.message}` }
 }
-watch([sel, diff], show)
+watch([sel, diff, sideOpen], show)
 
 // several PRs at once: space or the boxes pick them, and m / M merge the picked ones instead of the selected one
 const picked = ref([])
