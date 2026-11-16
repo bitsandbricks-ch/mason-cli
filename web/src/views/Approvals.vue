@@ -15,10 +15,16 @@ loadGroups()
 const sel = ref(null)
 const output = ref('')
 const rows = computed(() => (data.value?.approvals || []).map((r) => ({ ...r, key: `${r.repo}|${r.kind}|${r.id}`, when: ago(r.created) })))
+// the list gets the reason's first part; the whole of it (with its link) shows beside the list
+function short(why) {
+  const head = String(why).split(/:\s|, but /)[0]
+  return head.length > 60 ? `${head.slice(0, 59)}…` : head
+}
+const why = computed(() => (current.value?.blocked ? `you can't approve this run: ${current.value.blocked}` : ''))
 const columns = [
   { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
   { key: 'waits_for', label: 'waits for', cls: (r) => (r.blocked ? 'dim' : 'warn') },
-  { key: 'blocked', label: 'you can approve', fmt: (v) => (v ? `no: ${v}` : 'yes'), cls: (r) => (r.blocked ? 'bad' : 'ok') },
+  { key: 'blocked', label: 'you can approve', fmt: (v) => (v ? `no: ${short(v)}` : 'yes'), cls: (r) => (r.blocked ? 'bad' : 'ok') },
   { key: 'name', label: 'run', cls: () => '', card: 'main' },
   { key: 'branch', label: 'branch', cls: () => '' },
   { key: 'when', label: 'since', cls: () => 'dim' },
@@ -39,12 +45,12 @@ useKeys({ r: () => load(true), a: () => approve(), o: () => open(current.value) 
     <div class="toolbar">
       <Scope :groups="scope.groups" />
       <span class="spacer" />
-      <button class="primary" :disabled="!current" @click="approve()"><span class="k">a</span> approve</button>
+      <button class="primary" :disabled="!current || !!current.blocked" :title="current?.blocked ? why : ''" @click="approve()"><span class="k">a</span> approve</button>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
     </div>
     <div class="split ld">
       <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ no run waits for your approval'" @activate="approve" /></div>
-      <div class="pad"><TextPane :text="output" placeholder="a approves the selected run; Enter does too" /></div>
+      <div class="pad"><TextPane :text="output || why" placeholder="a approves the selected run; Enter does too" /></div>
     </div>
   </div>
 </template>
