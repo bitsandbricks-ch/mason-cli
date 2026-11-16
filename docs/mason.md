@@ -139,6 +139,11 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` opens a sheet with the keys of what is on screen (read from its buttons) and those that work everywhere. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Desktop notifications.** Under setup › settings › this browser, turn on notifications to hear when a
+  change you started (a merge, a release, a rerun) finishes while Mason's tab is in the background: ✓ done or
+  ✗ something failed. They are off until you turn them on, and the setting is per browser.
+- **Tab title:** the browser tab names the page (`acme/web#7 · pull requests · Mason`). A change that
+  finishes while the tab is in the background puts ✓ (or ✗ on an error) in front until you come back.
 - **Pinned repos:** `*` on a repo (in the repo list or on its page, also under **actions**) pins it: it
   comes first, marked ★, in the repo and pull request lists. `*` again unpins it. Pins are part of your
   settings (`pinned`), so they follow you to every browser.
