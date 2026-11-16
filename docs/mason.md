@@ -121,6 +121,8 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` lists the keys. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Tab title:** the browser tab names the page (`acme/web#7 · pull requests · Mason`). A change that
+  finishes while the tab is in the background puts ✓ (or ✗ on an error) in front until you come back.
 
 ## Run it
 
