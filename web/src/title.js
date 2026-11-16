@@ -24,3 +24,13 @@ export function markFor(kinds) {
   if (kinds.includes('ok')) return '✓'
   return ''
 }
+
+// A desktop notification for a log line, when you asked for them in this browser (settings) and the tab is in
+// the background: only finished changes (ok, error), not every note.
+export function shouldNotify(entry, { on, hidden, permission }) {
+  return !!(entry && on && hidden && permission === 'granted' && (entry.kind === 'ok' || entry.kind === 'error'))
+}
+export function notifyText(entry) {
+  const body = String(entry?.text || '').replace(/^\[dry-run\] /, 'dry run: ').slice(0, 200)
+  return { title: entry?.kind === 'error' ? '✗ Mason: something failed' : '✓ Mason: done', body }
+}
