@@ -65,7 +65,7 @@ MUTATIONS = {"markPullRequestReadyForReview", "enablePullRequestAutoMerge", "dis
 # regex over the raw query could be fooled by `deleteRef, (input: ...)` or a comment before the "(".
 TOKEN = re.compile(r'''"""(?:\\"""|(?!""").)*"""|"(?:\\.|[^"\\\n])*"'''  # block and plain strings
                    r"|\.\.\.|[A-Za-z_]\w*|-?\d[\w.+-]*|[!$&()\[\]{}:=@|]", re.S)
-SPACE = re.compile(r"(?:[\s,\ufeff]+|#[^\n\r]*)+")
+SPACE = re.compile(r"[\s,\ufeff]+|#[^\n\r]*")  # one run at a time: the loop in tokens() takes the next
 
 
 def tokens(text: str) -> list[str] | None:
