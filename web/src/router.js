@@ -65,3 +65,18 @@ export const router = createRouter({
     { path: '/:rest(.*)*', redirect: '/' },
   ],
 })
+
+// After Mason is updated, a tab opened before it still asks for the old build's files, which are gone: the next
+// view then never loads. Load the page fresh instead, once a minute at most (a broken network mustn't loop).
+const STALE = /dynamically imported module|Importing a module script failed|Unable to preload|Failed to fetch dynamically/i
+export function reloadOnStaleBuild(err, to) {
+  if (!STALE.test(String(err?.message || err))) return false
+  try {
+    const last = Number(sessionStorage.getItem('mason-reloaded') || 0)
+    if (Date.now() - last < 60_000) return false
+    sessionStorage.setItem('mason-reloaded', String(Date.now()))
+  } catch { /* private mode: reload anyway */ }
+  window.location.assign(to?.fullPath || window.location.href)
+  return true
+}
+router.onError((err, to) => { reloadOnStaleBuild(err, to) })
