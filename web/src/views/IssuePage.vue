@@ -27,12 +27,15 @@ const sheet = ref(null)
 async function load() {
   if (!repo.value || !number.value) return
   if (!detail.value) detail.value = '…'
+  const asked = `${repo.value}#${number.value}` // the page can move to another issue before the answer comes
+  const same = () => asked === `${repo.value}#${number.value}`
   try {
     const t = (await get(`/issue${qs({ repo: repo.value, number: number.value })}`)).text
+    if (!same()) return
     detail.value = t
     const line = t.split('\n').find((l) => /^\s+state\s/.test(l)) || ''
     isOpen.value = !/\bclosed\b/.test(line)
-  } catch (e) { detail.value = `error: ${e.message}` }
+  } catch (e) { if (same()) detail.value = `error: ${e.message}` }
 }
 watch([repo, number], () => { detail.value = ''; output.value = ''; load() }, { immediate: true })
 

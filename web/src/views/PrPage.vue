@@ -38,11 +38,13 @@ function parse(text) {
 async function load() {
   if (!repo.value || !number.value) return
   if (!detail.value) detail.value = '…'
+  const asked = ref_.value // the page can move to another PR (arrows, back) before the answer comes
   try {
     const t = (await get(`/pr${qs({ repo: repo.value, number: number.value, diff: diff.value })}`)).text
+    if (asked !== ref_.value) return
     detail.value = t
     state.value = parse(t)
-  } catch (e) { detail.value = `error: ${e.message}` }
+  } catch (e) { if (asked === ref_.value) detail.value = `error: ${e.message}` }
 }
 // whether you may merge past the base branch's rules (GitHub's bypass), rule by rule
 const bypass = ref(null)
