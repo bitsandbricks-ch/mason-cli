@@ -92,6 +92,11 @@ def test_me_csrf_settings(op):
     assert r.status_code == 400 and "tool" in r.json["error"]
     assert c.put("/api/v1/settings", json={"orgs": ["acme/web"]}, headers=H).status_code == 400
     assert c.get("/api/v1/settings").json["org_defaults"] is True  # each org's .mason: on unless turned off
+    assert c.get("/api/v1/settings").json["pinned"] == []
+    got = c.put("/api/v1/settings", json={"pinned": ["acme/web", "gitlab:grp/sub/app"]}, headers=H).json
+    assert got["pinned"] == ["acme/web", "gitlab:grp/sub/app"]
+    assert c.put("/api/v1/settings", json={"pinned": ["<script>"]}, headers=H).status_code == 400
+    assert c.get("/api/v1/me").json["settings"]["pinned"] == ["acme/web", "gitlab:grp/sub/app"]
     assert c.put("/api/v1/settings", json={"org_defaults": "no"}, headers=H).status_code == 400
     assert c.put("/api/v1/settings", json={"org_defaults": False}, headers=H).json["org_defaults"] is False
 
