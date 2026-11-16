@@ -11,3 +11,9 @@ export function openLink(url) {
   if (s) window.open(s, '_blank', 'noopener,noreferrer')
   return !!s
 }
+
+// Where to go after signing in: a path on this site, like the server's safe_next, else '/'.
+export function safeNext(next) {
+  const s = String(next || '/')
+  return s.length < 200 && /^\/(?![/\\])[A-Za-z0-9/._~%!$&'()*+,;=:@?#-]*$/.test(s) ? s : '/'
+}

@@ -1,4 +1,5 @@
 <script setup>
+import { safeNext } from './links.js'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { get, loadMe, log, post, put, state } from './api.js'
@@ -54,6 +55,8 @@ onMounted(async () => {
 function guard() {
   if (!state.loaded) return
   if (!signedIn.value && !route.meta.public) router.replace({ name: 'login', query: route.path !== '/' ? { next: route.fullPath } : {} })
+  // signed in already (a bookmark, the back button after signing in): the sign-in page has nothing to offer
+  else if (signedIn.value && route.name === 'login') router.replace(safeNext(route.query.next))
 }
 watch(() => route.fullPath, guard)
 watch(signedIn, guard)
