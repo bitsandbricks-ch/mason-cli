@@ -1,11 +1,12 @@
 <script setup>
 // Settings: logins, the defaults repo and which repos to manage, API keys, sessions and plugin secrets.
 // Everything a CLI user keeps in files lives here, per user: nobody else sees or changes yours.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { del, get, loadMe, log, post, put, state } from '../api.js'
 import { deviceSignIn } from '../signin.js'
 import { ago, ask, tellRevoked } from '../ui.js'
+import { useUnsaved } from '../unsaved.js'
 
 const router = useRouter()
 const s = ref(null)
@@ -31,10 +32,15 @@ function cancelLink() { stopLink?.(); stopLink = null; linking.value = null }
 onBeforeUnmount(() => stopLink?.())
 
 const asText = (v) => (v || []).join(', ')
+// leaving asks first while the form has changes, or a new key is still shown (it isn't shown again)
+const saved = ref('')
+useUnsaved(computed(() => !!s.value && JSON.stringify(s.value) !== saved.value), 'your settings')
+useUnsaved(computed(() => !!fresh.value), 'the new API key (it is not shown again)')
 async function load() {
   try {
     const got = await get('/settings')
     s.value = { ...got, ...Object.fromEntries(LISTS.map((k) => [k, asText(got[k])])) }
+    saved.value = JSON.stringify(s.value)
     ;[keys.value, sessions.value, secrets.value] = await Promise.all([get('/keys'), get('/sessions'), get('/secrets')])
   } catch (e) { log(e.message, 'error') }
 }
