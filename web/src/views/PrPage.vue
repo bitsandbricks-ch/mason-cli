@@ -13,6 +13,7 @@ import EventLog from '../components/EventLog.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import TextPane from '../components/TextPane.vue'
 import { openOut } from '../links.js'
+import { ask } from '../ui.js'
 
 // the route's query, or the side panel's when it shows in one (and then back closes the panel)
 const { query, back } = usePage('/prs')
@@ -93,6 +94,14 @@ async function ready() {
   if (got) changed(got, { draft: false })
 }
 const url = computed(() => detail.value.split('\n')[1])
+// a comment on a GitHub PR goes through its issue (GitLab MR notes would need their own call)
+async function comment() {
+  if (gitlab.value) return
+  const said = await ask(`Comment on ${ref_.value}`, { input: { placeholder: 'your comment' }, allowDry: false })
+  if (!said?.trim()) return
+  const got = await change(`Post the comment on ${ref_.value}?`, '/issue', { repo: repo.value, number: number.value, action: 'comment', text: said }, { detail: said })
+  if (got) changed(got)
+}
 
 // What the header shows, read from the detail (the same text the CLI prints): the fields, and the checks
 // with their states, so it can say why the PR can't merge yet.
@@ -159,6 +168,7 @@ const actions = computed(() => [
   { k: 'M', group: 'merge', label: 'merge now', fn: () => merge_(true), off: !open.value },
   { k: 'B', group: 'merge', label: 'merge now, bypassing the rules', fn: mergeBypass, off: !open.value || !bypass.value?.can },
   { k: 'y', group: 'merge', label: 'mark ready for review', fn: ready, off: !state.value.draft || !open.value },
+  ...(gitlab.value ? [] : [{ k: 'c', group: 'discuss', label: 'comment', fn: comment }]),
   { k: 'd', group: 'look', label: diff.value ? 'hide the diff' : 'show the diff', fn: () => { diff.value = !diff.value } },
   { k: 'o', group: 'look', label: `open on ${gitlab.value ? 'GitLab' : 'GitHub'}`, fn: visit },
   { k: 'g', group: 'look', label: 'the repo page', fn: () => router.push({ path: '/repo', query: { repo: repo.value } }) },
