@@ -144,6 +144,14 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   a phone, at the top of **more**); on a saved one the button says **★ saved** and removes it. They are part of
   your settings (`views`, at most 30), so every browser has them. A link with `?group=` or `?provider=` sets
   the filter, also within the app.
+- **Desktop notifications.** Under setup › settings › this browser, turn on notifications to hear when a
+  change you started (a merge, a release, a rerun) finishes while Mason's tab is in the background: ✓ done or
+  ✗ something failed. They are off until you turn them on, and the setting is per browser.
+- **Tab title:** the browser tab names the page (`acme/web#7 · pull requests · Mason`). A change that
+  finishes while the tab is in the background puts ✓ (or ✗ on an error) in front until you come back.
+- **Pinned repos:** `*` on a repo (in the repo list or on its page, also under **actions**) pins it: it
+  comes first, marked ★, in the repo and pull request lists. `*` again unpins it. Pins are part of your
+  settings (`pinned`), so they follow you to every browser.
 - **Export:** **⤓ csv** next to a list's filter downloads the list as shown (filter and sort applied, cells
   in words) as a CSV file. It is made in the browser; cells that a spreadsheet would run as a formula
   start with `'`.
