@@ -139,6 +139,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` opens a sheet with the keys of what is on screen (read from its buttons) and those that work everywhere. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Filters in the link.** The filters of Issues (state, mine, label, age), Runs (only failed, per repo),
+  Releases (only problems, only unreleased) and Stats (days) are in the page's link, such as
+  `/issues?state=closed&mine=1` or `/runs?failed=1`, so a bookmark, a shared link or a saved view opens the same list. A value the menus don't offer falls back to the default.
 - **Offline:** when the server doesn't answer (the network is down, or it is restarting behind a proxy that
   answers 502/503/504), a banner says so and the app asks again by itself after 2s, 4s, 8s … up to every 30s,
   and at once when the browser is back online. What was on screen stays. A page opened while the server is

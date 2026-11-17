@@ -5,7 +5,8 @@ import { useRouter } from 'vue-router'
 import { useTrack } from '../side.js'
 import { useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
-import { loadGroups, scope } from '../scope.js'
+import { emptyText } from '../empty.js'
+import { loadGroups, narrowed, scope } from '../scope.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
 import { openOut } from '../links.js'
@@ -39,7 +40,7 @@ useKeys({ r: () => load(true), o: () => open(current.value), p: repoPage })
       <button class="any" :disabled="!current" @click="repoPage"><span class="k">p</span> repo page</button>
     </div>
     <div class="scroll">
-      <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ no open security alerts'" outside @activate="open" />
+      <DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('✓ no open security alerts', [], narrowed())" outside @activate="open" />
       <div v-if="unread.length" class="pad dim">
         <div v-for="s in unread" :key="s.repo">couldn't read {{ s.repo }}: {{ s.unread.join('; ') }}</div>
       </div>

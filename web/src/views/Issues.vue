@@ -8,7 +8,9 @@ import { act, change, forget, useLoad } from '../load.js'
 import { alive } from '../pick.js'
 import { useKeys } from '../keys.js'
 import { useSeen } from '../seen.js'
-import { loadGroups, scope, scopedRepos } from '../scope.js'
+import { emptyText } from '../empty.js'
+import { useLinkFilters } from '../useLink.js'
+import { loadGroups, narrowed, scope, scopedRepos } from '../scope.js'
 import { ago, ask, openDetail } from '../ui.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
@@ -20,6 +22,10 @@ import { useUnsaved } from '../unsaved.js'
 
 const STATES = { open: 'open', closed: 'closed', all: 'all' }
 const f = reactive({ state: 'open', mine: false, label: '', stale: 0 })
+// the filters are in the link (?state=closed&mine=1), so a bookmark or a saved view opens the same list
+useLinkFilters(f, {
+  state: { def: 'open', ok: (v) => v in STATES }, mine: { def: false }, label: { def: '' }, stale: { def: 0, ok: (v) => [0, 30, 90].includes(v) },
+})
 function issuesUrl(q) {
   const extra = qs({ state: f.state, mine: f.mine, label: f.label, stale: f.stale || '' }).slice(1)
   return `/issues${q || (extra ? '?' : '')}${q && extra ? '&' : ''}${extra}`
@@ -143,7 +149,7 @@ const seen = useSeen('issues', () => (data.value?.issues || []).map(keyOf))
       <Scope :groups="scope.groups" />
       <span class="row"><button v-for="(l, k) in STATES" :key="k" class="chip" :class="{ on: f.state === k }" @click="f.state = k">{{ l }}</button></span>
       <button class="chip" :class="{ on: f.mine }" @click="f.mine = !f.mine"><span class="k">i</span> mine</button>
-      <select v-model="f.label" aria-label="label"><option value="">any label</option><option v-for="l in data?.labels || []" :key="l" :value="l">{{ l }}</option></select>
+      <select v-model="f.label" aria-label="label"><option value="">any label</option><option v-if="f.label && !(data?.labels || []).includes(f.label)" :value="f.label">{{ f.label }}</option><option v-for="l in data?.labels || []" :key="l" :value="l">{{ l }}</option></select>
       <select v-model.number="f.stale" aria-label="age"><option :value="0">any age</option><option :value="30">untouched 30d</option><option :value="90">untouched 90d</option></select>
       <span class="spacer" />
       <button class="primary any" @click="newIssue"><span class="k">n</span> new</button>
@@ -164,7 +170,7 @@ const seen = useSeen('issues', () => (data.value?.issues || []).map(keyOf))
       <div>
         <details v-if="data?.failed?.length" class="pad warn"><summary>{{ data.failed.length }} repo{{ data.failed.length === 1 ? '' : 's' }} couldn't be read</summary>
           <div v-for="x in data.failed" :key="x" class="dim">{{ x }}</div></details>
-        <DataTable :is-new="seen.isNew" v-model="sel" :picked="picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : 'no open issues'" @activate="page" />
+        <DataTable :is-new="seen.isNew" v-model="sel" :picked="picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : emptyText('no open issues', [f.state !== 'open' && `${f.state} issues`, f.mine && 'mine', f.label && `label ${f.label}`, f.stale && `untouched ${f.stale}d`], narrowed())" @activate="page" />
       </div>
       <div class="pad">
         <div v-if="form.open" class="box">
