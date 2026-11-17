@@ -35,6 +35,10 @@ export function scopeLabel() {
   return scope.provider === 'all' ? g : `${g} on ${scope.provider}`
 }
 
+// Where the list looks, when the filter narrows it: "in org acme", "in group web on gitlab", "on gitlab"; ''
+// for every repo. For an empty list's words.
+export const narrowed = () => (scope.group ? `in ${scopeLabel()}` : scope.provider !== 'all' ? `on ${scope.provider}` : '')
+
 // How an org filter reads in a menu: acme/ -> org acme, gitlab:a/b/ -> gitlab a/b.
 export function ownerLabel(o) {
   return o.startsWith('gitlab:') ? `gitlab ${o.slice(7, -1)}` : `org ${o.slice(0, -1)}`
@@ -52,6 +56,12 @@ export function loadGroups() {
     }).catch(() => { loading = null })
   }
   return loading
+}
+
+// After the settings changed (other orgs, a defaults repo): read the groups and orgs again.
+export function reloadGroups() {
+  loading = null
+  return loadGroups()
 }
 
 // The repos the filter lets through, for pickers (a new release's or issue's repo).

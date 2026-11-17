@@ -9,6 +9,8 @@ import { titleFor } from './panel.js'
 import { installSide } from './side.js'
 import { installUnsaved } from './unsaved.js'
 import { staleChunk } from './links.js'
+import { markFor, notifyText, shouldNotify } from './title.js'
+import { notifyOn, permission } from './notify.js'
 
 watch(() => state.dryRun, keepDry)
 
@@ -26,9 +28,24 @@ router.onError((err, to) => {
   window.location.assign(to.fullPath)
 })
 router.afterEach(() => { try { sessionStorage.removeItem('mason-reloaded') } catch { /* private mode */ } })
-// each tab and history entry says what it shows: "acme/web#7 · pull requests · Mason"
+// each tab and history entry says what it shows: "acme/web#7 · pull requests · Mason"; a change that finishes
+// while the tab is hidden puts ✓ or ✗ in front until you come back, and notifies when you asked for that
 const LABELS = Object.fromEntries(TABS.map((t) => [t.path, t.label]))
-router.afterEach((to) => { document.title = titleFor(to, LABELS) })
+const seen = [] // kinds of log lines since the tab was hidden
+const show = (to = router.currentRoute.value) => { const m = markFor(seen); document.title = (m ? `${m} ` : '') + titleFor(to, LABELS) }
+router.afterEach((to) => show(to))
+watch(() => state.log[0], (l) => {
+  if (!l || !document.hidden) return
+  seen.push(l.kind)
+  show()
+  if (!shouldNotify(l, { on: notifyOn.value, hidden: document.hidden, permission: permission() })) return
+  const { title, body } = notifyText(l)
+  try {
+    const n = new Notification(title, { body, tag: 'mason' }) // one at a time: a newer one replaces it
+    n.onclick = () => { window.focus(); n.close() }
+  } catch { /* some phones only notify from a service worker */ }
+})
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { seen.length = 0; show() } })
 
 const app = createApp(App)
 // a bug in a view shows in the log line instead of only in the browser console, and the rest keeps working
