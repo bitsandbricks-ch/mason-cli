@@ -11,12 +11,13 @@ import { csvName, toCsv } from '../csv.js'
 import { range, toggle, toggleAll } from '../pick.js'
 
 const props = defineProps({
-  columns: { type: Array, required: true }, // [{key, label, cls?: (row) => str, fmt?: (v,row) => str, right?, mark?: false}]
+  columns: { type: Array, required: true }, // [{key, label, cls?: (row) => str, fmt?: (v,row) => str, right?, mark?: false, sortBy?: (row) => value}]
   rows: { type: Array, default: () => [] },
   rowKey: { type: Function, default: (r) => r.key ?? r.repo ?? JSON.stringify(r) },
   empty: { type: String, default: 'nothing here' },
   name: { type: String, default: '' }, // what the list is, for the exported file's name (default: the view)
   error: { type: String, default: '' }, // the list couldn't load: said in plain words instead of "empty"
+  isNew: { type: Function, default: null }, // (row key) => true marks a row "new since your last visit" (seen.js)
   modelValue: { default: null }, // the selected row's key
   // several rows to act on at once: the keys of the picked rows (v-model:picked); null: no boxes
   picked: { type: Array, default: null },
@@ -40,7 +41,13 @@ const shown = computed(() => {
     : props.rows.slice()
   if (sortKey.value) {
     const c = props.columns.find((x) => x.key === sortKey.value)
-    out.sort((a, b) => String(cell(c, a)).localeCompare(String(cell(c, b)), undefined, { numeric: true }) * sortDir.value)
+    // sortBy: what the column sorts by when its words don't ("3d ago" before "2h ago")
+    const key = c.sortBy || ((r) => String(cell(c, r)))
+    out.sort((a, b) => {
+      const x = key(a)
+      const y = key(b)
+      return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true })) * sortDir.value
+    })
   }
   return out
 })
@@ -67,6 +74,8 @@ const sortChoice = computed({
   get: () => (sortKey.value ? `${sortKey.value}:${sortDir.value}` : ''),
   set: (v) => { const [k, d] = v.split(':'); sortKey.value = k; sortDir.value = Number(d) || 1 },
 })
+const isNewRow = (r) => !!props.isNew?.(props.rowKey(r))
+const newCount = computed(() => (props.isNew ? props.rows.filter(isNewRow).length : 0))
 const index = computed(() => shown.value.findIndex((r) => props.rowKey(r) === props.modelValue))
 
 function select(i, scroll = true) {
@@ -137,6 +146,7 @@ defineExpose({ focus: () => table.value?.focus(), shown })
       <input ref="filterInput" v-model="filter" class="grow" placeholder="filter" aria-label="filter the list"
              @keydown.esc="filter = ''; table?.focus()" @keydown.enter="table?.focus()">
       <span class="dim nowrap">{{ shown.length }}<template v-if="shown.length !== rows.length">/{{ rows.length }}</template></span>
+      <span v-if="newCount" class="accent nowrap" title="not shown to you before in this browser">· {{ newCount }} new</span>
       <button v-if="shown.length" class="export" title="download the list as shown, as a CSV file" aria-label="download as CSV"
               @click="exportCsv">⤓<span class="hide-xs"> csv</span></button>
       <select v-if="phone && rows.length > 1" v-model="sortChoice" class="sort" aria-label="sort by">
@@ -151,6 +161,7 @@ defineExpose({ focus: () => table.value?.focus(), shown })
       <li v-for="r in shown" :key="rowKey(r)" role="option" :aria-selected="rowKey(r) === modelValue"
           :class="{ sel: rowKey(r) === modelValue }" @click="tap(r)">
         <div class="head">
+          <span v-if="isNewRow(r)" class="new-dot" title="new since your last visit">●</span>
           <span v-for="c in head" :key="c.key" :class="cls(c, r)"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</span>
           <span v-if="inSplit" class="go dim" aria-hidden="true">›</span>
         </div>
@@ -180,7 +191,7 @@ defineExpose({ focus: () => table.value?.focus(), shown })
           <td v-if="picks" class="pick" @mousedown.prevent @click.stop="pick(r, $event); emit('update:modelValue', rowKey(r)); table?.focus({ preventScroll: true })"><input type="checkbox" :checked="isPicked(r)" tabindex="-1"
             :aria-label="`pick ${rowKey(r)}`"></td>
           <td v-for="c in columns" :key="c.key" :class="[cls(c, r), { right: c.right }]"
-              :title="String(cell(c, r))"><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</td>
+              :title="String(cell(c, r))"><span v-if="c === columns[0] && isNewRow(r)" class="new-dot" title="new since your last visit">● </span><span v-if="mark(c, r)" class="mark" aria-hidden="true">{{ mark(c, r) }}</span>{{ cell(c, r) }}</td>
         </tr>
       </tbody>
     </table>

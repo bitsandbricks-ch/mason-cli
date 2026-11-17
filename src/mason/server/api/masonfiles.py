@@ -4,7 +4,8 @@
     PUT  /api/v1/mason/file                   save or remove one file (.mason.toml, .mason/mason.toml,
                                               .mason/rulesets/*.json; in an org's .mason repo: mason.toml,
                                               rulesets/**.json, files/**)
-    POST /api/v1/mason/protect                set (or turn off) the repo's `protect` table
+    POST /api/v1/mason/protect                set (or turn off) the repo's `protect` table, or a group's in the
+                                              org's .mason; `apply` protects the default branch right away
     POST /api/v1/mason/save-live              the repo's live rulesets as .mason/rulesets/*.json
 
 Writes go through a pull request (merge request), straight onto the default branch (`commit`), or `auto`:
@@ -226,6 +227,21 @@ def effective(rows: list[dict], own: dict) -> tuple[dict | None, bool, str]:
     return (spec if spec and rules.on(spec) else None), skipped, last
 
 
+def org_groups(repo: str, text: str) -> list[dict]:
+    """An org's .mason groups and their protect, for its page ([] when mason.toml is missing or broken)."""
+    try:
+        raw = config.parse_defaults(text) if text.strip() else {}
+    except RuntimeError:
+        return []
+    org = repo.rsplit("/", 1)[0].removeprefix(GL.PREFIX)
+    out = []
+    for i, grp in enumerate(raw.get("group") or []):
+        if isinstance(grp, dict):
+            out.append({"name": f"{org}:{grp.get('name') or f'group {i + 1}'}", "match": grp.get("match") or {},
+                        "protect": grp.get("protect")})
+    return out
+
+
 @bp.get("")
 @need("read")
 def view():
@@ -245,6 +261,7 @@ def view():
         out = {"repo": repo, "provider": "gitlab" if is_gl(repo) else "github", "files": files,
                "kind": "org" if is_org_repo(repo) else "repo"}
         if is_org_repo(repo):
+            out["groups"] = org_groups(repo, next((f["text"] for f in files if f["path"] == config.DEFAULTS_FILE), ""))
             return jsonify(out)
         rows = layer_rows(cfg, repo)
         own_path, own = own_layer(gl, repo)
@@ -368,7 +385,7 @@ def forget(repo: str) -> None:
     config._loaded.clear()
 
 
-def commit(repo: str, changes: dict[str, str | None], mode: str, message: str, what: str, dry: bool = False):
+def land(repo: str, changes: dict[str, str | None], mode: str, message: str, what: str, dry: bool = False) -> dict:
     """Write `changes`; a dry run only says what it would write."""
     with as_user(False) as (_gh, gl):  # dry runs answer below, before anything is written
         if is_gl(repo) and gl is None:
@@ -380,7 +397,7 @@ def commit(repo: str, changes: dict[str, str | None], mode: str, message: str, w
             lines = [f"[dry-run] {'remove' if t is None else 'write'} {p} {where}" for p, t in changes.items()]
             lines += [f"\n--- {p}\n{t}" for p, t in changes.items() if t is not None]
             audit(what, f"{repo}: {', '.join(changes)}", True)
-            return jsonify({"url": "", "mode": how, "dry": True, "text": "\n".join(lines)})
+            return {"url": "", "mode": how, "dry": True, "text": "\n".join(lines)}
         try:
             if mode == "auto" and not is_gl(repo) and not is_org_repo(repo) and None not in changes.values():
                 url, pushed = land_github(cfg, repo, changes, message)  # auto_push, a PR when that's refused
@@ -395,7 +412,11 @@ def commit(repo: str, changes: dict[str, str | None], mode: str, message: str, w
         forget(repo)
     audit(what, f"{repo}: {', '.join(changes)} ({how})", detail=url)
     verb = "pushed to the default branch" if how == "commit" else "opened"
-    return jsonify({"url": url, "mode": how, "text": f"{verb}: {url}"})
+    return {"url": url, "mode": how, "text": f"{verb}: {url}"}
+
+
+def commit(repo: str, changes: dict[str, str | None], mode: str, message: str, what: str, dry: bool = False):
+    return jsonify(land(repo, changes, mode, message, what, dry))
 
 
 @bp.post("/validate")
@@ -517,32 +538,156 @@ def clean_protect(raw) -> dict | bool | None:
     return out
 
 
+GROUP_HEADER = re.compile(r"^\s*\[\[\s*group\s*\]\]\s*(#.*)?$")
+GROUP_SUB = re.compile(r"^\s*\[\[?\s*group\s*\.")  # [group.x] / [[group.x]]: still the same group
+PROTECT_SUB = re.compile(r"^\s*\[\s*group\s*\.\s*protect\s*\]\s*(#.*)?$")
+
+
+def with_group_protect(text: str, index: int, spec) -> str:
+    """`text` (an org's .mason/mason.toml) with the protect of its `index`-th [[group]] replaced: a table,
+    false, or (None) nothing. Every other line stays; a result that would change anything else is refused."""
+    lines = text.splitlines()
+    starts = [n for n, x in enumerate(lines) if GROUP_HEADER.match(x)]
+    if index >= len(starts):
+        raise ValueError("the group isn't written as a [[group]] table")
+    begin = starts[index]
+    end = next((n for n in range(begin + 1, len(lines)) if HEADER.match(lines[n]) and not GROUP_SUB.match(lines[n])),
+               len(lines))
+    out, n, own_end = lines[:begin + 1], begin + 1, None
+    while n < end:
+        line = lines[n]
+        if PROTECT_SUB.match(line):  # [group.protect]: dropped up to the next table
+            own_end = len(out) if own_end is None else own_end
+            n += 1
+            while n < end and not HEADER.match(lines[n]):
+                n += 1
+            continue
+        if HEADER.match(line):
+            own_end = len(out) if own_end is None else own_end
+        elif own_end is None and re.match(r"^\s*protect\s*[=.]", line):
+            n += 1
+            continue
+        out.append(line)
+        n += 1
+    if own_end is None:
+        own_end = len(out)
+    while own_end > begin + 1 and not out[own_end - 1].strip():  # after the group's last key, not its blank lines
+        own_end -= 1
+    if spec is not None:
+        out.insert(own_end, f"protect = {toml_value(spec)}")
+    new = "\n".join(out + lines[end:]).rstrip("\n") + "\n"
+    old_raw, new_raw = config.parse_defaults(text), config.parse_defaults(new)  # RuntimeError: it doesn't parse
+    want = [dict(x) for x in old_raw.get("group") or []]
+    want[index].pop("protect", None)
+    if spec is not None:
+        want[index]["protect"] = spec
+    if new_raw.get("group") != want or {k: v for k, v in new_raw.items() if k != "group"} != \
+            {k: v for k, v in old_raw.items() if k != "group"}:
+        raise ValueError("couldn't change only the group's protect")
+    return new
+
+
+def org_group(gl, repo: str, name: str) -> tuple[str, int, str, dict]:
+    """The org .mason group `name` ("acme:default") that `repo` may write: (where, index, text, raw group).
+    `repo` is the .mason repo itself, or a repo of that org."""
+    org, _, short = name.partition(":")
+    if not org or not short:
+        abort(400, "group is org:name, e.g. acme:default")
+    where = f"{GL.PREFIX}{org}/{config.ORG_REPO}" if is_gl(repo) else f"{org}/{config.ORG_REPO}"
+    if where != repo and where not in config.org_candidates(repo):
+        abort(400, f"{name} isn't a group of {repo}'s org")
+    try:
+        text = read(gl, where, config.DEFAULTS_FILE)
+    except RuntimeError as err:
+        abort(502, str(err))
+    if text is None:
+        abort(404, f"{where} has no {config.DEFAULTS_FILE}")
+    try:
+        raw = config.parse_defaults(text, f"{where}/{config.DEFAULTS_FILE}")
+    except RuntimeError as err:
+        abort(422, f"{err}: fix it in the editor first")
+    for i, grp in enumerate(raw.get("group") or []):
+        if (grp.get("name") or f"group {i + 1}") == short:
+            return where, i, text, grp
+    abort(404, f"{where} has no group {short}")
+
+
+def apply_protect(repo: str, rows: list[dict], own: dict, dry: bool) -> str:
+    """Protect the repo's default branch now: the "protect" ruleset from what stacks, made on GitHub (as
+    `doctor --fix` would), so a change that waits in a pull request doesn't leave the branch open meanwhile."""
+    spec, skipped, _ = effective(rows, own)
+    if skipped:
+        return f"not applied: {repo} skips protect"
+    if spec is None:
+        return "not applied: protect is off for it"
+    rs = rules.protect_ruleset(spec)
+    if dry:
+        return f"[dry-run] create (or update) ruleset {rs['name']} in {repo}"
+    with as_user(False):
+        try:
+            D.import_rulesets(repo, {rs["name"]: rs})
+        except core.RateLimited as err:
+            abort(429, str(err))
+        except RuntimeError as err:
+            audit("mason.protect.apply", repo, ok=False, detail=str(err))
+            abort(502, f"saved, but the ruleset wasn't made: {err}")
+    audit("mason.protect.apply", repo, detail=json.dumps(rs))
+    return f"ruleset {rs['name']} made in {repo}: its default branch is protected now"
+
+
 @bp.post("/protect")
 @need("write")
 def set_protect():
     """Set the repo's own protect: a table on top of the groups', false (off in this repo), or null (drop the
-    repo's own, so the groups decide)."""
+    repo's own, so the groups decide). With `group` ("acme:default"), that group of the org's .mason instead,
+    for every repo it takes in. With `apply`, the repo's default branch is protected on GitHub right away too."""
     data = body()
     repo = valid_repo(str(data.get("repo", "")))
-    if is_org_repo(repo):
-        abort(400, "edit the groups' protect in the org's mason.toml")
+    group = str(data.get("group") or "")
+    if is_org_repo(repo) and not group:
+        abort(400, "name the group whose protect to set")
     spec = clean_protect(data.get("protect"))
+    dry = write_allowed(bool(data.get("dry_run")))
+    apply = bool(data.get("apply")) and not is_gl(repo) and not is_org_repo(repo)
+    mode = str(data.get("mode") or "auto")
     with as_user() as (_gh, gl):
         if is_gl(repo) and gl is None:
             abort(409, "connect GitLab first")
-        path, text = config.repo_file(lambda p: read(gl, repo, p), repo)
-    if text is None:
-        path = config.REPO_FOLDER_FILE if data.get("folder", True) else config.REPO_LAYER
-    new = with_protect(text or "", spec)
-    problems = validate_settings(new)
+        if group:
+            where, index, text, grp = org_group(gl, repo, group)
+            path = config.DEFAULTS_FILE
+            try:
+                new = with_group_protect(text, index, spec)
+            except (ValueError, RuntimeError) as err:
+                abort(422, f"{err}: change {where}/{path} in its editor")
+            problems = validate(where, path, new)
+            rows = layer_rows(load_config(), repo) if apply else []
+            own = own_layer(gl, repo)[1] if apply else {}
+            for row in rows:
+                if row["group"] == group:
+                    row["protect"] = {"enabled": False} if spec is False else spec
+        else:
+            where = repo
+            path, text = config.repo_file(lambda p: read(gl, repo, p), repo)
+            if text is None:
+                path = config.REPO_FOLDER_FILE if data.get("folder", True) else config.REPO_LAYER
+            new = with_protect(text or "", spec)
+            problems = validate_settings(new)
+            rows = layer_rows(load_config(), repo) if apply and not problems else []
+            own = config.parse_defaults(new) if apply and not problems and new.strip() else {}
     if problems:
         return jsonify({"problems": problems}), 422
+    whose = f"group {group}'s" if group else "the repo's own"
+    what = (f"turn off branch protection in {f'group {group}' if group else 'the repo'}" if spec is False
+            else f"drop {whose} protect" if spec is None else f"set {whose} branch protection")
     if (text or "") == new:
-        return jsonify({"text": f"{path} already says that", "url": "", "mode": ""})
-    what = "turn off branch protection" if spec is False else "drop the repo's own protect" if spec is None \
-        else "set branch protection"
-    return commit(repo, {path: new or None}, str(data.get("mode") or "auto"), f"{what[0].upper()}{what[1:]} (Mason)",
-                  "mason.protect", write_allowed(bool(data.get("dry_run"))))
+        out = {"text": f"{where}/{path} already says that", "url": "", "mode": ""}
+    else:  # an org's .mason: a pull request unless you pick commit (pick_mode)
+        out = land(where, {path: new or None}, mode, f"{what[0].upper()}{what[1:]} (Mason)", "mason.protect", dry)
+    if apply:
+        done = apply_protect(repo, rows, own, dry)
+        out = {**out, "applied": done, "text": f"{out['text']}\n{done}"}
+    return jsonify(out)
 
 
 SKIPPABLE = {"github_rulesets": "mason ignores .github/rulesets: only its own rules count",

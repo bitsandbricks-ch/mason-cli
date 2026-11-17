@@ -2,7 +2,8 @@
 // A repo against its defaults (mason doctor), kept: the last check shows when the page opens and is checked
 // on the spot when there is none. "check again" asks GitHub/GitLab again; c and f on the page refresh it too.
 // Each fix it suggests is a button (fix the drift, open a sync PR): the page runs it (emit run: 'fix' | 'sync'),
-// the command stays as the button's title for the CLI.
+// the command stays as the button's title for the CLI. An unprotected default branch gets its own button: the
+// branch rules panel below sets protect (emit run: 'protect').
 import { ref, watch } from 'vue'
 import { get, qs } from '../api.js'
 import ErrorNote from './ErrorNote.vue'
@@ -42,6 +43,8 @@ function fixOf(cmd) {
   if (/\bsync\b/.test(cmd)) return { kind: 'sync', label: 'open a PR with the shared files', k: 's' }
   return null
 }
+// "the default branch main isn't protected (...)": the branch, or ''
+const unprotected = (p) => /^the default branch (\S+) isn't protected/.exec(p)?.[1] || ''
 defineExpose({ load })
 </script>
 
@@ -62,7 +65,9 @@ defineExpose({ load })
         <button :disabled="busy" @click="load(true)">{{ busy ? 'checking…' : 'check again' }}</button>
       </div>
       <ul v-if="result.problems.length" class="problems">
-        <li v-for="p in result.problems" :key="p">{{ p }}</li>
+        <li v-for="p in result.problems" :key="p">{{ p }}
+          <button v-if="unprotected(p)" class="primary" @click="emit('run', 'protect')">protect {{ unprotected(p) }}</button>
+        </li>
       </ul>
       <ErrorNote v-if="result.error" :error="result.error" what="couldn't check this repo" />
       <div v-if="result.fixes?.length" class="row fixes">
