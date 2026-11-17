@@ -144,6 +144,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   nothing happened to for 30 days. **asks you** covers GitLab reviewers too. The **updated** column says when
   each one last changed (it sorts by date). `v` cycles them. The filter is in the link (`/prs?show=mine`), so a
   bookmark opens the same list.
+- **Rerun failed runs at once:** **F** (or **rerun all failed**) on the runs list runs the failed jobs of every
+  failed run in the list again, after one question that lists them (`d` for a dry run). Only the newest run
+  of each repo and workflow counts, so a failure a later run already fixed is left alone; at most 30 per go.
 - **New since your last visit:** the pull request, issue and run lists mark rows they haven't shown you
   before with ● and say how many there are ("· 2 new"). Leaving the list counts as having seen them. It is
   kept in the browser, and the first visit marks nothing.
