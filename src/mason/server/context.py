@@ -25,7 +25,11 @@ GITLAB_REPO = re.compile(rf"^gitlab:{_PART}(/{_PART})+$")
 NAME = re.compile(rf"^({_PART}/)?{_PART}(#\d+)?$")
 SETTING_KEYS = {"defaults": str, "ref": str, "orgs": list, "repos": list, "exclude": list,
                 "gitlab_groups": list, "gitlab_repos": list, "theme": str, "plugins_off": list,
-                "org_defaults": bool, "pinned": list}
+                "org_defaults": bool, "pinned": list, "views": list}
+# A saved view is {name, path}: a page of the web app with its query (/prs?show=mine&group=acme/). Only such
+# paths pass, so a saved view can't point the browser anywhere else.
+VIEW_PATH = re.compile(r"^/(?!/)[A-Za-z0-9/_.-]*(\?[A-Za-z0-9_.~%=&:/!+,@-]*)?$")
+MAX_VIEWS = 30
 # The web app's themes (web/src/themes.js). "" is the default: bricks, or mortar on a light system.
 THEMES = ("bricks", "mortar")
 
@@ -72,8 +76,10 @@ def user_settings(user) -> dict:
 
 def clean_settings(body: dict) -> dict:
     out = {}
+    if "views" in body:
+        out["views"] = clean_views(body["views"])
     for k, t in SETTING_KEYS.items():
-        if k not in body:
+        if k not in body or k == "views":
             continue
         v = body[k]
         if t is bool:
@@ -105,6 +111,25 @@ def clean_settings(body: dict) -> dict:
         abort(400, f"theme is one of {', '.join(THEMES)}")
     if out.get("defaults") and not (REPO.match(out["defaults"]) or GITLAB_REPO.match(out["defaults"])):
         abort(400, "defaults must be a repo (owner/name) or a GitLab project (gitlab:group/name)")
+    return out
+
+
+def clean_views(value) -> list[dict]:
+    if not isinstance(value, list) or len(value) > MAX_VIEWS:
+        abort(400, f"views: a list of at most {MAX_VIEWS} saved views")
+    out, names = [], set()
+    for v in value:
+        if not isinstance(v, dict) or not isinstance(v.get("name"), str) or not isinstance(v.get("path"), str):
+            abort(400, "views: each one is {name, path}")
+        name, path = v["name"].strip(), v["path"].strip()
+        if not name or len(name) > 40 or any(c < " " for c in name):
+            abort(400, "views: a name is 1 to 40 characters")
+        if len(path) > 300 or not VIEW_PATH.match(path):
+            abort(400, f"views: not a page of Mason: {path[:80]!r}")
+        if name.lower() in names:
+            abort(400, f"views: {name!r} twice")
+        names.add(name.lower())
+        out.append({"name": name, "path": path})
     return out
 
 

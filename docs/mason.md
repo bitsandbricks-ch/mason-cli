@@ -139,6 +139,11 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` opens a sheet with the keys of what is on screen (read from its buttons) and those that work everywhere. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Saved views:** **☆ save view** in the header keeps the page you are on with its filter, group and
+  provider under a name (`/runs?group=plugins` as "plugin runs"). Saved views sit in the tab bar marked ★ (on
+  a phone, at the top of **more**); on a saved one the button says **★ saved** and removes it. They are part of
+  your settings (`views`, at most 30), so every browser has them. A link with `?group=` or `?provider=` sets
+  the filter, also within the app.
 - **After an update.** A tab left open while Mason was updated loads the new version by itself when you
   switch views: the server answers a file of the old version with a 404 (never cached), not with the page.
 - **Filters in the link.** The filters of Issues (state, mine, label, age), Runs (only failed, per repo),

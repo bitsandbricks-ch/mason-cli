@@ -11,6 +11,11 @@ import { installUnsaved } from './unsaved.js'
 import { staleChunk } from './links.js'
 import { markFor, notifyText, shouldNotify } from './title.js'
 import { notifyOn, permission } from './notify.js'
+import { scope } from './scope.js'
+import { scopeFrom } from './saved.js'
+
+// ?group= and ?provider= in a link (a saved view, a shared link) set the filter before the view loads
+router.beforeEach((to) => { const s = scopeFrom(to.query); if (s) Object.assign(scope, s) })
 
 watch(() => state.dryRun, keepDry)
 

@@ -92,6 +92,17 @@ def test_me_csrf_settings(op):
     assert r.status_code == 400 and "tool" in r.json["error"]
     assert c.put("/api/v1/settings", json={"orgs": ["acme/web"]}, headers=H).status_code == 400
     assert c.get("/api/v1/settings").json["org_defaults"] is True  # each org's .mason: on unless turned off
+    # saved views: a name and a page of the web app, nothing else
+    assert c.get("/api/v1/settings").json["views"] == []
+    mine = [{"name": "my PRs", "path": "/prs?show=mine&group=acme/"}, {"name": "repos", "path": "/"}]
+    assert c.put("/api/v1/settings", json={"views": mine}, headers=H).json["views"] == mine
+    for bad in ("https://evil.example/", "//evil.example", "/x\\y", "/prs?<script>", "javascript:alert(1)"):
+        r = c.put("/api/v1/settings", json={"views": [{"name": "x", "path": bad}]}, headers=H)
+        assert r.status_code == 400, bad
+    assert c.put("/api/v1/settings", json={"views": [{"name": "", "path": "/"}]}, headers=H).status_code == 400
+    assert c.put("/api/v1/settings", json={"views": [mine[0], mine[0]]}, headers=H).status_code == 400
+    assert c.put("/api/v1/settings", json={"views": "/prs"}, headers=H).status_code == 400
+    assert c.get("/api/v1/settings").json["views"] == mine
     assert c.get("/api/v1/settings").json["pinned"] == []
     got = c.put("/api/v1/settings", json={"pinned": ["acme/web", "gitlab:grp/sub/app"]}, headers=H).json
     assert got["pinned"] == ["acme/web", "gitlab:grp/sub/app"]

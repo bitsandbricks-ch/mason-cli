@@ -57,6 +57,7 @@ move it to "Done" when it ships.
 - A daily digest (email or chat): PRs waiting for you, failed runs, new alerts, new drift.
 - A command palette (Ctrl+K) in the web UI that searches repos, PRs and commands at once.
 - Repo ownership: an owner per repo (from CODEOWNERS or a topic), last activity, and archive candidates.
+- Bulk actions with a preview: rerun failed runs, update a file in N repos, archive stale repos.
 - Saved views and filters (e.g. "my PRs needing review across both providers").
 - Bulk actions with a preview: update a file in N repos, archive stale repos (rerunning failed runs is done).
 - OIDC / SAML sign-in for the operator itself in companies, next to GitHub and GitLab.
@@ -93,6 +94,7 @@ move it to "Done" when it ships.
 
 ## Done
 
+- Saved views: a page with its filter and group under a name, in the tab bar (settings.views).
 - "New since your last visit" marks in the pull request, issue and run lists (per browser).
 - GitLab in the CLI, through glab: `gitlab_groups` in your config, `gitlab:` names in every command that reads GitLab.
 
