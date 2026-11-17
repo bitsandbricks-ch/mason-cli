@@ -139,6 +139,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` opens a sheet with the keys of what is on screen (read from its buttons) and those that work everywhere. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **New since your last visit:** the pull request, issue and run lists mark rows they haven't shown you
+  before with ● and say how many there are ("· 2 new"). Leaving the list counts as having seen them. It is
+  kept in the browser, and the first visit marks nothing.
 - **Desktop notifications.** Under setup › settings › this browser, turn on notifications to hear when a
   change you started (a merge, a release, a rerun) finishes while Mason's tab is in the background: ✓ done or
   ✗ something failed. They are off until you turn them on, and the setting is per browser.
