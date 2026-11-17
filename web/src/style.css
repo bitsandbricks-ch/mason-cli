@@ -61,6 +61,8 @@ main { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); flex: 1; min-height: 0; }
 .split > * { min-height: 0; overflow: auto; }
 .split > :first-child { border-right: 1px solid var(--line); }
+.split.first { grid-template-columns: 1fr; }
+.split.first > :last-child { display: none; }
 .pad { padding: 10px 12px; }
 .scroll { overflow: auto; min-height: 0; flex: 1; }
 h1, h2, h3 { font-size: 13px; margin: 0 0 8px; color: var(--accent); text-shadow: var(--glow); font-weight: 700; }
