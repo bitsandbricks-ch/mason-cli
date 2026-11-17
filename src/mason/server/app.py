@@ -67,7 +67,7 @@ def create_app(op: S.Settings | None = None) -> Flask:
             resp.headers.setdefault(k, v)
         if request.path.startswith("/api/"):
             resp.headers["Cache-Control"] = "no-store"
-        elif request.path.startswith("/assets/"):
+        elif request.path.startswith("/assets/") and resp.status_code == 200:
             resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return resp
 
@@ -129,6 +129,10 @@ def create_app(op: S.Settings | None = None) -> Flask:
     def _spa(path: str = ""):
         if path and (STATIC / path).is_file() and ".." not in path:
             return send_from_directory(STATIC, path)
+        if path.startswith("assets/"):
+            # a file of an older build (a tab open across an update): the page must see it is gone, not get
+            # index.html as a script, so it can load the new build
+            abort(404)
         if not webui.built(STATIC):
             return (webui.BUILD_HINT, 503,
                     {"Content-Type": "text/plain; charset=utf-8"})
