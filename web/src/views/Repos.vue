@@ -20,6 +20,7 @@ import { ask, choose, stateClass } from '../ui.js'
 import { alive } from '../pick.js'
 import { useTrack } from '../side.js'
 import { openOut } from '../links.js'
+import { pinned, pinnedFirst, togglePin } from '../pins.js'
 
 const emit = defineEmits(['rate'])
 const { data, error, loading, load } = useLoad((q) => `/status${q}`)
@@ -29,11 +30,11 @@ const detail = ref('')
 const output = ref('')
 
 const head = computed(() => data.value?.head || [])
-const rows = computed(() => (data.value?.rows || []).map((r) => {
+const rows = computed(() => pinnedFirst((data.value?.rows || []).map((r) => {
   const o = { repo: r.repo, provider: r.provider }
   head.value.forEach((h, i) => { o[h] = r.cells[i] })
   return o
-}))
+}), pinned.value))
 // the cells in words: "2 ready · 1 draft" instead of 2/1, "never" instead of -
 function prsCell(v) {
   const m = String(v || '').match(/^(\d+)\/(\d+)$/)
@@ -48,7 +49,7 @@ const COLUMN = {
   CI: { fmt: (v) => (!v || v === '-' ? 'no runs' : v) },
 }
 const columns = computed(() => [
-  { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
+  { key: 'repo', label: 'repo', fmt: (v) => (pinned.value.has(v) ? `★ ${v}` : v), cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
   ...head.value.map((h) => ({ key: h, label: h.toLowerCase(), ...(COLUMN[h] || {}) })),
   { key: 'doctor', label: 'defaults', fmt: (_, r) => doctorCell(r.repo), cls: (r) => doctorClass(r.repo) },
 ])
@@ -126,10 +127,11 @@ const actions = computed(() => [
   { k: 'm', group: 'pull requests', label: 'auto-merge the ready ones', fn: () => merge(false) },
   { k: 'M', group: 'pull requests', label: 'merge the ready ones now', fn: () => merge(true) },
   { k: 'l', group: 'releases', label: 'its releases', fn: releases },
+  { k: '*', group: 'elsewhere', label: pinned.value.has(sel.value) ? 'unpin from the top' : 'pin to the top of the lists', fn: () => togglePin(sel.value) },
   { k: 'o', group: 'elsewhere', label: `open on ${row.value?.provider === 'gitlab' ? 'GitLab' : 'GitHub'}`, fn: open },
 ])
 const fixFrom = (kind) => (kind === 'sync' ? sync() : fix())
-useKeys({ '.': () => sheet.value?.pick(), l: () => sel.value && router.push({ path: '/release', query: { repo: sel.value } }), r: () => load(true), c: doctor, f: fix, s: sync, m: () => merge(false), M: () => merge(true), o: open, n: newRepo })
+useKeys({ '*': () => togglePin(sel.value), '.': () => sheet.value?.pick(), l: () => sel.value && router.push({ path: '/release', query: { repo: sel.value } }), r: () => load(true), c: doctor, f: fix, s: sync, m: () => merge(false), M: () => merge(true), o: open, n: newRepo })
 </script>
 
 <template>
