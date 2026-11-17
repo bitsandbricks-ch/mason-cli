@@ -126,7 +126,15 @@ function exportCsv() {
   a.remove()
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
-// a filter that hides the selected row selects the first one shown, so the preview and actions match the list
+// The selected row must be one you can see: the keys and buttons act on it (m merged a PR the filter had hidden).
+// When the filter hides it, the first row it shows is selected instead, or none.
+watch(shown, () => {
+  if (props.modelValue == null || index.value >= 0) return
+  if (!props.rows.some((r) => props.rowKey(r) === props.modelValue)) return // gone from the list: the view decides
+  if (shown.value.length) select(0, false)
+  else emit('update:modelValue', null)
+})
+// and once the filter shows rows again, the first one is selected
 watch(filter, () => { if (index.value < 0 && shown.value.length) select(0, false) })
 defineExpose({ focus: () => table.value?.focus(), shown })
 </script>
