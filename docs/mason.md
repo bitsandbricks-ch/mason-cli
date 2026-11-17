@@ -144,6 +144,9 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   nothing happened to for 30 days. **asks you** covers GitLab reviewers too. The **updated** column says when
   each one last changed (it sorts by date). `v` cycles them. The filter is in the link (`/prs?show=mine`), so a
   bookmark opens the same list.
+- **New since your last visit:** the pull request, issue and run lists mark rows they haven't shown you
+  before with ● and say how many there are ("· 2 new"). Leaving the list counts as having seen them. It is
+  kept in the browser, and the first visit marks nothing.
 - **Desktop notifications.** Under setup › settings › this browser, turn on notifications to hear when a
   change you started (a merge, a release, a rerun) finishes while Mason's tab is in the background: ✓ done or
   ✗ something failed. They are off until you turn them on, and the setting is per browser.

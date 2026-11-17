@@ -10,6 +10,7 @@ import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { alive } from '../pick.js'
 import { useKeys } from '../keys.js'
 import { ago } from '../ui.js'
+import { useSeen } from '../seen.js'
 import { pinned, pinnedFirst } from '../pins.js'
 import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
@@ -140,6 +141,7 @@ useTrack(() => current.value && { kind: 'pr', repo: current.value.repo, number: 
 const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }
 useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, p: () => page(), v: cycle })
+const seen = useSeen('prs', () => (data.value?.prs || []).map(keyOf))
 </script>
 
 <template>
@@ -164,7 +166,7 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <span class="dim hide-xs">space picks the selected row, shift+click a span</span>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :picked="filter === 'merged' ? null : picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : filter === 'stale' ? `nothing has waited longer than ${STALE_DAYS} days` : filter === 'review' ? 'nobody asks you for a review right now' : filter === 'mine' ? `none of the open ones were opened by you (${[...myLogins].join(', ') || 'no login'})` : 'none match this filter: v cycles the filters'" @activate="page" /></div>
+      <div><DataTable :is-new="seen.isNew" v-model="sel" :picked="filter === 'merged' ? null : picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : filter === 'stale' ? `nothing has waited longer than ${STALE_DAYS} days` : filter === 'review' ? 'nobody asks you for a review right now' : filter === 'mine' ? `none of the open ones were opened by you (${[...myLogins].join(', ') || 'no login'})` : 'none match this filter: v cycles the filters'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
     <EventLog band :repo="current?.repo || ''" kind="pr" :number="current?.number || ''" :title="current ? `${current.repo}${current.provider === 'gitlab' ? '!' : '#'}${current.number} ${current.title}` : ''" />
