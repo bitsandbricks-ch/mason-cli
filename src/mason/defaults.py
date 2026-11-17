@@ -13,7 +13,7 @@ import json
 import time
 import urllib.parse
 
-from mason import config, core, extras, plugins, rules, versions, workflows
+from mason import builtin, config, core, extras, plugins, rules, versions, workflows
 from mason.config import Config, Group
 from mason.core import WEB, api, compact, file_on, for_each, get_file, git_blob_sha, say, short
 
@@ -142,7 +142,7 @@ def baseline(cfg: Config, group: Group) -> dict:
                 description=group.description, skip=set(group.skip), environments=dict(group.environments),
                 variables=dict(group.variables), secrets=list(group.secrets), pages=group.pages,
                 homepage=group.homepage, code_scanning=group.code_scanning, autolinks=dict(group.autolinks),
-                auto_fix=group.auto_fix, more=dict(group.more))
+                auto_fix=group.auto_fix, more=dict(group.more), builtin=cfg.builtin)
     return skip(rules.prepare(want))
 
 
@@ -172,6 +172,8 @@ def skip(want: dict) -> dict:
     for key in ("topics", "required_files", "secrets"):
         if key in off:
             want[key] = []
+    if "required_files" in off:
+        want["starters"] = {}
     for key in ("vulnerability_reporting", "immutable_releases", "branch", "visibility", "pages", "homepage",
                 "code_scanning"):
         if key in off:
@@ -296,8 +298,18 @@ def required_drift(repo: str, want: dict, branch: str) -> list[str]:
     if not want.get("required_files"):
         return []
     ours = blob_shas(repo, branch)
-    return [f"{need.replace('|', ' or ')} is missing" for need in want["required_files"]
-            if not any(p.strip() in ours for p in need.split("|"))]
+    return [builtin.missing(need) for need in want["required_files"] if not has(ours, need)]
+
+
+def has(ours, need: str) -> bool:
+    """Is one of a required entry's names ("a|b") among `ours`?"""
+    return any(p.strip() in ours for p in need.split("|"))
+
+
+def starter_files(want: dict, ours) -> dict[str, str]:
+    """The starter files for the required entries the repo has none of: {path: text}."""
+    return {p: t for need, files in (want.get("starters") or {}).items() if need in (want.get("required_files") or ())
+            and not has(ours, need) for p, t in files.items()}
 
 
 def repo_drift(repo: str, state: dict, want: dict) -> tuple[list[str], list[str]]:
@@ -424,7 +436,8 @@ def doctor_ctx(cfg: Config, repos: list[str], fix: bool = False, auto: bool = Fa
     """`auto`: repos with `auto_fix` get fixed without `fix` (the CLI; the web's plain check doesn't)."""
     from mason.repos import group_of
 
-    groups = {r: group_of(cfg, r) for r in repos}
+    # a repo nothing describes gets Mason's built-in defaults (unless they're turned off)
+    groups = {r: group_of(cfg, r) or (builtin.group() if cfg.builtin else None) for r in repos}
     used = {group_key(g): g for g in groups.values() if g}
     names = {x.name for g in used.values() for x in (g.layers or [g])}
     refs = {g.name: g for g in cfg.groups_for(repos) if g.reference and (g.name in names or g.reference in repos)}
@@ -445,7 +458,7 @@ def want_of(repo: str, ctx: dict) -> tuple[dict | None, Group | None]:
     want = ctx["wants"].get(group_key(group)) if group else None
     own = config.repo_layer(repo)
     if own:
-        if want is None:
+        if want is None:  # the built-in defaults are off
             want = baseline(ctx["cfg"], Group(config.REPO_LAYER))
             want["group"] = config.REPO_LAYER
         want = overlay(want, own)
@@ -556,7 +569,8 @@ def doctor(repo: str, ctx: dict) -> None:
     mine = " + .mason.toml" if own_file else ""
     who = rules.about((want or {}).get("more") or {})
     who = f"; {who}" if who else ""
-    where = f" (group {group.name}{mine}{who})" if group else \
+    name = ("Mason's built-in defaults" if group.name == builtin.NAME else f"group {group.name}") if group else ""
+    where = f" ({name}{mine}{who})" if group else \
         f" (its .mason.toml{who})" if own_file else " (no group: only its own ruleset files)"
     if not problems:
         say(f"   ok{where}")
@@ -663,7 +677,10 @@ def sync(repo: str, ctx: dict) -> None:
     want, _ = want_of(repo, ctx)  # the group's files and the ones its keys generate (dependabot, CODEOWNERS ...)
     if want and ctx.get("only"):
         want = {**want, "files": {p: s for p, s in want["files"].items() if p in ctx["only"]}}
-    if not want or not want["files"]:
+    if want and ctx.get("only"):
+        want = {**want, "starters": {n: {p: t for p, t in f.items() if p in ctx["only"]}
+                                     for n, f in (want.get("starters") or {}).items()}}
+    if not want or not (want["files"] or want.get("starters")):
         say("   no files to sync" + ("" if group else " (no group)"))
         return
     if group and group.reference == repo:
@@ -674,12 +691,16 @@ def sync(repo: str, ctx: dict) -> None:
     ours = blob_shas(repo, branch_base)
     changed = {p: (want["texts"][p], ours.get(p)) for p, sha in want["files"].items()
                if ours.get(p) != sha and p in want["texts"]}
+    # a required file the repo has none of: a starter it can change as it likes (never replaced later)
+    starters = {p: t for p, t in starter_files(want, ours).items() if p not in changed}
+    changed.update({p: (t, None) for p, t in starters.items()})
     if not changed:
         say(f"   in sync with {want['label']}")
         return
     for path, (_, sha) in changed.items():
         say(f"   {'update' if sha else 'add'} {path}")
-    stamp = want.get("head") or hashlib.sha1("".join(sorted(want["files"].values())).encode()).hexdigest()
+    seed = "".join(sorted(want["files"].values()) + sorted(starters))
+    stamp = want.get("head") or hashlib.sha1(seed.encode()).hexdigest()
     branch = f"mason/sync-{stamp[:7]}"
     owner = repo.split("/")[0]
     if api("GET", f"/repos/{repo}/pulls?state=open&head={owner}:{branch}"):
@@ -689,7 +710,7 @@ def sync(repo: str, ctx: dict) -> None:
         say(f"   [dry-run] push {len(changed)} file(s) to {branch_base}" if config.auto(ctx["cfg"], repo, "auto_push")
             else f"   [dry-run] PR on {branch} with {len(changed)} file(s)")
         return
-    lines = "\n".join(f"- `{p}`" for p in changed)
+    lines = "\n".join(f"- `{p}`" for p in changed if p not in starters)
     group = ctx["groups"].get(repo)
     where = group.origin if group and group.origin else ctx["cfg"].source
     source = f"{want['reference']}@{stamp[:7]}" if want.get("reference") else f"the defaults ({where})"
@@ -698,8 +719,10 @@ def sync(repo: str, ctx: dict) -> None:
     land(ctx["cfg"], repo, branch_base, branch, changed,
          f"chore: sync shared files with {want['label']}",
          f"Sync shared files with {want['label']}",
-         f"Copies these files from {source}:\n\n{lines}\n\n"
-         "Check the diff for changes this repo made on purpose before merging.\n\nOpened by `mason sync`.")
+         (f"Copies these files from {source}:\n\n{lines}\n\n" if lines else "")
+         + ("Adds starter files for what the repo should have and has none of (edit them as you like; "
+            "mason won't replace them):\n\n" + "\n".join(f"- `{p}`" for p in starters) + "\n\n" if starters else "")
+         + "Check the diff for changes this repo made on purpose before merging.\n\nOpened by `mason sync`.")
 
 
 # ── new repos ────────────────────────────────────────────────────────────────

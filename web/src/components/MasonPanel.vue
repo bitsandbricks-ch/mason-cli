@@ -12,6 +12,7 @@ import { RouterLink } from 'vue-router'
 import { forget } from '../load.js'
 import { get, log, post, put, qs, state } from '../api.js'
 import { ask } from '../ui.js'
+import { working } from '../toast.js'
 import ErrorNote from './ErrorNote.vue'
 import RulesetForm from './RulesetForm.vue'
 import { useUnsaved } from '../unsaved.js'
@@ -64,16 +65,17 @@ async function send(question, method, path, body) {
   const a = await ask(question, { detail: state.dryRun ? 'dry run is on: nothing changes' : `Writes ${where.value}.` })
   if (!a) return null
   const dry = a === 'dry'
+  const busy = working(`${dry ? '[dry-run] ' : ''}${question.replace(/\?$/, '')}`)
   try {
     const got = await method(path, { ...body, mode: mode.value, dry_run: dry })
     if (!dry) { forget('/doctor'); forget('/repo') }
-    log(`${dry ? '[dry-run] ' : ''}${question.replace(/\?$/, '')}: done`, 'ok', { detail: got.text })
+    log(`${dry ? '[dry-run] ' : ''}${question.replace(/\?$/, '')}: done`, 'ok', { detail: got.text, toast: busy.id })
     emit('done', { text: got.text, ok: true })
     if (!dry) await load()
     return got
   } catch (e) {
     const text = e.message
-    log(`${question.replace(/\?$/, '')}: ${text}`, 'error')
+    log(`${question.replace(/\?$/, '')}: ${text}`, 'error', { toast: busy.id })
     emit('done', { text: `error: ${text}`, ok: false })
     return null
   }

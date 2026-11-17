@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router'
 import { get, log, post, put } from '../api.js'
 import { ask } from '../ui.js'
 import TextPane from '../components/TextPane.vue'
+import { working } from '../toast.js'
 
 const list = ref([])
 const broken = ref([])
@@ -32,9 +33,11 @@ async function run(p, a) {
   }
   const { repo, ...rest } = f
   output.value = `running ${a.title}...`
+  const note = working(`${dry ? '[dry-run] ' : ''}${a.title}`)
   try {
     output.value = (await post(`/plugins/${p.name}/actions/${a.id}`, { repo, params: rest, dry_run: dry })).text
-  } catch (e) { output.value = `error: ${e.message}` }
+    log(`${dry ? '[dry-run] ' : ''}${a.title}: done`, 'ok', { detail: output.value, toast: note.id })
+  } catch (e) { output.value = `error: ${e.message}`; log(`${a.title}: ${e.message}`, 'error', { toast: note.id }) }
 }
 onMounted(load)
 </script>

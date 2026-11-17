@@ -8,6 +8,7 @@ import { computed, ref, watch } from 'vue'
 import { get, log, post, qs, state } from '../api.js'
 import { forget } from '../load.js'
 import { ask } from '../ui.js'
+import { working } from '../toast.js'
 import ErrorNote from './ErrorNote.vue'
 import { safeHref } from '../links.js'
 import { useUnsaved } from '../unsaved.js'
@@ -73,14 +74,15 @@ async function apply(keep) {
   if (!a) return
   busy.value = true
   const dry = a === 'dry'
+  const note = working(`${dry ? '[dry-run] ' : ''}Change ${pending.value.length} setting${pending.value.length === 1 ? '' : 's'} of ${props.repo}`)
   try {
     const got = await post('/repo/settings', { repo: props.repo, changes: edits.value, keep, dry_run: dry })
-    log(`${dry ? '[dry-run] ' : ''}settings of ${props.repo}: done`, 'ok', { detail: got.text })
+    log(`${dry ? '[dry-run] ' : ''}settings of ${props.repo}: done`, 'ok', { detail: got.text, toast: note.id })
     emit('done', { text: got.text, ok: true })
     if (!dry) { edits.value = {}; forget('/doctor'); forget('/repo'); await load() }
   } catch (e) {
     const text = e.message
-    log(`settings of ${props.repo}: ${text}`, 'error')
+    log(`settings of ${props.repo}: ${text}`, 'error', { toast: note.id })
     emit('done', { text: `error: ${text}`, ok: false })
   } finally { busy.value = false }
 }
@@ -150,7 +152,7 @@ defineExpose({ load })
         <div><span class="warn">{{ pending.length }} change{{ pending.length === 1 ? '' : 's' }}</span>
           <span class="dim">: {{ pending.map((p) => `${p.row.label} → ${show(p.value)}`).join(' · ') }}</span></div>
         <div class="row" style="margin-top: 6px">
-          <button class="primary" :disabled="busy" @click="apply(false)">apply on {{ host }}</button>
+          <button class="primary" :class="{ running: busy }" :disabled="busy" @click="apply(false)">apply on {{ host }}</button>
           <button :disabled="busy || !keepable" :title="keepable ? '' : 'doctor has no key for these'" @click="apply(true)">apply and keep in .mason.toml</button>
           <button :disabled="busy" @click="edits = {}">undo</button>
         </div>

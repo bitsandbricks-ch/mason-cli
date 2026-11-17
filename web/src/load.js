@@ -2,6 +2,7 @@ import { onMounted, onScopeDispose, ref, watch } from 'vue'
 import { get, log, post, qs, state } from './api.js'
 import { scope } from './scope.js'
 import { ask } from './ui.js'
+import { working } from './toast.js'
 
 // Answers the views already have, by request path: switching tabs (or going back from a page) shows the
 // last answer at once and asks again only when it is older than FRESH_MS. r and every change ask again.
@@ -167,21 +168,31 @@ export function useFollow({ pending, refresh }) {
 }
 
 // A change: ask first (y / d for a dry run / n), then send it; returns {text, dry, ok} (null when not asked to).
-export async function change(question, path, body = {}, { detail = '' } = {}) {
+// started(): called once it's asked and on its way (a button can say "working" from then on, not while asking).
+export async function change(question, path, body = {}, { detail = '', started = null } = {}) {
   const a = await ask(question, { detail: [detail, state.dryRun ? 'dry run is on: nothing changes' : ''].filter(Boolean).join('\n') })
   if (!a) return null
+  started?.()
   const dry = a === 'dry'
+  const what = `${dry ? '[dry-run] ' : ''}${question.replace(/\?$/, '')}`
+  const busy = working(what) // the toast says it's under way, then how it ended
   try {
     const got = await post(path, { ...body, dry_run: dry })
     if (!dry) forget() // a change: every remembered answer may be stale now
     const text = got.text ?? ''
-    const failed = /^\s*error/m.test(text)
-    log(`${dry ? '[dry-run] ' : ''}${question.replace(/\?$/, '')}: ${failed ? 'had errors' : 'done'}`, failed ? 'error' : 'ok', { detail: text })
+    const failed = /^\s*(error|couldn't)/m.test(text)
+    log(`${what}: ${failed ? `failed: ${firstError(text)}` : 'done'}`, failed ? 'error' : 'ok', { detail: text, toast: busy.id })
     return { text, dry, ok: !failed }
   } catch (e) {
-    log(`${question.replace(/\?$/, '')}: ${e.message}`, 'error')
+    log(`${what}: ${e.message}`, 'error', { toast: busy.id })
     return { text: `error: ${e.message}`, dry, ok: false }
   }
+}
+
+// the first line of output that says what went wrong, short
+export function firstError(text) {
+  const line = String(text || '').split('\n').map((l) => l.trim()).find((l) => /^(error|couldn't)/.test(l)) || 'see the output'
+  return line.replace(/^error:\s*/, '').slice(0, 140)
 }
 
 // The same, returning only the command output (or null).

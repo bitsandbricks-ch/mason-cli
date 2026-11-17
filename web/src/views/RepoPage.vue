@@ -3,11 +3,12 @@
 // its drift against the defaults (doctor: the kept check, or checked when the page opens), its open PRs as links to their
 // pages, and its event log at the bottom. After a change, and while a release run is going, the page reads
 // the repo again by itself (see useFollow).
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePage } from '../side.js'
 import { qs } from '../api.js'
-import { act, cached, forget, useFollow } from '../load.js'
+import { cached, change, forget, useFollow } from '../load.js'
+import { toast } from '../toast.js'
 import { useKeys } from '../keys.js'
 import DoctorPanel from '../components/DoctorPanel.vue'
 import ActionList from '../components/ActionList.vue'
@@ -44,6 +45,9 @@ const info = ref(null) // /repo's info: what the status header shows
 const doctor = ref(null) // the doctor panel's last result
 const sheet = ref(null)
 const vbar = ref(null)
+const running = ref('') // the key of the action under way: its button says so (one at a time)
+const ended = reactive({}) // {key: 'ok' | 'bad'}: how an action just ended, shown on its button for a while
+let fixed = '' // a fix just ran on this repo: say what's left once the defaults panel has checked again
 
 async function load(fresh = false) {
   if (!repo.value) return
@@ -94,25 +98,53 @@ const rest = computed(() => {
 })
 const log = ref(null)
 
-async function run(q, path, body) {
-  const t = await act(q, path, body)
-  if (t === null) return
-  output.value = t
+async function run(q, path, body, k = '') {
+  if (running.value) {
+    toast(`wait: ${actions.value.find((a) => a.k === running.value)?.label || 'a change'} is still under way`, 'info')
+    return
+  }
+  const name = repo.value
+  let got
+  try {
+    got = await change(q, path, body, { started: () => { running.value = k } })
+  } finally { running.value = '' }
+  if (got === null || name !== repo.value) return
+  output.value = got.text
+  if (k) mark(k, got.ok)
   forget('/status'); forget('/repo'); forget('/release')
   load(true)
   follow.now([repo.value])
   log.value?.burst()
-  if (path === '/doctor') checked.value++
+  if (path !== '/doctor') return
+  if (body.fix && !got.dry && got.ok) { fixed = name; doctorPanel.value?.load(true) } else checked.value++
+}
+const timers = {}
+function mark(k, ok) {
+  ended[k] = ok ? 'ok' : 'bad'
+  clearTimeout(timers[k])
+  timers[k] = setTimeout(() => { delete ended[k] }, 8000)
+}
+// the defaults panel's new result: after a fix, say whether it's all fixed now or what is left
+function checkedNow(d) {
+  doctor.value = d
+  if (!fixed || fixed !== repo.value || d.repo !== repo.value) return
+  fixed = ''
+  if (d.ok) toast(`${repo.value} matches its defaults now`, 'ok')
+  else if (!d.error) {
+    const n = d.problems.length
+    toast(`${repo.value}: ${n} issue${n === 1 ? '' : 's'} left that fixing the drift can't change: see "defaults"`, 'info',
+      { detail: d.problems.join('\n') })
+  }
 }
 const r = () => [repo.value]
 const fixFrom = (kind) => (kind === 'protect' ? masonPanel.value?.protectNow()
   : actions.value.find((a) => a.k === (kind === 'sync' ? 's' : 'f'))?.fn())
 const actions = computed(() => [
-  { k: 'c', group: 'defaults', label: 'check against the defaults', fn: () => run(`Check ${repo.value} against the defaults?`, '/doctor', { repos: r() }) },
-  { k: 'f', group: 'defaults', label: 'fix the drift', fn: () => run(`Fix the drift of ${repo.value} (settings, security, rulesets)?`, '/doctor', { repos: r(), fix: true }) },
-  { k: 's', group: 'defaults', label: 'open a PR with the shared files', fn: () => run(`Open a PR that syncs the shared files into ${repo.value}?`, '/sync', { repos: r() }) },
-  { k: 'm', group: 'pull requests', off: !pulls.value.length, label: 'auto-merge the ready ones', fn: () => run(`Auto-merge the ready PRs of ${repo.value}?`, '/merge', { targets: r() }) },
-  { k: 'M', group: 'pull requests', off: !pulls.value.length, label: 'merge the ready ones now', fn: () => run(`Merge the ready PRs of ${repo.value} now?`, '/merge', { targets: r(), now: true }) },
+  { k: 'c', group: 'defaults', label: 'check against the defaults', fn: () => run(`Check ${repo.value} against the defaults?`, '/doctor', { repos: r() }, 'c') },
+  { k: 'f', group: 'defaults', label: 'fix the drift', fn: () => run(`Fix the drift of ${repo.value} (settings, security, rulesets)?`, '/doctor', { repos: r(), fix: true }, 'f') },
+  { k: 's', group: 'defaults', label: 'open a PR with the shared files', fn: () => run(`Open a PR that syncs the shared files into ${repo.value}?`, '/sync', { repos: r() }, 's') },
+  { k: 'm', group: 'pull requests', off: !pulls.value.length, label: 'auto-merge the ready ones', fn: () => run(`Auto-merge the ready PRs of ${repo.value}?`, '/merge', { targets: r() }, 'm') },
+  { k: 'M', group: 'pull requests', off: !pulls.value.length, label: 'merge the ready ones now', fn: () => run(`Merge the ready PRs of ${repo.value} now?`, '/merge', { targets: r(), now: true }, 'M') },
   { k: 'n', group: 'releases', primary: true, label: 'create a release', fn: () => newRelease('release') },
   { k: 'T', group: 'releases', label: 'push a tag (its workflow releases)', fn: () => newRelease('tag') },
   { k: 'l', group: 'releases', label: 'all its releases', fn: () => router.push({ path: '/release', query: { repo: repo.value } }) },
@@ -149,7 +181,7 @@ const keys = { '.': () => sheet.value?.pick(), Escape: async () => { if (!form.v
 watch(actions, (list) => list.forEach((a) => { keys[a.k] = () => !a.off && a.fn() }), { immediate: true })
 useKeys(keys)
 // last: the immediate watch uses everything above
-watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; version.value = null; suggest.value = ''; info.value = null; doctor.value = null; load(); loadReleases() }, { immediate: true })
+watch(repo, () => { fixed = ''; detail.value = ''; output.value = ''; form.value = ''; version.value = null; suggest.value = ''; info.value = null; doctor.value = null; load(); loadReleases() }, { immediate: true })
 </script>
 
 <template>
@@ -158,10 +190,11 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
       <button class="hide-xs" @click="back"><span class="k">esc</span> back</button>
       <span class="dim hide-xs">repos ›</span>
       <span class="spacer" />
-      <ActionList v-if="!needs" ref="sheet" class="show-compact" :actions="actions" :title="repo" compact />
+      <ActionList v-if="!needs" ref="sheet" class="show-compact" :actions="actions" :title="repo" :running="running" compact />
       <button class="any" @click="reload"><span class="k">r</span> reload</button>
     </div>
-    <StatusHeader :title="pinned.has(repo) ? `★ ${repo}` : repo" :url="info?.url" :badges="badges" :next="next" />
+    <StatusHeader :title="pinned.has(repo) ? `★ ${repo}` : repo" :url="info?.url" :badges="badges"
+                  :next="next && { ...next, busy: !!next.key && running === next.key }" />
     <div v-if="needs" class="pad">
       <div class="box">
         <p>Mason reads {{ repo }} with your {{ needs }} account, and none is connected yet.</p>
@@ -170,12 +203,13 @@ watch(repo, () => { detail.value = ''; output.value = ''; form.value = ''; versi
     </div>
     <div v-else class="split page repo-cols">
       <div class="pad">
-        <div class="hide-xs"><h2>actions</h2><ActionList :actions="actions" /></div>
-        <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" @result="(d) => (doctor = d)" @run="fixFrom" />
+        <div class="hide-xs"><h2>actions</h2><ActionList :actions="actions" :running="running" :ended="ended" /></div>
+        <!-- right under the buttons that made it, not below every panel -->
+        <template v-if="output"><h2 class="row" style="margin-top: 16px">output <span class="spacer" /><button class="link" @click="output = ''">clear</button></h2><TextPane :text="output" /></template>
+        <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" :running="running" @result="checkedNow" @run="fixFrom" />
         <MasonPanel ref="masonPanel" :repo="repo" @done="({ text, ok }) => { output = text; if (ok) { checked++; log?.burst() } }" />
         <SecretsPanel v-if="!gitlab" :repo="repo" @done="({ text }) => (output = text)" />
         <SettingsPanel ref="settingsPanel" :repo="repo" @done="({ text, ok }) => { output = text; if (ok) { checked++; masonPanel?.load(); log?.burst() } }" />
-        <template v-if="output"><h2 style="margin-top: 16px">output</h2><TextPane :text="output" /></template>
       </div>
       <div class="pad">
         <VersionBar v-if="version" ref="vbar" :repo="repo" :version="version" @done="done" />
