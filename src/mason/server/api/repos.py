@@ -239,7 +239,7 @@ def prs():
                             "review": (p.get("reviewDecision") or "").lower().replace("_", " "),
                             "auto": bool(p.get("autoMergeRequest")), "merge": R.merge_word(p),
                             "author": (p.get("author") or {}).get("login", ""),
-                            "reviewers": reviewers(p),
+                            "reviewers": reviewers(p), "updated": p.get("updatedAt"),
                             "branch": p.get("headRefName", "")})
             for p in (node.get("merged") or {}).get("nodes") or []:
                 merged.append({"repo": repo, "provider": "github", "number": p["number"], "title": p["title"],
