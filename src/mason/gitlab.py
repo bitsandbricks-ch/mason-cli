@@ -665,14 +665,18 @@ def doctor(gl: GitLab, cfg, repo: str, fix: bool = False, auto: bool = False) ->
     group = cfg.group_of(repo)
     own = own_file(gl, repo)
     spec = protect_spec(group, own)
-    if not group and not own.get("gitlab") and spec is None:
+    skipped = "protect" in set((group.skip if group else []) or []) | set(own.get("skip") or [])
+    # nothing says protect, not even protect = false: Mason's built-in defaults protect the default branch
+    builtin = (spec is None and not skipped and getattr(cfg, "builtin", True)
+               and "protect" not in ((group.more if group else {}) or {}) and "protect" not in own)
+    if not group and not own.get("gitlab") and spec is None and not builtin:
         say("   ok (no group)")
         return
     want = with_own(want_of(gl, cfg, group) if group else no_group_want(), own)
     if not fix and auto and auto_of(gl, cfg, repo, "auto_fix"):
         fix = True
         say("   auto_fix: fixing what drifted")
-    gname = f"group {group.name}" if group else "its .mason.toml"
+    gname = f"group {group.name}" if group else "its .mason.toml" if own else "Mason's built-in defaults"
     if group and own:
         gname += " + .mason.toml"
     live = gl.api("GET", gl.project(repo)) or {}
@@ -682,10 +686,11 @@ def doctor(gl: GitLab, cfg, repo: str, fix: bool = False, auto: bool = False) ->
             problems.append(f"{k} is {compact(live.get(k))}, {want['label']} has {compact(v)}")
             fixable[k] = v
     branch = live.get("default_branch") or "main"
-    want = with_protect(want, spec, branch)
     prot = {b["name"]: b for b in gl.api("GET", f"{gl.project(repo)}/protected_branches") or []}
+    if builtin and not any(fnmatch.fnmatchcase(branch, p) for p in prot):
+        spec = {"enabled": True}  # only when nothing protects it yet: a protection that's there stays as it is
+    want = with_protect(want, spec, branch)
     bad_branches = []
-    skipped = "protect" in set((group.skip if group else []) or []) | set(own.get("skip") or [])
     if branch not in want["protected"] and not skipped and not any(fnmatch.fnmatchcase(branch, p) for p in prot):
         problems.append(f"the default branch {branch} isn't protected: set protect = {{ reviews = 1 }} in its "
                         f"group, the group's .mason or the project's .mason.toml")

@@ -82,7 +82,7 @@ const yes = computed(() => (state.dryRun && prompt.allowDry ? 'dry' : 'yes'))
           <button @click="answer(null)">cancel</button>
         </template>
         <template v-else>
-          <button class="primary" @click="answer(yes.value)">
+          <button class="primary" @click="answer(yes)">
             <span class="k">y</span> {{ yes === 'dry' ? 'yes (dry run is on)' : 'yes' }}</button>
           <button v-if="prompt.allowDry" @click="answer('dry')"><span class="k">d</span> dry run</button>
           <button @click="answer(null)"><span class="k">n</span> no</button>

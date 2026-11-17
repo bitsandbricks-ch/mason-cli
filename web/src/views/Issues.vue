@@ -19,6 +19,7 @@ import TextPane from '../components/TextPane.vue'
 import { sideOpen, useSide, useTrack } from '../side.js'
 import { openOut } from '../links.js'
 import { useUnsaved } from '../unsaved.js'
+import { working } from '../toast.js'
 
 const STATES = { open: 'open', closed: 'closed', all: 'all' }
 const f = reactive({ state: 'open', mine: false, label: '', stale: 0 })
@@ -77,11 +78,12 @@ async function setPicked(close) {
   const dry = a === 'dry'
   const out = []
   let failed = 0
+  const note = working(`${dry ? '[dry-run] ' : ''}${verb} ${list.length} issue${list.length === 1 ? '' : 's'}`)
   for (const i of list) { // one at a time: each is its own call, and one that fails doesn't stop the rest
     try { out.push((await post('/issue', { repo: i.repo, number: i.number, action: close ? 'close' : 'reopen', dry_run: dry })).text) } catch (e) { failed++; out.push(`${keyOf(i)}: error: ${e.message}`) }
   }
   detail.value = out.join('\n')
-  log(`${dry ? '[dry-run] ' : ''}${verb} ${list.length} issues: ${failed ? `${failed} failed` : 'done'}`, failed ? 'error' : 'ok', { detail: detail.value })
+  log(`${dry ? '[dry-run] ' : ''}${verb} ${list.length} issues: ${failed ? `${failed} failed` : 'done'}`, failed ? 'error' : 'ok', { detail: detail.value, toast: note.id })
   if (!dry) { picked.value = []; forget('/issues'); load(true) }
 }
 

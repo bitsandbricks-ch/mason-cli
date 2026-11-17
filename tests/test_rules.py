@@ -184,9 +184,73 @@ def test_gitlab_protect_protects_the_default_branch(capsys):
     assert "1 protected branches" in capsys.readouterr().out
     assert ("POST", "/projects/acme%2Fsite/protected_branches",
             {"name": "main", "push_access_level": 0, "merge_access_level": 30}) in gl.calls
-    bare = Config(source=None, orgs=[], repos=[], exclude=[], org_defaults=False, groups=[Group("all")])
+    bare = Config(source=None, orgs=[], repos=[], exclude=[], org_defaults=False, groups=[Group("all")],
+                  builtin=False)
     GL.doctor(StubGitLab(""), bare, "gitlab:acme/site")
     assert "the default branch main isn't protected" in capsys.readouterr().out
     GL.doctor(StubGitLab('skip = ["protect"]'), bare, "gitlab:acme/site")
     assert "isn't protected" not in capsys.readouterr().out
 
+
+
+def test_gitlab_builtin_protects_an_unprotected_default_branch(capsys):
+    from mason import gitlab as GL
+
+    nothing = Config(source=None, orgs=[], repos=[], exclude=[], org_defaults=False, groups=[])
+    gl = StubGitLab("")
+    GL.doctor(gl, nothing, "gitlab:acme/site", fix=True)
+    out = capsys.readouterr().out
+    assert "1 protected branches" in out and "no group" not in out
+    assert ("POST", "/projects/acme%2Fsite/protected_branches",
+            {"name": "main", "push_access_level": 0, "merge_access_level": 30}) in gl.calls
+    gl = StubGitLab("protect = false")  # said off: nothing is added
+    GL.doctor(gl, nothing, "gitlab:acme/site", fix=True)
+    assert not [c for c in gl.calls if c[0] == "POST"]
+
+
+def test_builtin_defaults_for_a_repo_nothing_describes(monkeypatch):
+    from mason import builtin, defaults
+
+    monkeypatch.setattr("mason.repos.listing", lambda cfg: {})
+    monkeypatch.setattr(config, "repo_layer", lambda repo: None)
+    c = Config(source=None, orgs=[], repos=[], exclude=[], org_defaults=False, groups=[])
+    ctx = defaults.doctor_ctx(c, ["acme/web"])
+    want, _ = defaults.want_of("acme/web", ctx)
+    assert ctx["groups"]["acme/web"].name == builtin.NAME and want["label"] == "built-in"
+    assert want["settings"]["delete_branch_on_merge"] is True
+    assert "secret_scanning" not in want["security"]  # private repos would need Advanced Security
+    assert want["builtin"] and "protect" not in want["more"]  # only when nothing protects it: rules._default_protected
+    assert set(want["required_files"]) == {builtin.PR_NEED, builtin.ISSUE_NEED, builtin.DEPS_NEED}
+    off = Config(source=None, orgs=[], repos=[], exclude=[], org_defaults=False, groups=[], builtin=False)
+    assert defaults.doctor_ctx(off, ["acme/web"])["groups"]["acme/web"] is None
+    mine = Config(source=None, orgs=[], repos=[], exclude=[], org_defaults=False, groups=[Group("default")])
+    assert defaults.doctor_ctx(mine, ["acme/web"])["groups"]["acme/web"].name == "default"  # a group replaces it
+
+
+def test_starters_only_where_the_repo_has_none():
+    from mason import builtin, defaults
+
+    w = rules.prepare(want(templates=True))
+    w["required_files"].append(builtin.DEPS_NEED)
+    w = rules.prepare(w)
+    assert builtin.missing(builtin.PR_NEED) == "a pull request template is missing"
+    got = defaults.starter_files(w, {".github/PULL_REQUEST_TEMPLATE.md": "x", "renovate.json": "y"})
+    assert set(got) == {".github/ISSUE_TEMPLATE/bug_report.yml", ".github/ISSUE_TEMPLATE/feature_request.yml"}
+    assert "name: Bug report" in got[".github/ISSUE_TEMPLATE/bug_report.yml"]
+    assert defaults.starter_files(defaults.skip({**w, "skip": {"required_files"}}), {}) == {}
+    assert rules.prepare(want(templates=True) | {"skip": {"templates"}})["required_files"] == []
+
+
+def test_builtin_protect_fills_in_when_no_layer_says(monkeypatch):
+    monkeypatch.setattr(rules, "_get", lambda path: None)
+    state = {"default_branch": "main"}
+    found = rules._default_protected("acme/web", state, {**want(), "label": "defaults", "builtin": True})
+    assert found[0].area == "protect" and "the default branch main isn't protected" in found[0].text
+    said_off = {**want(protect={"enabled": False}), "label": "defaults", "builtin": True}
+    assert not rules._default_protected("acme/web", state, said_off)[0].area  # protect = false: only reported
+    calls = []
+    monkeypatch.setattr("mason.defaults.api", lambda *a: calls.append(a) or [])
+    rules.fix_protect("acme/web", state, {})
+    assert calls[-1][0] == "POST" and calls[-1][2]["name"] == "protect"
+    kinds = {r["type"]: r.get("parameters") for r in calls[-1][2]["rules"]}
+    assert kinds["pull_request"]["required_approving_review_count"] == 0 and "non_fast_forward" in kinds

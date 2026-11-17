@@ -14,6 +14,7 @@ import SidePanel from './components/SidePanel.vue'
 import Palette from './components/Palette.vue'
 import KeysSheet from './components/KeysSheet.vue'
 import SetupHint from './components/SetupHint.vue'
+import Toasts from './components/Toasts.vue'
 import { clearRecent, sideOpen } from './side.js'
 import { confirmLeave } from './unsaved.js'
 import { forget } from './load.js'
@@ -125,15 +126,6 @@ const moreLabel = computed(() => (inDock.value || menu.value ? 'more' : TABS.fin
 watch(() => route.path, () => { menu.value = false })
 watch(phone, (p) => { if (!p) menu.value = false })
 
-// the last log line, for a few seconds (errors longer), in a row of its own above the bottom bar
-const toast = ref(null)
-let toastTimer = null
-watch(() => state.log[0], (l) => {
-  if (!phone.value || !l) return
-  toast.value = l
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { toast.value = null }, l.kind === 'error' ? 10000 : 4000)
-})
 
 const reload = () => window.location.reload()
 async function logout() {
@@ -241,8 +233,7 @@ window.addEventListener('keydown', (e) => {
         </section>
       </div>
     </main>
-    <div v-if="toast" class="toast" :class="toast.kind === 'error' ? 'bad' : toast.kind === 'ok' ? 'ok' : ''" role="status"
-         @click="toast = null">{{ toast.text }}</div>
+    <Toasts />
     <nav class="dock" aria-label="views">
       <router-link v-for="d in DOCK" :key="d.name" :to="d.path" :class="{ active: !menu && current === d.name }">
         <span class="ico" aria-hidden="true">{{ d.icon }}</span>{{ d.label }}
@@ -283,6 +274,7 @@ window.addEventListener('keydown', (e) => {
       <main><SetupHint /><router-view @rate="refreshRate" /></main>
       <SidePanel />
     </div>
+    <Toasts />
     <footer class="foot">
       <span v-if="last" class="last" :class="last.kind === 'error' ? 'bad' : last.kind === 'ok' ? 'ok' : 'dim'"
             :title="'the session log (`)'" role="button" :aria-expanded="logOpen" @click="logOpen = !logOpen">

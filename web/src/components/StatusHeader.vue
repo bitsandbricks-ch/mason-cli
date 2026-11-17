@@ -11,7 +11,7 @@ defineProps({
   url: { type: String, default: '' },
   badges: { type: Array, default: () => [] }, // [{label, value, cls?, to?, href?}]
   blockers: { type: Array, default: () => [] }, // [string]
-  next: { type: Object, default: null }, // {text, label?, key?, fn?, cls?}
+  next: { type: Object, default: null }, // {text, label?, key?, fn?, cls?, busy?: its change is under way}
 })
 const tone = (b) => b.cls ?? stateClass(b.value)
 </script>
@@ -37,7 +37,7 @@ const tone = (b) => b.cls ?? stateClass(b.value)
     </ul>
     <div v-if="next" class="next">
       <span class="dim">next:</span> <span :class="next.cls || ''">{{ next.text }}</span>
-      <button v-if="next.fn" class="primary" @click="next.fn"><span v-if="next.key" class="k">{{ next.key }}</span> {{ next.label }}</button>
+      <button v-if="next.fn" class="primary" :class="{ running: next.busy }" :disabled="next.busy" :aria-busy="!!next.busy" @click="next.fn"><span v-if="next.key" class="k">{{ next.key }}</span> {{ next.label }}</button>
     </div>
   </header>
 </template>

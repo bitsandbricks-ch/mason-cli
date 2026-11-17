@@ -11,6 +11,7 @@ import Scope from '../components/Scope.vue'
 import TextPane from '../components/TextPane.vue'
 import { useTrack } from '../side.js'
 import { ago } from '../ui.js'
+import { working } from '../toast.js'
 
 const output = ref('')
 const found = ref([]) // doctor's result per repo: the table on top, the full output below it
@@ -58,13 +59,17 @@ async function doctor() {
   running.value = 'doctor'
   output.value = ''
   found.value = []
+  const note = working(`Check ${where.value} against the defaults`)
   try {
     const got = await post('/doctor', { repos: repos.value, ...scoped() })
     output.value = got.text || 'ok'
     found.value = got.repos || []
     fromKept.value = false
     forget('/status') // the repo list's doctor column
-  } catch (e) { output.value = `error: ${e.message}`; log(e.message, 'error') }
+    const off = found.value.filter((r) => !r.ok).length
+    log(`Checked ${found.value.length} repo${found.value.length === 1 ? '' : 's'}: ${off ? `${off} off their defaults` : 'all on their defaults'}`,
+      'ok', { detail: output.value, toast: note.id })
+  } catch (e) { output.value = `error: ${e.message}`; log(`check: ${e.message}`, 'error', { toast: note.id }) }
   running.value = ''
 }
 async function fix() {
@@ -77,7 +82,11 @@ async function sync() {
 }
 async function plugin(c) {
   running.value = c.key
-  try { output.value = (await post(`/plugins/${c.plugin}/checks/${c.key}`)).text } catch (e) { output.value = `error: ${e.message}` }
+  const note = working(`${c.plugin}: ${c.key}`)
+  try {
+    output.value = (await post(`/plugins/${c.plugin}/checks/${c.key}`)).text
+    log(`${c.plugin}: ${c.key} done`, 'ok', { detail: output.value, toast: note.id })
+  } catch (e) { output.value = `error: ${e.message}`; log(`${c.plugin}: ${c.key}: ${e.message}`, 'error', { toast: note.id }) }
   running.value = ''
 }
 useKeys({ c: doctor, f: fix, s: sync })

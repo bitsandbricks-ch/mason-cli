@@ -12,6 +12,7 @@ const emit = defineEmits(['run', 'result'])
 const props = defineProps({
   repo: { type: String, required: true },
   stamp: { type: Number, default: 0 }, // bumped by the page after it ran doctor (c, f): show the kept result
+  running: { type: String, default: '' }, // the page's action under way (f, s): its button here says so too
 })
 const result = ref(null)
 const error = ref('')
@@ -72,7 +73,8 @@ defineExpose({ load })
       <ErrorNote v-if="result.error" :error="result.error" what="couldn't check this repo" />
       <div v-if="result.fixes?.length" class="row fixes">
         <template v-for="f in result.fixes" :key="f">
-          <button v-if="fixOf(f)" :title="f" @click="emit('run', fixOf(f).kind)"><span class="k">{{ fixOf(f).k }}</span> {{ fixOf(f).label }}</button>
+          <button v-if="fixOf(f)" :title="f" :class="{ running: running === fixOf(f).k }" :disabled="running === fixOf(f).k"
+                  :aria-busy="running === fixOf(f).k" @click="emit('run', fixOf(f).kind)"><span class="k">{{ fixOf(f).k }}</span> {{ fixOf(f).label }}</button>
           <span v-else class="dim fix">{{ f }}</span>
         </template>
       </div>
