@@ -9,6 +9,7 @@ import { arrowKey } from './arrows.js'
 import { closeDetail, detailName, phone, prompt } from './ui.js'
 import PromptDialog from './components/PromptDialog.vue'
 import Logo from './components/Logo.vue'
+import { net, retry } from './net.js'
 import SidePanel from './components/SidePanel.vue'
 import Palette from './components/Palette.vue'
 import KeysSheet from './components/KeysSheet.vue'
@@ -59,12 +60,22 @@ onMounted(async () => {
   }
 })
 async function guard() {
-  if (!state.loaded || state.unreachable) return
+  if (!state.loaded || state.offline || state.unreachable) return // unreachable is not signed out: wait, then decide
   await router.isReady() // before the first page is resolved the route is still "/", and the link was lost
   if (!signedIn.value && !route.meta.public) router.replace({ name: 'login', query: route.path !== '/' ? { next: route.fullPath } : {} })
 }
 watch(() => route.fullPath, guard)
 watch(signedIn, guard)
+watch(() => state.offline, guard)
+// the seconds until the next try, for the offline banner
+const now = ref(Date.now())
+let tick = null
+watch(() => state.offline, (off) => {
+  clearInterval(tick)
+  now.value = Date.now()
+  if (off) tick = setInterval(() => { now.value = Date.now() }, 1000)
+}, { immediate: true })
+const retryIn = computed(() => Math.max(0, Math.ceil((net.retryAt - now.value) / 1000)))
 
 // The desktop tab bar: sections, and the views of the open section as sub-tabs (plugins and the operator
 // page belong to setup).
@@ -124,7 +135,7 @@ watch(() => state.log[0], (l) => {
   toastTimer = setTimeout(() => { toast.value = null }, l.kind === 'error' ? 10000 : 4000)
 })
 
-const retry = () => window.location.reload()
+const reload = () => window.location.reload()
 async function logout() {
   if (!(await confirmLeave())) return
   forget() // what this account's lists said: not for whoever signs in next in this tab
@@ -170,8 +181,13 @@ window.addEventListener('keydown', (e) => {
 
 <template>
   <div v-if="!state.loaded" class="center"><span class="cursor">connecting</span></div>
+  <div v-else-if="state.offline && !signedIn" class="center" role="alert">
+    <div><Logo :size="28" /><p>Can't reach the Mason server.</p>
+      <p class="dim">Trying again<template v-if="retryIn"> in {{ retryIn }}s</template><span class="cursor" /></p>
+      <button class="primary" @click="retry">try now</button></div>
+  </div>
   <div v-else-if="state.unreachable" class="center">
-    <div class="box"><span class="bad">{{ state.unreachable }}</span><br><br><button class="primary" @click="retry">try again</button></div>
+    <div class="box"><span class="bad">{{ state.unreachable }}</span><br><br><button class="primary" @click="reload">try again</button></div>
   </div>
   <router-view v-else-if="!signedIn || route.meta.public" />
   <div v-else-if="phone" class="screen phone">
@@ -288,6 +304,10 @@ window.addEventListener('keydown', (e) => {
         </li>
       </ol>
     </section>
+  </div>
+  <div v-if="state.offline && signedIn" class="offline" role="alert">
+    can't reach the Mason server<span class="dim"> · trying again<template v-if="retryIn"> in {{ retryIn }}s</template></span>
+    <button class="link" @click="retry">try now</button>
   </div>
   <Palette v-if="signedIn" v-model="jump" :commands="commands" />
   <KeysSheet v-if="signedIn" v-model="help" />

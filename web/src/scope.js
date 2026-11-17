@@ -58,6 +58,12 @@ export function loadGroups() {
   return loading
 }
 
+// After the settings changed (other orgs, a defaults repo): read the groups and orgs again.
+export function reloadGroups() {
+  loading = null
+  return loadGroups()
+}
+
 // The repos the filter lets through, for pickers (a new release's or issue's repo).
 export async function scopedRepos() {
   const r = await get(`/repos${qs(scoped())}`)

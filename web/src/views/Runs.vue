@@ -3,12 +3,14 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { change, forget, useLoad } from '../load.js'
+import { log, post, state } from '../api.js'
+import { BULK_MAX, bulkQuestion, rerunnable } from '../bulk.js'
 import { useKeys } from '../keys.js'
 import { useSeen } from '../seen.js'
 import { emptyText } from '../empty.js'
 import { useLinkFilters } from '../useLink.js'
 import { loadGroups, narrowed, scope } from '../scope.js'
-import { ago } from '../ui.js'
+import { ago, ask } from '../ui.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
@@ -48,7 +50,29 @@ async function rerun() {
   if (got?.ok && !got.dry) { forget('/runs'); setTimeout(() => load(true), 2000) }
 }
 const toggle = () => { f.failed = !f.failed }
-useKeys({ r: () => load(true), R: rerun, f: toggle, o: () => open(current.value), p: () => page() })
+// F: every failed run in the list (the newest of each workflow) runs its failed jobs again, after one question
+const failedRuns = computed(() => rerunnable(rows.value))
+let rerunning = false // a second R while the first go is still sending would send them all again
+async function rerunAll() {
+  const list = failedRuns.value.slice(0, BULK_MAX)
+  if (!list.length || rerunning) return
+  const { question, detail } = bulkQuestion('Run the failed jobs again', 'run', list, (x) => `${x.repo}  ${x.name}  (${x.branch || x.event || x.id})`)
+  const a = await ask(question, { detail: detail + (state.dryRun ? '\n\ndry run is on: nothing changes' : '') })
+  if (!a) return
+  const dry = a === 'dry'
+  const out = []
+  let bad = 0
+  rerunning = true
+  try {
+    for (const x of list) { // one after the other: GitHub's secondary rate limit dislikes bursts of writes
+      try { out.push((await post('/run/rerun', { repo: x.repo, id: x.id, dry_run: dry })).text || `${x.repo}: ${x.id}`) }
+      catch (e) { bad++; out.push(`error: ${x.repo} run ${x.id}: ${e.message}`) }
+    }
+  } finally { rerunning = false }
+  log(`${dry ? '[dry-run] ' : ''}ran the failed jobs again in ${list.length - bad} of ${list.length} runs`, bad ? 'error' : 'ok', { detail: out.join('\n') })
+  if (!dry) { forget('/runs'); setTimeout(() => load(true), 2000) }
+}
+useKeys({ r: () => load(true), R: rerun, F: rerunAll, f: toggle, o: () => open(current.value), p: () => page() })
 const seen = useSeen('runs', () => rows.value.filter((r) => r.id != null).map((r) => r.key))
 </script>
 
@@ -58,6 +82,8 @@ const seen = useSeen('runs', () => rows.value.filter((r) => r.id != null).map((r
       <Scope :groups="scope.groups" />
       <label class="check"><input :checked="f.failed" type="checkbox" @change="toggle"> only failed <span class="dim k">(f)</span></label>
       <label class="row">per repo <select v-model.number="f.limit"><option v-for="n in LIMITS" :key="n">{{ n }}</option></select></label>
+      <button class="any" :disabled="!failedRuns.length" title="run the failed jobs of every failed run in the list again, after one question"
+              @click="rerunAll"><span class="k">F</span> rerun all failed<template v-if="failedRuns.length"> ({{ failedRuns.length }})</template></button>
       <span class="spacer" />
       <button :disabled="!canRerun" @click="rerun"><span class="k">R</span> run failed jobs again</button>
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
