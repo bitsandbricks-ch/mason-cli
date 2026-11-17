@@ -9,6 +9,8 @@ import { get, qs, state } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { alive } from '../pick.js'
 import { useKeys } from '../keys.js'
+import { useSeen } from '../seen.js'
+import { pinned, pinnedFirst } from '../pins.js'
 import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
@@ -30,7 +32,7 @@ const myLogins = computed(() => new Set((state.me?.identities || []).map((i) => 
 const asksMe = (p) => (p.reviewers || []).some((r) => myLogins.value.has(String(r).toLowerCase()))
 const rows = computed(() => {
   if (filter.value === 'merged') return (data.value?.merged || []).map((p) => ({ ...p, state: `merged ${p.by ? 'by ' + p.by : ''}` }))
-  return (data.value?.prs || []).filter((p) => ({
+  return pinnedFirst(data.value?.prs || [], pinned.value).filter((p) => ({
     all: true, review: asksMe(p), ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
   })[filter.value]).map((p) => ({
     ...p, state: p.draft ? 'draft' : p.conflicts ? 'CONFLICTS' : p.merge || 'ready',
@@ -38,7 +40,7 @@ const rows = computed(() => {
   }))
 })
 const columns = [
-  { key: 'repo', label: 'repo', cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
+  { key: 'repo', label: 'repo', fmt: (v) => (pinned.value.has(v) ? `★ ${v}` : v), cls: (r) => (r.provider === 'gitlab' ? 'warn' : '') },
   { key: 'number', label: '#', right: true, fmt: (v, r) => (r.provider === 'gitlab' ? `!${v}` : `#${v}`), card: 'head' },
   { key: 'title', label: 'title', cls: () => '', card: 'main' },
   { key: 'state', label: 'state', card: 'head' },
@@ -127,6 +129,7 @@ useTrack(() => current.value && { kind: 'pr', repo: current.value.repo, number: 
 const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }
 useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, p: () => page(), v: cycle })
+const seen = useSeen('prs', () => (data.value?.prs || []).map(keyOf))
 </script>
 
 <template>
@@ -151,7 +154,7 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <span class="dim hide-xs">space picks the selected row, shift+click a span</span>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :picked="filter === 'merged' ? null : picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
+      <div><DataTable :is-new="seen.isNew" v-model="sel" :picked="filter === 'merged' ? null : picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
     <EventLog band :repo="current?.repo || ''" kind="pr" :number="current?.number || ''" :title="current ? `${current.repo}${current.provider === 'gitlab' ? '!' : '#'}${current.number} ${current.title}` : ''" />

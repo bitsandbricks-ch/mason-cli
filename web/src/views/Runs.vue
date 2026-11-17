@@ -4,6 +4,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { change, forget, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
+import { useSeen } from '../seen.js'
 import { emptyText } from '../empty.js'
 import { useLinkFilters } from '../useLink.js'
 import { loadGroups, narrowed, scope } from '../scope.js'
@@ -48,6 +49,7 @@ async function rerun() {
 }
 const toggle = () => { f.failed = !f.failed }
 useKeys({ r: () => load(true), R: rerun, f: toggle, o: () => open(current.value), p: () => page() })
+const seen = useSeen('runs', () => rows.value.filter((r) => r.id != null).map((r) => r.key))
 </script>
 
 <template>
@@ -61,7 +63,7 @@ useKeys({ r: () => load(true), R: rerun, f: toggle, o: () => open(current.value)
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
       <button :disabled="!current?.id" @click="page()"><span class="k">p</span> page</button>
     </div>
-    <div class="scroll"><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('no workflow runs yet: repos with GitHub Actions or GitLab CI show theirs here', [f.failed && 'only failed'], narrowed())" @activate="page" /></div>
+    <div class="scroll"><DataTable :is-new="seen.isNew" v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('no workflow runs yet: repos with GitHub Actions or GitLab CI show theirs here', [f.failed && 'only failed'], narrowed())" @activate="page" /></div>
     <EventLog band :repo="current?.id ? current.repo : ''" kind="run" :number="current?.id || ''" :title="current?.id ? `${current.repo} ${current.name}` : ''" />
   </div>
 </template>

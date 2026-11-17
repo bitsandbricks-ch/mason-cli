@@ -7,6 +7,7 @@ import { get, log, post, qs, state } from '../api.js'
 import { act, change, forget, useLoad } from '../load.js'
 import { alive } from '../pick.js'
 import { useKeys } from '../keys.js'
+import { useSeen } from '../seen.js'
 import { emptyText } from '../empty.js'
 import { useLinkFilters } from '../useLink.js'
 import { loadGroups, narrowed, scope, scopedRepos } from '../scope.js'
@@ -139,6 +140,7 @@ useTrack(() => current.value && { kind: 'issue', repo: current.value.repo, numbe
 const page = (i) => { const r = i || current.value; if (r) router.push({ path: '/issue', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(STATES); f.state = k[(k.indexOf(f.state) + 1) % k.length] }
 useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => setState(false), m: comment, o: open, p: () => page(), v: cycle, i: () => { f.mine = !f.mine } })
+const seen = useSeen('issues', () => (data.value?.issues || []).map(keyOf))
 </script>
 
 <template>
@@ -168,7 +170,7 @@ useKeys({ r: () => load(true), n: newIssue, c: () => setState(true), u: () => se
       <div>
         <details v-if="data?.failed?.length" class="pad warn"><summary>{{ data.failed.length }} repo{{ data.failed.length === 1 ? '' : 's' }} couldn't be read</summary>
           <div v-for="x in data.failed" :key="x" class="dim">{{ x }}</div></details>
-        <DataTable v-model="sel" :picked="picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : emptyText('no open issues', [f.state !== 'open' && `${f.state} issues`, f.mine && 'mine', f.label && `label ${f.label}`, f.stale && `untouched ${f.stale}d`], narrowed())" @activate="page" />
+        <DataTable :is-new="seen.isNew" v-model="sel" :picked="picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : emptyText('no open issues', [f.state !== 'open' && `${f.state} issues`, f.mine && 'mine', f.label && `label ${f.label}`, f.stale && `untouched ${f.stale}d`], narrowed())" @activate="page" />
       </div>
       <div class="pad">
         <div v-if="form.open" class="box">
