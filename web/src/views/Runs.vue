@@ -6,6 +6,7 @@ import { change, forget, useLoad } from '../load.js'
 import { log, post, state } from '../api.js'
 import { BULK_MAX, bulkQuestion, rerunnable } from '../bulk.js'
 import { useKeys } from '../keys.js'
+import { useSeen } from '../seen.js'
 import { loadGroups, scope } from '../scope.js'
 import { ago, ask } from '../ui.js'
 import EventLog from '../components/EventLog.vue'
@@ -67,6 +68,7 @@ async function rerunAll() {
   if (!dry) { forget('/runs'); setTimeout(() => load(true), 2000) }
 }
 useKeys({ r: () => load(true), R: rerun, F: rerunAll, f: toggle, o: () => open(current.value), p: () => page() })
+const seen = useSeen('runs', () => rows.value.filter((r) => r.id != null).map((r) => r.key))
 </script>
 
 <template>
@@ -82,7 +84,7 @@ useKeys({ r: () => load(true), R: rerun, F: rerunAll, f: toggle, o: () => open(c
       <button :disabled="!current" @click="open(current)"><span class="k">o</span> open</button>
       <button :disabled="!current?.id" @click="page()"><span class="k">p</span> page</button>
     </div>
-    <div class="scroll"><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no workflow runs yet: repos with GitHub Actions or GitLab CI show theirs here'" @activate="page" /></div>
+    <div class="scroll"><DataTable :is-new="seen.isNew" v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : 'no workflow runs yet: repos with GitHub Actions or GitLab CI show theirs here'" @activate="page" /></div>
     <EventLog band :repo="current?.id ? current.repo : ''" kind="run" :number="current?.id || ''" :title="current?.id ? `${current.repo} ${current.name}` : ''" />
   </div>
 </template>

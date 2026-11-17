@@ -93,6 +93,7 @@ move it to "Done" when it ships.
 
 ## Done
 
+- "New since your last visit" marks in the pull request, issue and run lists (per browser).
 - GitLab in the CLI, through glab: `gitlab_groups` in your config, `gitlab:` names in every command that reads GitLab.
 
 - TUI keyboard: Tab / Shift+Tab through every panel and dialog, F1-F10 for help, search, filter and sort.
