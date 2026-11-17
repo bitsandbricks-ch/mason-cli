@@ -10,7 +10,10 @@ export const state = reactive({
   log: [],           // [{at, text, kind, detail, where}] the bottom log (click it for all of them)
   busy: 0,
   rate: null,
+  offline: false,    // the server didn't answer (network down, server restarting): see net.js
 })
+
+const DOWN = [502, 503, 504]
 
 // dry run survives a reload of the tab: switched on as a safety, it mustn't go off without you noticing
 function savedDry() { try { return sessionStorage.getItem('mason-dry-run') === '1' } catch { return false } }
@@ -40,9 +43,16 @@ export async function api(method, path, body, { quiet = false, again = true } = 
         method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body),
       })
     } catch {
+      state.offline = true // no answer at all: the network, or the server is down
       // the browser's own words ("Failed to fetch", "NetworkError…") say nothing about what to do
       throw new ApiError(`can't reach Mason: check your connection${method === 'GET' ? '' : ' (the change may or may not have gone through)'}`, 0)
     }
+    // a proxy in front answers for a server that is down or restarting
+    if (DOWN.includes(res.status) && !res.headers.get('content-type')?.includes('json')) {
+      state.offline = true
+      throw new ApiError(`the Mason server isn't answering (${res.status}): it may be restarting`, res.status)
+    }
+    state.offline = false
     const data = res.status === 204 ? {} : await res.json().catch(() => ({}))
     if (!res.ok) {
       // signed in again in another tab: this tab's token is the old session's. The server refused the write
@@ -70,9 +80,12 @@ export const del = (path) => api('DELETE', path)
 export async function loadMe() {
   state.unreachable = ''
   try { state.me = await get('/me') } catch (e) {
-    // down or unreachable isn't signed out: say so and offer a retry instead of a sign-in page with no way in
-    if (e.status === 0 || e.status >= 500) state.unreachable = e.status ? `Mason answered ${e.message}` : e.message
-    state.me = { user: null, providers: [] }
+    // unreachable: keep who we were (null on the first load), so the app waits and tries again instead of
+    // showing the sign-in; a server that answers with an error says so, with a retry, for the same reason
+    if (!state.offline) {
+      if (e.status >= 500) state.unreachable = `Mason answered ${e.message}`
+      state.me = { user: null, providers: [] }
+    }
     log(e.message, 'error')
   }
   state.loaded = true

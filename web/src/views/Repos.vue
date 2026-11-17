@@ -7,7 +7,8 @@ import { qs } from '../api.js'
 import { act, cached, useLoad } from '../load.js'
 import { useRouter } from 'vue-router'
 import { useKeys } from '../keys.js'
-import { loadGroups, scope } from '../scope.js'
+import { loadGroups, reloadGroups, scope } from '../scope.js'
+import FirstRun from '../components/FirstRun.vue'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
@@ -53,6 +54,9 @@ const columns = computed(() => [
   { key: 'doctor', label: 'defaults', fmt: (_, r) => doctorCell(r.repo), cls: (r) => doctorClass(r.repo) },
 ])
 const row = computed(() => rows.value.find((r) => r.repo === sel.value))
+// nothing to list, with no filter on: the first visit, so show how to get started instead of an empty table
+const firstRun = computed(() => !!data.value && !loading.value && !error.value && !rows.value.length && !scope.group && scope.provider === 'all')
+const started = () => { load(true); reloadGroups() }
 const info = ref(null)
 const badges = computed(() => {
   const r = row.value
@@ -148,8 +152,9 @@ useKeys({ '*': () => togglePin(sel.value), '.': () => sheet.value?.pick(), l: ()
       <button @click="merge(false)"><span class="k">m</span> auto-merge their ready PRs</button>
       <button @click="picked = []">clear</button>
     </div>
-    <div class="split ld">
-      <div>
+    <div class="split ld" :class="{ first: firstRun }">
+      <FirstRun v-if="firstRun" @saved="started" />
+      <div v-else>
         <DataTable v-model="sel" v-model:picked="picked" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo"
                    :empty="loading ? 'loading…' : 'no repos yet: add your orgs or a defaults repo under setup › settings'" @activate="page" />
       </div>

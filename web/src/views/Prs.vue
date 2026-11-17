@@ -4,11 +4,13 @@
 // A change shows at once: the row changes right away, and its repo is read again (only that one) a moment later
 // and then while a PR of it waits for auto-merge, so a PR that merges by itself leaves the list without r.
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { get, qs, state } from '../api.js'
 import { act, change, splice, useFollow, useLoad } from '../load.js'
 import { alive } from '../pick.js'
 import { useKeys } from '../keys.js'
+import { ago } from '../ui.js'
+import { useSeen } from '../seen.js'
 import { pinned, pinnedFirst } from '../pins.js'
 import { loadGroups, scope, scopeLabel, scoped } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
@@ -20,11 +22,20 @@ import { openOut } from '../links.js'
 
 const { data, error, loading, load, keep } = useLoad((q) => `/prs${q}`)
 loadGroups()
+// the filter is in the link (?show=mine), so a bookmark or a shared link opens the same list
+const route = useRoute()
 const filter = ref('all')
+const router = useRouter()
 const sel = ref(null)
 const detail = ref('')
 const diff = ref(false)
-const FILTERS = { all: 'all open', review: 'asks you', ready: 'ready', drafts: 'drafts', auto: 'auto-merge', conflicts: 'conflicts', merged: 'merged' }
+const FILTERS = { all: 'all open', review: 'asks you', mine: 'mine', failing: 'checks failing', stale: 'stale', ready: 'ready', drafts: 'drafts', auto: 'auto-merge', conflicts: 'conflicts', merged: 'merged' }
+if (FILTERS[route.query.show]) filter.value = route.query.show
+watch(filter, (f) => { if ((route.query.show || 'all') !== f) router.replace({ query: { ...route.query, show: f === 'all' ? undefined : f }, hash: route.hash }) })
+// mine: opened by one of your signed-in accounts (GitHub or GitLab login)
+// stale: no change for STALE_DAYS (a push, a comment, a review all count as one at GitHub and GitLab)
+const STALE_DAYS = 30
+const stale = (p) => !!p.updated && Date.now() - new Date(p.updated) > STALE_DAYS * 86400_000
 
 const keyOf = (p) => `${p.repo}#${p.number}`
 const myLogins = computed(() => new Set((state.me?.identities || []).map((i) => String(i.login).toLowerCase())))
@@ -32,7 +43,8 @@ const asksMe = (p) => (p.reviewers || []).some((r) => myLogins.value.has(String(
 const rows = computed(() => {
   if (filter.value === 'merged') return (data.value?.merged || []).map((p) => ({ ...p, state: `merged ${p.by ? 'by ' + p.by : ''}` }))
   return pinnedFirst(data.value?.prs || [], pinned.value).filter((p) => ({
-    all: true, review: asksMe(p), ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
+    all: true, review: asksMe(p), mine: myLogins.value.has(String(p.author || '').toLowerCase()), failing: /fail/.test(String(p.checks || '')), stale: stale(p),
+    ready: !p.draft && !p.conflicts, drafts: p.draft, auto: p.auto, conflicts: p.conflicts,
   })[filter.value]).map((p) => ({
     ...p, state: p.draft ? 'draft' : p.conflicts ? 'CONFLICTS' : p.merge || 'ready',
     flags: [asksMe(p) && 'asks you to review', p.auto && 'auto-merge', p.review].filter(Boolean).join(' · '),
@@ -46,6 +58,8 @@ const columns = [
   { key: 'checks', label: 'checks' },
   { key: 'flags', label: '' },
   { key: 'author', label: 'by', cls: () => 'dim' },
+  { key: 'updated', label: 'updated', fmt: (v) => (v ? ago(v) : ''), cls: (r) => (stale(r) ? 'warn' : 'dim'), mark: false,
+    sortBy: (r) => -(new Date(r.updated || 0)) },
 ]
 const current = computed(() => rows.value.find((p) => keyOf(p) === sel.value))
 
@@ -122,12 +136,12 @@ async function ready() {
   follow.now([p.repo])
 }
 const open = () => openOut(current.value?.url)
-const router = useRouter()
 useTrack(() => current.value && { kind: 'pr', repo: current.value.repo, number: current.value.number },
   { sel, kind: 'pr', key: (t) => (t.kind === 'pr' ? `${t.repo}#${t.number}` : null) })
 const page = (p) => { const r = p || current.value; if (r) router.push({ path: '/pr', query: { repo: r.repo, number: r.number } }) }
 const cycle = () => { const k = Object.keys(FILTERS); filter.value = k[(k.indexOf(filter.value) + 1) % k.length] }
 useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), A: mergeAll, y: ready, d: () => { diff.value = !diff.value }, o: open, p: () => page(), v: cycle })
+const seen = useSeen('prs', () => (data.value?.prs || []).map(keyOf))
 </script>
 
 <template>
@@ -152,7 +166,7 @@ useKeys({ r: () => load(true), m: () => doMerge(false), M: () => doMerge(true), 
       <span class="dim hide-xs">space picks the selected row, shift+click a span</span>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :picked="filter === 'merged' ? null : picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : 'none match this filter: v cycles the filters'" @activate="page" /></div>
+      <div><DataTable :is-new="seen.isNew" v-model="sel" :picked="filter === 'merged' ? null : picked" @update:picked="(v) => (picked = v)" :error="error" :columns="columns" :rows="rows" :row-key="keyOf" :empty="loading ? 'loading…' : filter === 'all' ? 'no open pull requests: nothing waits for a merge' : filter === 'stale' ? `nothing has waited longer than ${STALE_DAYS} days` : filter === 'review' ? 'nobody asks you for a review right now' : filter === 'mine' ? `none of the open ones were opened by you (${[...myLogins].join(', ') || 'no login'})` : 'none match this filter: v cycles the filters'" @activate="page" /></div>
       <div class="pad"><TextPane :text="detail" placeholder="pick a pull request" /></div>
     </div>
     <EventLog band :repo="current?.repo || ''" kind="pr" :number="current?.number || ''" :title="current ? `${current.repo}${current.provider === 'gitlab' ? '!' : '#'}${current.number} ${current.title}` : ''" />

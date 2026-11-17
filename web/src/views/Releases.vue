@@ -5,12 +5,14 @@
 // A releases every new version of the list at once.
 // After a release, a tag or a bump only that repo is read again, and so is every repo whose release run is still
 // going, until it is done: the new release and the run's result show without r.
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { get, log, qs } from '../api.js'
 import { change, splice, useFollow, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
-import { loadGroups, scope, scopedRepos } from '../scope.js'
+import { emptyText } from '../empty.js'
+import { useLinkFilters } from '../useLink.js'
+import { loadGroups, narrowed, scope, scopedRepos } from '../scope.js'
 import EventLog from '../components/EventLog.vue'
 import DataTable from '../components/DataTable.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
@@ -22,10 +24,11 @@ import { useSide, useTrack } from '../side.js'
 import { openOut } from '../links.js'
 
 const router = useRouter()
-const problems = ref(false)
-const unreleased = ref(false)
+// in the link (?problems=1&unreleased=1), so a bookmark or a saved view opens the same list
+const f = reactive({ problems: false, unreleased: false })
+useLinkFilters(f, { problems: { def: false }, unreleased: { def: false } })
 const { data, error, loading, load, keep } = useLoad((q) => {
-  const extra = [problems.value && 'problems=1', unreleased.value && 'unreleased=1'].filter(Boolean).join('&')
+  const extra = [f.problems && 'problems=1', f.unreleased && 'unreleased=1'].filter(Boolean).join('&')
   return `/releases${q}${extra ? (q ? '&' : '?') + extra : ''}`
 })
 loadGroups()
@@ -44,8 +47,9 @@ const columns = [
 ]
 const current = computed(() => rows.value.find((r) => r.repo === sel.value))
 const relTag = computed(() => { const m = String(current.value?.url || '').match(/\/releases\/tag\/([^/?#]+)$/); return m ? decodeURIComponent(m[1]) : '' })
-const toggle = () => { problems.value = !problems.value; load() }
-const toggleUnreleased = () => { unreleased.value = !unreleased.value; load() }
+const toggle = () => { f.problems = !f.problems }
+const toggleUnreleased = () => { f.unreleased = !f.unreleased }
+watch(() => [f.problems, f.unreleased], () => load())
 useTrack(() => sel.value && { kind: 'release', repo: sel.value }, { sel, kind: 'release', key: (t) => (t.kind === 'release' ? t.repo : null) })
 const page = (r) => { const repo = r?.repo || sel.value; if (repo) router.push({ path: '/release', query: { repo } }) }
 const side = useSide()
@@ -59,7 +63,7 @@ async function newRelease(mode = 'release') {
   }
 }
 async function refresh(repos) {
-  const got = await get(`/releases${qs({ repo: repos, problems: problems.value, unreleased: unreleased.value, fresh: true })}`, { quiet: true })
+  const got = await get(`/releases${qs({ repo: repos, problems: f.problems, unreleased: f.unreleased, fresh: true })}`, { quiet: true })
   if (!data.value) return
   const named = new Set(repos)
   const before = (data.value.releases || []).filter((r) => named.has(r.repo) && r.version?.todo).length
@@ -95,8 +99,8 @@ useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n:
   <div class="view">
     <div class="toolbar">
       <Scope :groups="scope.groups" />
-      <label class="check"><input :checked="problems" type="checkbox" @change="toggle"> only problems <span class="dim k">(p)</span></label>
-      <label class="check"><input :checked="unreleased" type="checkbox" @change="toggleUnreleased"> only unreleased
+      <label class="check"><input :checked="f.problems" type="checkbox" @change="toggle"> only problems <span class="dim k">(p)</span></label>
+      <label class="check"><input :checked="f.unreleased" type="checkbox" @change="toggleUnreleased"> only unreleased
         <span class="dim k">(u)</span><span v-if="data?.unreleased" class="warn"> {{ data.unreleased }}</span></label>
       <span class="spacer" />
       <button class="primary any" @click="newRelease('release')"><span class="k">n</span> new release</button>
@@ -105,7 +109,7 @@ useKeys({ r: () => load(true), A: releaseAll, p: toggle, u: toggleUnreleased, n:
       <button :disabled="!sel" @click="page()"><span class="k">⏎</span> releases of the repo</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : problems || unreleased ? 'none match: p and u switch the filters off' : 'no repos in this filter: new release (n) picks any repo'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :row-key="(r) => r.repo" :empty="loading ? 'loading…' : emptyText('no releases yet: new release (n) picks any repo', [f.problems && 'only problems (p)', f.unreleased && 'only unreleased (u)'], narrowed())" @activate="page" /></div>
       <div class="pad">
         <VersionBar v-if="current?.version && !form" :key="current.repo" :repo="current.repo" :version="current.version" @done="done" />
         <ReleaseForm v-if="form" ref="formEl" :key="form" :mode="form" :repo="sel || ''" :repos="repoNames" @done="done" @cancel="form = ''" />

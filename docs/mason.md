@@ -144,6 +144,28 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   a phone, at the top of **more**); on a saved one the button says **★ saved** and removes it. They are part of
   your settings (`views`, at most 30), so every browser has them. A link with `?group=` or `?provider=` sets
   the filter, also within the app.
+- **Filters in the link.** The filters of Issues (state, mine, label, age), Runs (only failed, per repo),
+  Releases (only problems, only unreleased) and Stats (days) are in the page's link, such as
+  `/issues?state=closed&mine=1` or `/runs?failed=1`, so a bookmark, a shared link or a saved view opens the same list. A value the menus don't offer falls back to the default.
+- **Offline:** when the server doesn't answer (the network is down, or it is restarting behind a proxy that
+  answers 502/503/504), a banner says so and the app asks again by itself after 2s, 4s, 8s … up to every 30s,
+  and at once when the browser is back online. What was on screen stays. A page opened while the server is
+  unreachable waits instead of sending you to the sign-in page.
+- **Get started:** with no repos to list yet (no orgs, repos, GitLab groups or defaults in your settings), the
+  repos view shows three steps instead of an empty table: connect an account, pick your repos (**add my own
+  repos** with one click, or type orgs and GitLab groups) and, optionally, a defaults repo. Each step saves to
+  your settings and the list loads again.
+- **Pull request filters:** besides asks you, ready, drafts, auto-merge, conflicts and merged, **mine** shows the
+  ones opened by your signed-in GitHub or GitLab login, **checks failing** the red ones, and **stale** the ones
+  nothing happened to for 30 days. **asks you** covers GitLab reviewers too. The **updated** column says when
+  each one last changed (it sorts by date). `v` cycles them. The filter is in the link (`/prs?show=mine`), so a
+  bookmark opens the same list.
+- **Rerun failed runs at once:** **F** (or **rerun all failed**) on the runs list runs the failed jobs of every
+  failed run in the list again, after one question that lists them (`d` for a dry run). Only the newest run
+  of each repo and workflow counts, so a failure a later run already fixed is left alone; at most 30 per go.
+- **New since your last visit:** the pull request, issue and run lists mark rows they haven't shown you
+  before with ● and say how many there are ("· 2 new"). Leaving the list counts as having seen them. It is
+  kept in the browser, and the first visit marks nothing.
 - **Desktop notifications.** Under setup › settings › this browser, turn on notifications to hear when a
   change you started (a merge, a release, a rerun) finishes while Mason's tab is in the background: ✓ done or
   ✗ something failed. They are off until you turn them on, and the setting is per browser.

@@ -5,7 +5,8 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { act, useLoad } from '../load.js'
 import { useKeys } from '../keys.js'
-import { loadGroups, scope } from '../scope.js'
+import { emptyText } from '../empty.js'
+import { loadGroups, narrowed, scope } from '../scope.js'
 import { ago } from '../ui.js'
 import DataTable from '../components/DataTable.vue'
 import Scope from '../components/Scope.vue'
@@ -69,7 +70,7 @@ useKeys({ r: () => load(true), a: () => approve(), o: () => open(current.value),
       <button class="any" :disabled="!current" @click="page()"><span class="k">p</span> page</button>
     </div>
     <div class="split ld">
-      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : '✓ no run waits for your approval'" @activate="page" /></div>
+      <div><DataTable v-model="sel" :error="error" :columns="columns" :rows="rows" :empty="loading ? 'loading…' : emptyText('✓ no run waits for your approval', [], narrowed())" @activate="page" /></div>
       <div class="pad"><TextPane :text="output || summary" placeholder="a approves the selected run; Enter opens it" /></div>
     </div>
   </div>
