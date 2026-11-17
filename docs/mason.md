@@ -139,6 +139,10 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` opens a sheet with the keys of what is on screen (read from its buttons) and those that work everywhere. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Offline:** when the server doesn't answer (the network is down, or it is restarting behind a proxy that
+  answers 502/503/504), a banner says so and the app asks again by itself after 2s, 4s, 8s … up to every 30s,
+  and at once when the browser is back online. What was on screen stays. A page opened while the server is
+  unreachable waits instead of sending you to the sign-in page.
 - **Get started:** with no repos to list yet (no orgs, repos, GitLab groups or defaults in your settings), the
   repos view shows three steps instead of an empty table: connect an account, pick your repos (**add my own
   repos** with one click, or type orgs and GitLab groups) and, optionally, a defaults repo. Each step saves to
