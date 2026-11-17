@@ -25,7 +25,7 @@ import datetime as dt
 import fnmatch
 import json
 
-from mason import core
+from mason import builtin, core
 from mason.core import api, git_blob_sha, graphql
 from mason.extras import Finding, _get, q
 
@@ -33,11 +33,7 @@ PROTECT = "protect"
 MERGE_QUEUE = {"check_response_timeout_minutes": 60, "grouping_strategy": "ALLGREEN", "max_entries_to_build": 5,
                "max_entries_to_merge": 5, "merge_method": "SQUASH", "min_entries_to_merge": 1,
                "min_entries_to_merge_wait_minutes": 5}
-TEMPLATES = (".github/pull_request_template.md|.github/PULL_REQUEST_TEMPLATE.md|pull_request_template.md|"
-             "docs/pull_request_template.md|.github/PULL_REQUEST_TEMPLATE",
-             ".github/ISSUE_TEMPLATE/config.yml|.github/ISSUE_TEMPLATE/config.yaml|.github/ISSUE_TEMPLATE/bug_report.md|"
-             ".github/ISSUE_TEMPLATE/bug_report.yml|.github/ISSUE_TEMPLATE/feature_request.md|"
-             ".github/ISSUE_TEMPLATE/feature_request.yml|.github/ISSUE_TEMPLATE.md")
+TEMPLATES = (builtin.PR_NEED, builtin.ISSUE_NEED)
 
 
 def on(spec) -> bool:
@@ -74,8 +70,10 @@ def prepare(want: dict) -> dict:
     for path, text in generated_files(more).items():
         want["files"] = {**want.get("files", {}), path: git_blob_sha(text)}
         want["texts"] = {**want.get("texts", {}), path: text}
-    if more.get("templates"):
+    if more.get("templates") and "templates" not in (want.get("skip") or ()):
         want["required_files"] = list(dict.fromkeys(list(want.get("required_files") or []) + list(TEMPLATES)))
+    # what `mason sync` adds for a required file that isn't there (templates, a dependency update config)
+    want["starters"] = builtin.starters(want.get("required_files") or [])
     return want
 
 
@@ -226,8 +224,20 @@ def _default_protected(repo: str, state: dict, want: dict) -> list[Finding]:
         return []
     if protection_of(repo, branch):
         return []
+    if want.get("builtin") and "protect" not in (want.get("more") or {}):
+        # nothing sets protect, not even protect = false: --fix applies the built-in one
+        return [Finding(f"the default branch {branch} isn't protected (no ruleset or branch protection): --fix adds "
+                        "the built-in protect ruleset (pull requests, no force pushes or deletion)", "protect")]
     return [Finding(f"the default branch {branch} isn't protected (no ruleset or branch protection): set protect "
                     f"= {{ reviews = 1 }} in its group, the org's .mason or the repo's .mason.toml")]
+
+
+def fix_protect(repo: str, state: dict, want: dict) -> None:
+    from mason.defaults import import_rulesets
+
+    rs = protect_ruleset(builtin.PROTECT)
+    import_rulesets(repo, {rs["name"]: rs})
+    core.say(f"   protected {state.get('default_branch') or 'main'} with the built-in protect ruleset")
 
 
 def _codeowners(repo: str, state: dict, more: dict, label: str) -> list[Finding]:
@@ -319,7 +329,7 @@ def _deploy_keys(repo: str, state: dict, more: dict, label: str) -> list[Finding
     return [Finding(f"deploy key {t} is missing (add it in the repo's settings)") for t in wanted if t not in have]
 
 
-FIXERS = {"archive": fix_archive, "properties": fix_properties}
+FIXERS = {"archive": fix_archive, "properties": fix_properties, "protect": fix_protect}
 
 
 def about(more: dict) -> str:

@@ -1,6 +1,7 @@
 // Every call to the operator's /api/v1. Writes carry the session's CSRF token; errors become exceptions
 // with the operator's message, which the views show in the log line.
 import { reactive } from 'vue'
+import { toast } from './toast.js'
 
 export const state = reactive({
   me: null,          // /api/v1/me
@@ -20,11 +21,13 @@ export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status }
 }
 
-// detail: the whole output of a change (shown when the entry is opened); where: the page it was done on
-export function log(text, kind = 'info', { detail = '', where = '' } = {}) {
-  state.log.unshift({ at: new Date().toLocaleTimeString(), text: String(text), kind, detail: String(detail || ''),
-    where: where || (typeof location !== 'undefined' ? location.pathname + location.search : '') })
+// detail: the whole output of a change (shown when the entry is opened); where: the page it was done on.
+// An ok or an error also shows as a toast (toast: the id of a "working" one it finishes, or false for none).
+export function log(text, kind = 'info', { detail = '', where = '', toast: id = 0 } = {}) {
+  const at = where || (typeof location !== 'undefined' ? location.pathname + location.search : '')
+  state.log.unshift({ at: new Date().toLocaleTimeString(), text: String(text), kind, detail: String(detail || ''), where: at })
   if (state.log.length > 200) state.log.length = 200
+  if (id !== false && (kind === 'ok' || kind === 'error' || id)) toast(text, kind, { detail, where: at, id })
 }
 
 // quiet: a background read (a follow-up, see useFollow) that doesn't light up "working…".

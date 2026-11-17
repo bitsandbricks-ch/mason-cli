@@ -186,10 +186,12 @@ textarea.editor { width: 100%; min-height: 40vh; resize: none; border: 0; border
   .dock .ico { font-size: 18px; line-height: 22px; }
   .dock a:hover, .dock button:hover { text-decoration: none; color: var(--fg); }
   .dock .active, .dock .router-link-exact-active { color: var(--accent); border-top-color: var(--accent); background: var(--bg3); }
-  .screen.phone:has(> .toast) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
+  .screen.phone:has(> .toasts) { grid-template-rows: auto minmax(0, 1fr) auto auto; }
   /* its own row above the bottom bar, not over the view: a detail's buttons sit just above the bar too */
-  .toast { background: var(--bg3); border-top: 1px solid var(--line); padding: 8px 12px; overflow-wrap: anywhere;
-    max-height: 30vh; overflow-y: auto; }
+  .screen.phone > .toasts { position: static; width: auto; max-height: 30vh; overflow-y: auto; border-top: 1px solid var(--line);
+    background: var(--bg3); gap: 0; padding: 0; }
+  .screen.phone > .toasts .toast { border: 0; border-bottom: 1px dotted var(--line); box-shadow: none; padding: 8px 12px; }
+  .toasts .toast .link { min-height: 32px; }
 
   /* the menu of every view */
   .sheet { position: absolute; inset: 0; z-index: 30; overflow-y: auto; background: var(--bg); padding: 4px 0 16px;
@@ -511,3 +513,24 @@ button.wide { width: 100%; text-align: left; }
   .side-body .split.page.repo-cols > :last-child { order: -1; border-bottom: 1px dashed var(--line); }
   .side-body .split.page.repo-cols > :first-child { border-bottom: 0; }
 }
+
+/* toasts (Toasts.vue): what's under way and how the last changes ended; above the footer, bottom right */
+.toasts { position: fixed; right: 16px; bottom: 40px; z-index: 40; width: min(440px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 6px; }
+.toast { background: var(--bg2); border: 1px solid var(--line); border-left: 3px solid var(--line); padding: 6px 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35); overflow-wrap: anywhere; }
+.toast.ok { border-left-color: var(--ok); }
+.toast.error { border-left-color: var(--bad); }
+.toast.busy { border-left-color: var(--warn); }
+.toast .line { display: flex; gap: 1ch; align-items: baseline; }
+.toast .text { flex: 1; min-width: 0; }
+.toast .mark { flex: none; min-width: 1ch; }
+.toast .mark.cursor::after { color: var(--warn); }
+.toast .where { white-space: nowrap; }
+.toast .out { max-height: 40vh; overflow: auto; margin: 6px 0 0; }
+/* a button whose change is under way, and how it ended (ActionList) */
+button.running { border-color: var(--warn); color: var(--warn); cursor: progress; }
+button.running::after { content: " …"; }
+button.ended-ok { border-color: var(--ok); }
+button.ended-bad { border-color: var(--bad); }
+button .ended { margin-left: .5ch; }

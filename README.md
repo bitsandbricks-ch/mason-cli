@@ -167,6 +167,7 @@ orgs = ["another-org"]                # added to the orgs the defaults name
 repos = ["someone/their-repo"]        # added to the defaults' repos
 exclude = ["another-org/archive-*"]   # added to the defaults' exclude
 org_defaults = true                   # read each org's .mason repo (the default; false turns it off)
+builtin = true                        # Mason's built-in defaults for repos nothing else describes
 ```
 
 It lives in `$XDG_CONFIG_HOME/mason` when that is set, and `MASON_CONFIG` points mason at another file. `MASON_DEFAULTS`, `MASON_DEFAULTS_REF` and `MASON_ORGS` (comma separated, replacing the orgs) override it for one run.
@@ -179,6 +180,7 @@ It lives in `$XDG_CONFIG_HOME/mason` when that is set, and `MASON_CONFIG` points
 | `MASON_GITLAB_GROUPS` | The GitLab groups to look at, comma separated (replacing `gitlab_groups`); see [GitLab](#gitlab). |
 | `GITLAB_URL` | A self-managed GitLab, instead of `https://gitlab.com` (the web app reads it too). |
 | `MASON_ORG_DEFAULTS` | `0` (or `off`) leaves each org's `.mason` repo out for one run. |
+| `MASON_BUILTIN` | `0` (or `off`) turns Mason's [built-in defaults](#built-in-defaults) off for one run. |
 | `MASON_SERVER`, `MASON_KEY` | Go through Mason with this URL and API key (for CI). `MASON_SERVER=` (set but empty) uses gh even after `mason login`. |
 | `MASON_OPEN` | How `mason open` opens links: `browser`, `copy` or `print`. |
 | `MASON_PLUGINS` | `none`, or a comma separated list of the plugins to load. |
@@ -421,6 +423,23 @@ Which groups stack for a repo, least important first:
 
 So the org's `.mason` replaces your catch-all for its repos, a group you wrote for some of its repos on
 purpose goes on top, and the repo itself has the last word.
+
+### Built-in defaults
+
+A repo that none of these describe (no group, no org `.mason` group; its own `.mason.toml` may still sit on
+top) gets Mason's built-in defaults instead of almost no checks (`src/mason/builtin.py`):
+
+- the default branch is protected: changes go through pull requests, no force pushes, no deletion, no
+  approvals required (one maintainer can still merge their own PRs); `mason doctor --fix` adds the ruleset
+- `delete_branch_on_merge`, `allow_auto_merge` and `allow_update_branch` on
+- Dependabot alerts and security updates on (secret scanning is left out: private repos need GitHub Advanced Security)
+- a pull request template, issue templates and a Dependabot or Renovate config must exist; `mason sync` adds a
+  starter for each one that's missing, and never replaces one the repo has
+
+Two of them fill in for every repo, grouped or not: a default branch that nothing protects gets the built-in
+`protect` ruleset from `--fix` when no layer sets `protect` at all (`protect = false` keeps it a report), and
+`templates = true` gets the starter templates. `builtin = false` in your config or the defaults repo's
+`mason.toml`, or `MASON_BUILTIN=0`, turns all of it off. On GitLab only the protected default branch applies.
 
 ### A repo's own settings: `.mason.toml`
 

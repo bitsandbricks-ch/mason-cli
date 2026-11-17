@@ -448,6 +448,7 @@ class Config:
     groups: list[Group]
     raw: dict = field(default_factory=dict)
     org_defaults: bool = True  # look for each org's .mason repo
+    builtin: bool = True  # Mason's own defaults (builtin.py) for repos nothing else describes
 
     def layers_of(self, repo: str, topics: list[str] | None = None) -> list[Group]:
         """Every group that matches the repo, least important first: your catch-all (only when no
@@ -670,7 +671,7 @@ def load(orgs: list[str] | None = None, mine: dict | None = None, env: bool = Tr
     ref = getenv("MASON_DEFAULTS_REF") or mine.get("ref")
     org_on = _on(getenv("MASON_ORG_DEFAULTS"), mine.get("org_defaults", True))
     key = (where, ref, tuple(orgs or ()), tuple(_list(mine.get("orgs"))), tuple(_list(mine.get("repos"))),
-           tuple(_list(mine.get("exclude"))), org_on)
+           tuple(_list(mine.get("exclude"))), org_on, getenv("MASON_BUILTIN"), mine.get("builtin"))
     if key in _loaded:
         return _loaded[key]
     raw: dict = {}
@@ -691,6 +692,8 @@ def load(orgs: list[str] | None = None, mine: dict | None = None, env: bool = Tr
         groups=[make_group(g, i) for i, g in enumerate(raw.get("group") or [])],
         raw=raw,
         org_defaults=org_on,
+        # the defaults repo's `builtin = false` turns them off for everyone who uses it; yours, for you
+        builtin=_on(getenv("MASON_BUILTIN"), mine.get("builtin", raw.get("builtin", True))),
     )
     _loaded[key] = cfg
     return cfg
