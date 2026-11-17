@@ -139,6 +139,11 @@ first ones, `I` issues, `W` workflows, `D` defaults, `:` console, `P` plugins, `
   with uses it; `?` opens a sheet with the keys of what is on screen (read from its buttons) and those that work everywhere. A list takes the keys as soon as it opens. On a detail page (a repo,
   a PR, an issue, a run) ↑ ↓ PgUp PgDn Home End scroll the page, and ← → stay on it: they switch tabs
   only from a tab's own list.
+- **Pull request filters:** besides asks you, ready, drafts, auto-merge, conflicts and merged, **mine** shows the
+  ones opened by your signed-in GitHub or GitLab login, **checks failing** the red ones, and **stale** the ones
+  nothing happened to for 30 days. **asks you** covers GitLab reviewers too. The **updated** column says when
+  each one last changed (it sorts by date). `v` cycles them. The filter is in the link (`/prs?show=mine`), so a
+  bookmark opens the same list.
 - **Rerun failed runs at once:** **F** (or **rerun all failed**) on the runs list runs the failed jobs of every
   failed run in the list again, after one question that lists them (`d` for a dry run). Only the newest run
   of each repo and workflow counts, so a failure a later run already fixed is left alone; at most 30 per go.

@@ -11,7 +11,7 @@ import { csvName, toCsv } from '../csv.js'
 import { range, toggle, toggleAll } from '../pick.js'
 
 const props = defineProps({
-  columns: { type: Array, required: true }, // [{key, label, cls?: (row) => str, fmt?: (v,row) => str, right?, mark?: false}]
+  columns: { type: Array, required: true }, // [{key, label, cls?: (row) => str, fmt?: (v,row) => str, right?, mark?: false, sortBy?: (row) => value}]
   rows: { type: Array, default: () => [] },
   rowKey: { type: Function, default: (r) => r.key ?? r.repo ?? JSON.stringify(r) },
   empty: { type: String, default: 'nothing here' },
@@ -41,7 +41,13 @@ const shown = computed(() => {
     : props.rows.slice()
   if (sortKey.value) {
     const c = props.columns.find((x) => x.key === sortKey.value)
-    out.sort((a, b) => String(cell(c, a)).localeCompare(String(cell(c, b)), undefined, { numeric: true }) * sortDir.value)
+    // sortBy: what the column sorts by when its words don't ("3d ago" before "2h ago")
+    const key = c.sortBy || ((r) => String(cell(c, r)))
+    out.sort((a, b) => {
+      const x = key(a)
+      const y = key(b)
+      return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true })) * sortDir.value
+    })
   }
   return out
 })
