@@ -31,6 +31,9 @@ means every repo, `.` names the checkout's repo and #12 its PR 12.
   mason secrets [names]               the Actions secrets the defaults name: set or missing (names only)
   mason secrets set NAME [names]      store a secret's value (read from stdin) in each repo (--env ENV)
   mason issues [names] [--mine]       open issues; mason issue new|view|close|comment name[#12] ...
+  mason check [--install-hook]        this checkout against its rules, offline (pre-push hook, CI)
+  mason lint [folder]                 a defaults repo or a handbook, offline (its CI)
+  mason handbook [name] [--profiles]  the chapters, files, labels and skills the repo's handbook profile asks for
   mason workflows [names] [--fix]     unpinned actions, write-all tokens, script injection; --fix: PRs that pin
   mason sync [names]                  PRs that bring shared files in line
   mason auto [names]                  what the auto_* keys allow: fix, release, update, close stale, rerun
@@ -201,6 +204,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("--public", action="store_true", help="public (default: private)")
     sp.add_argument("--description", default="")
     sub.add_parser("config", help="show where mason looks and what it found")
+    sp = sub.add_parser("check", help="this checkout against its own rules, offline: for a pre-push hook and CI")
+    sp.add_argument("path", nargs="?", help="the checkout (default: the one you're in)")
+    sp.add_argument("--handbook", metavar="FOLDER", help="read the profile from this handbook folder, not the cache")
+    sp.add_argument("--base", help="the branch to compare with for the changelog check (default: origin/HEAD)")
+    sp.add_argument("--only", action="append", metavar="CHECK", help="only this check (repeatable)")
+    sp.add_argument("--install-hook", action="store_true", help="make git push run mason check first")
+    sp = sub.add_parser("lint", help="a defaults repo (mason.toml, rulesets) or a handbook, offline: for its CI")
+    sp.add_argument("path", nargs="?", help="the folder (default: here)")
+    sp = sub.add_parser("handbook", help="the handbook chapters, files, labels and skills a repo's profile asks for")
+    sp.add_argument("repo", nargs="?", help="a repo (default: this checkout, its .mason.toml read from disk)")
+    sp.add_argument("--profile", help="this profile instead of the repo's")
+    sp.add_argument("--profiles", action="store_true", help="list the handbook's profiles")
     sp = sub.add_parser("login", help="sign in to Mason (the web app) with an API key")
     sp.add_argument("url", help="Mason's URL, e.g. https://mason.mortar.ch")
     sp.add_argument("--read", action="store_true", help="a read-only key")
@@ -343,6 +358,9 @@ def command(parser, handlers: dict, args) -> None:
             return init(args)
         if args.cmd == "config":
             return show_config()
+        if args.cmd in ("check", "lint"):  # offline: no login, no defaults
+            from mason import check, lint
+            return (check if args.cmd == "check" else lint).command(args)
         if args.cmd in ("login", "logout", "whoami"):
             from mason import login
             if args.cmd == "login":
@@ -368,6 +386,10 @@ def command(parser, handlers: dict, args) -> None:
         if args.cmd in handlers:
             return handlers[args.cmd](args)
         cfg = config.load(getattr(args, "org", None))
+        if args.cmd == "handbook":
+            from mason import handbook
+            repo = repos.resolve(cfg, args.repo)[0] if args.repo and args.repo != "." else None
+            return handbook.show(cfg, repo, args.profile, args.profiles)
         if args.cmd == "tui":
             try:
                 from mason import tui
