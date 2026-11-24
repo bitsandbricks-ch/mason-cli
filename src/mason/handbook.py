@@ -79,11 +79,14 @@ def table_of(raw: dict) -> dict:
 
 def spec(own: dict | None = None, defaults_raw: dict | None = None, mine: dict | None = None) -> Spec:
     """The handbook for a repo whose .mason.toml says `own` (parsed), under these defaults and your config."""
+    from mason import here
     table = table_of(own or {})
+    local = here.local()  # in the web app: no config file, no environment and no folders of the server's
     if mine is None:
-        mine = config.OVERRIDE.get() if config.OVERRIDE.get() is not None else config.user_config()
+        mine = config.user_config() if local else (config.OVERRIDE.get() or {})
     found = Spec(version=table.get("version"), profile=table.get("profile"))
-    for where, said in ((table.get("repo"), ".mason.toml"), (os.environ.get("MASON_HANDBOOK"), "MASON_HANDBOOK"),
+    for where, said in ((table.get("repo"), ".mason.toml"),
+                        (os.environ.get("MASON_HANDBOOK") if local else None, "MASON_HANDBOOK"),
                         (table_of(mine).get("repo"), "your config"),
                         (table_of(defaults_raw or {}).get("repo"), "the defaults")):
         if where:
@@ -173,11 +176,12 @@ def open_handbook(found: Spec) -> Handbook:
     if not found:
         raise RuntimeError("No handbook: set handbook = \"owner/repo\" in your config or the defaults' mason.toml, "
                            "or [handbook] repo = \"owner/repo\" in the repo's .mason.toml")
-    source = config.Source(found.where, found.version)
+    from mason import here
+    source = config.Source(found.where, found.version, allow_local=here.local())
     book = Handbook(source)
     layout_text = source.read("handbook.toml")
     if layout_text is None and found.version and not source.local and not source.tree(LAYOUT["profiles"]):
-        source = config.Source(found.where, None)
+        source = config.Source(found.where, None, allow_local=here.local())
         book = Handbook(source, note=f"{found.version} isn't a tag or branch of {found.where} yet: "
                                      "read its default branch")
         layout_text = source.read("handbook.toml")
@@ -292,7 +296,7 @@ def skill_repo_files(book: Handbook, names: list[str]) -> dict[str, str]:
 def local_table() -> dict:
     """The [handbook] table of this checkout's .mason.toml, read from disk (it may not be pushed yet)."""
     from mason import here
-    root = here.root()
+    root = here.root() if here.local() else None
     if root is None:
         return {}
     _, text = config.repo_file(lambda p: (root / p).read_text() if (root / p).is_file() else None, "")
