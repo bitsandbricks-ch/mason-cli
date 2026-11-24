@@ -82,9 +82,14 @@ def validate_settings(text: str) -> list[str]:
     except RuntimeError as err:
         return [str(err)]
     problems = []
-    unknown = sorted(set(raw) - config.REPO_KEYS - {"release", "gitlab"})
+    # [handbook] names the BitsAndBricks handbook profile the repo follows; mason only keeps it for now
+    unknown = sorted(set(raw) - config.REPO_KEYS - {"release", "gitlab", "handbook"})
     if unknown:
         problems.append(f"a repo's own file doesn't take {', '.join(unknown)} (groups only, or unknown)")
+    handbook = raw.get("handbook", {})
+    if not isinstance(handbook, dict) or set(handbook) - {"profile", "version"} or not all(
+            isinstance(v, str) for v in handbook.values()):
+        problems.append('handbook must be a table like { profile = "cli-tool", version = "v1" }')
     settings = raw.get("settings") or {}
     if not isinstance(settings, dict):
         problems.append("settings must be a table")

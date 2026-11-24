@@ -1251,6 +1251,13 @@ def test_mason_files_write(op, monkeypatch, tmp_path):
     bad = c.post("/api/v1/mason/validate", json={"repo": "acme/web", "path": ".mason.toml",
                                                  "text": 'match = { org = "x" }\nskip = ["nope"]\n'}, headers=H).json
     assert "doesn't take match" in bad["problems"][0] and "skip doesn't know nope" in bad["problems"][1]
+    good = c.post("/api/v1/mason/validate", json={"repo": "acme/web", "path": ".mason.toml",
+                                                  "text": '[handbook]\nprofile = "cli-tool"\nversion = "v1"\n'},
+                  headers=H).json
+    assert good["problems"] == []
+    bad = c.post("/api/v1/mason/validate", json={"repo": "acme/web", "path": ".mason.toml",
+                                                 "text": 'handbook = "cli-tool"\n'}, headers=H).json
+    assert "handbook must be a table" in bad["problems"][0]
     ok = c.put("/api/v1/mason/file", json={"repo": "acme/web", "path": ".mason.toml", "text": "auto_fix = true\n",
                                            "mode": "commit"}, headers=H).json
     assert ok["mode"] == "commit" and "pushed to the default branch" in ok["text"]
