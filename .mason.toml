@@ -1,0 +1,4 @@
+# Mason's per-repo settings file. [handbook]: the BitsAndBricks handbook profile this repo follows.
+[handbook]
+profile = "cli-tool"
+version = "v1"
