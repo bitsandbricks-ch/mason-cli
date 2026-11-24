@@ -45,6 +45,9 @@ class RateLimited(RuntimeError):
 _dry_run: contextvars.ContextVar[bool | None] = contextvars.ContextVar("mason_dry_run", default=None)
 _lines: contextvars.ContextVar[list | None] = contextvars.ContextVar("mason_lines", default=None)
 _printed: contextvars.ContextVar[io.StringIO | None] = contextvars.ContextVar("mason_printed", default=None)
+# --json: what a command says, collected for one JSON document instead of printed (see json_output)
+_json: contextvars.ContextVar[dict | None] = contextvars.ContextVar("mason_json", default=None)
+_repo: contextvars.ContextVar[str | None] = contextvars.ContextVar("mason_repo", default=None)
 
 
 def dry_run() -> bool:
@@ -141,21 +144,73 @@ class Scoped:
 def say(msg: str = "") -> None:
     lines = _lines.get()
     if lines is None:
+        collected = _json.get()
+        if collected is not None:
+            collected["messages"] += [line.strip() for line in str(msg).splitlines() if line.strip()]
+            return
         print(msg, flush=True)
     else:
         lines.append(msg)
+
+
+def json_mode() -> bool:
+    """--json: commands that know their data hand it to emit() and print nothing else."""
+    return _json.get() is not None
+
+
+def emit(data) -> None:
+    """A command's result as data: the `result` of the --json document (nothing happens without --json)."""
+    collected = _json.get()
+    if collected is not None:
+        collected["result"] = data
+
+
+@contextmanager
+def json_output(command: str):
+    """Collect what a command says into one document, printed as JSON at the end:
+    {command, ok, result (from emit), repos {repo: [lines]}, tables [{repo?, columns, rows}], messages, error}.
+    Every command gets it this way; the ones that know their data emit() it as `result`."""
+    doc: dict = {"command": command, "ok": True, "messages": [], "tables": [], "repos": {}}
+    token = _json.set(doc)
+    buf = io.StringIO()
+    code = 0
+    try:
+        with redirect_stdout(buf):
+            yield doc
+    except SystemExit as err:
+        code = err.code if isinstance(err.code, int) else 1
+        if err.code not in (None, 0) and not isinstance(err.code, int):
+            doc["error"] = str(err.code)
+    except RuntimeError as err:
+        code, doc["error"] = 1, str(err)
+    finally:
+        _json.reset(token)
+    doc["messages"] += [line.strip() for line in buf.getvalue().splitlines() if line.strip()]
+    doc["ok"] = code in (0, None)
+    for key in ("messages", "tables", "repos"):
+        if not doc[key]:
+            del doc[key]
+    print(json.dumps(doc, indent=2, default=str))
+    if code:
+        raise SystemExit(code)
 
 
 def for_each(repos: list[str], action, ctx: dict, parallel: bool = True) -> None:
     """Run action(repo, ctx) for each repo under a `== repo` heading; errors stay with their repo."""
     def one(repo: str) -> list[str]:
         _lines.set([f"== {repo}"])
+        _repo.set(repo)
         try:
             action(repo, ctx)
         except RuntimeError as err:
             say(f"   error: {err}")
         return _lines.get() or []
 
+    collected = _json.get()
+    if collected is not None:  # one list of lines per repo, without the heading
+        for repo, lines in zip(repos, pmap(one, repos) if parallel else map(one, repos)):
+            collected["repos"][repo] = [line.strip() for line in lines[1:] if line.strip()]
+        return
     if not parallel:
         for repo in repos:
             say(f"== {repo}")
@@ -364,6 +419,14 @@ def ago(stamp: str | None) -> str:
 
 
 def table(head: list[str], rows: list[list[str]]) -> None:
+    collected = _json.get()
+    if collected is not None:
+        keys = [re.sub(r"\W+", "_", h.strip().lower()).strip("_") or f"column{i + 1}" for i, h in enumerate(head)]
+        entry = {"columns": keys, "rows": [dict(zip(keys, (str(c).strip() for c in r))) for r in rows]}
+        if _repo.get():
+            entry = {"repo": _repo.get(), **entry}
+        collected["tables"].append(entry)
+        return
     widths = [max(len(r[i]) for r in [head, *rows]) for i in range(len(head))]
     for r in [head, ["-" * w for w in widths], *rows]:
         say("  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip())

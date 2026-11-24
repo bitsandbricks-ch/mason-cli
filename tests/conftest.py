@@ -21,6 +21,7 @@ def env(tmp_path_factory):
         "XDG_CONFIG_HOME": str(bin_dir / "config"),
         "MASON_DEFAULTS": "acme/defaults",
         "MASON_OPEN": "print",
+        "MASON_HERE": "0",  # the tests run inside mason's own checkout: no names means every repo
         "MASON_PLUGINS": "demo",  # only the tests' own plugin, whatever else is installed
     }
 

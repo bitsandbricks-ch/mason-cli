@@ -28,7 +28,7 @@ The project was called Mortar before, and before that it was `bitsandbricks-ch/b
 
 ## Commands
 
-Repos are named as `owner/name`, as a bare `name` when only one repo has it, or by their group alias (the group's `prefix` dropped, so `plugin-budgets` is also `budgets`). `name#12` is a pull request. Without names a command runs on every repo of your orgs. `--org` and `--group` narrow it down (`--group` takes a group's name, or an org with a trailing slash: `--group acme/` is every repo of the GitHub org acme, `--group gitlab:grp/` every project under the GitLab group grp, matched by a group or not), and `--dry-run` shows what would change.
+Repos are named as `owner/name`, as a bare `name` when only one repo has it, or by their group alias (the group's `prefix` dropped, so `plugin-budgets` is also `budgets`). `name#12` is a pull request. Without names a command runs on every repo of your orgs, except inside a git checkout: there it runs on that checkout's repo, read offline from its `origin` remote (GitHub, or GitLab as `gitlab:group/project`). `--all` runs on every repo from inside a checkout too, `.` names the checkout's repo anywhere a name goes, `#12` is its pull request 12, and `MASON_HERE=0` turns the guess off. `--org` and `--group` narrow it down (`--group` takes a group's name, or an org with a trailing slash: `--group acme/` is every repo of the GitHub org acme, `--group gitlab:grp/` every project under the GitLab group grp, matched by a group or not), and `--dry-run` shows what would change.
 
 | Command | What it does |
 |---|---|
@@ -67,6 +67,8 @@ Repos are named as `owner/name`, as a bare `name` when only one repo has it, or 
 | `mason serve [--host 127.0.0.1] [--port 8080]` | Runs Mason, the web app, on Flask's development server (needs the `server` extra). `mason serve --check` shows what its settings allow and what is missing; `mason serve --users` lists its accounts, and `mason operator add github:LOGIN` makes someone an operator (the operator page). See [docs/mason.md](docs/mason.md). |
 | `mason login https://mason [--read] [--key KEY]` | Go through [Mason](docs/mason.md), the web app, with an API key: mason shows a code, you approve it in the browser, and every command and the TUI then work without gh or a GitHub token here. `--read` asks for a read-only key, `--key` uses one you made in Settings › API keys. `mason logout` forgets the key, `mason whoami` says how mason reaches GitHub and as whom. |
 | `mason tui` | Everything above, full screen. |
+
+Every command takes `--json` (anywhere on the line): one JSON document instead of text, for scripts and CI. It always has `command` and `ok` (false with `error` when the command failed, and the exit code stays non-zero); commands that know their data put it in `result`, the others give their tables as `tables` (`columns` and `rows` by column name), their per-repo lines as `repos` and the rest as `messages`.
 
 Security alerts need the `security_events` scope and packages the `read:packages` scope: `gh auth refresh -s security_events,read:packages`.
 

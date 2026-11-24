@@ -4,7 +4,9 @@ Repos are named as owner/name, as a bare name when only one repo has it, or by
 their group alias (the group's prefix dropped). name#12 is a PR. No names: every
 repo of your orgs. --org and --group narrow that down. GitLab projects are
 gitlab:group/project; mason reaches them through glab (glab auth login), and
-gitlab_groups in your config adds a group's projects to every command.
+gitlab_groups in your config adds a group's projects to every command. Inside a
+checkout, no names means that checkout's repo (read from its origin remote); --all
+means every repo, `.` names the checkout's repo and #12 its PR 12.
 
   mason init your-org/your-defaults   point mason at a defaults repo (or a local folder)
   mason status | prs | runs           what's going on
@@ -34,6 +36,7 @@ gitlab_groups in your config adds a group's projects to every command.
   mason auto [names]                  what the auto_* keys allow: fix, release, update, close stale, rerun
   mason new owner/name [--group G]    a new repo, set up the way its group wants
   mason tui                           all of it, full screen
+  --json                              any command: one JSON document instead of text (scripts, CI)
   mason login https://mason          go through Mason (the web app) with an API key: no gh needed
   mason market [install NAME]         plugins from the signed plugin index
   mason serve [--check|--users]    run Mason, the web app (the [server] extra); --users: its accounts
@@ -46,7 +49,21 @@ import argparse
 import shutil
 import sys
 
-from mason import __version__, auto, config, core, defaults, glab, issues, packages, plugins, repos, versions, workflows
+from mason import (
+    __version__,
+    auto,
+    config,
+    core,
+    defaults,
+    glab,
+    here,
+    issues,
+    packages,
+    plugins,
+    repos,
+    versions,
+    workflows,
+)
 
 # Commands that don't know GitLab projects yet (Mason, the web app, has most of them).
 GITHUB_ONLY = {"rerun", "packages", "workflows", "auto", "bump", "release", "secrets", "new"}
@@ -59,6 +76,8 @@ def common_parser() -> argparse.ArgumentParser:
     common.add_argument("--org", action="append", metavar="ORG", help="only this org or user (repeatable)")
     common.add_argument("--group", help="only repos of this group, or of an org: acme/ (GitLab: gitlab:grp/)")
     common.add_argument("--dry-run", action="store_true", help="show what would change, change nothing")
+    common.add_argument("--all", action="store_true",
+                        help="every repo, also inside a checkout (there, no names means only its repo)")
     return common
 
 
@@ -67,9 +86,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
                                 formatter_class=argparse.RawDescriptionHelpFormatter,
                                 epilog=__doc__.split("\n\n", 1)[1])
     p.add_argument("--version", action="version", version=f"mason {__version__}")
+    p.add_argument("--json", action="store_true",
+                   help="one JSON document instead of text, for scripts and CI (works anywhere on the line)")
     sub = p.add_subparsers(dest="cmd", required=True)
     common = common_parser()
-    names = "owner/name, name, group alias; name#12 for one PR"
+    names = "owner/name, name, group alias; name#12 for one PR; . is this checkout's repo, #12 its PR"
     helps = {
         "status": "one line per repo: group, release, PRs, CI",
         "prs": "open PRs with checks, reviews, conflicts, auto-merge",
@@ -145,16 +166,16 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("repos", nargs="*", help=f"{names}; or: set NAME [names]")
     sp.add_argument("--env", default=None, help="set: an environment's secret instead of the repo's")
     sp = sub.add_parser("settings", parents=[common], help="every setting of a repo; key=value changes one")
-    sp.add_argument("target", help="the repo")
+    sp.add_argument("target", nargs="?", default=".", help="the repo (default: this checkout's)")
     sp.add_argument("changes", nargs="*", help="an area to show, or key=value pairs to set (see --keys)")
     sp.add_argument("--keys", action="store_true", help="show each setting's key")
     sp = sub.add_parser("branches", parents=[common], help="a repo's branches; `delete NAME...` deletes some")
-    sp.add_argument("target", help="the repo")
+    sp.add_argument("target", nargs="?", default=".", help="the repo (default: this checkout's)")
     sp.add_argument("names", nargs="*", help="delete NAME...: the branches to delete")
     sp.add_argument("--merged", action="store_true", help="delete: every merged branch too")
     sp.add_argument("--yes", action="store_true", help="delete: don't ask first")
     sp = sub.add_parser("pr", parents=[common], help="one PR in detail")
-    sp.add_argument("target", help="name#12 or a PR URL")
+    sp.add_argument("target", help="name#12, #12 (this checkout's) or a PR URL")
     sp.add_argument("--diff", action="store_true")
     sp.add_argument("--body", action="store_true", help="the whole description")
     sp = sub.add_parser("issue", parents=[common], help="create, show, close, reopen or comment on an issue")
@@ -166,7 +187,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("--assignee", action="append", metavar="LOGIN", help="new: assign (repeatable)")
     sp.add_argument("--not-planned", action="store_true", help="close: as not planned")
     sp = sub.add_parser("open", parents=[common], help="print (and open or copy) a repo or PR link")
-    sp.add_argument("target", help="name or name#12")
+    sp.add_argument("target", nargs="?", default=".", help="name or name#12 (default: this checkout's repo)")
     sp.add_argument("--actions", action="store_true")
     sp.add_argument("--releases", action="store_true")
     sp = sub.add_parser("init", help="point mason at a defaults repo (owner/repo or a local folder)")
@@ -218,6 +239,8 @@ def show_config() -> None:
         print(f"GitLab       {where} on {glab.web_url()} (through glab)")
     if mine.get("orgs"):
         print(f"your orgs    {', '.join(mine['orgs'])} (from your config)")
+    if here.enabled() and (found := here.repo()):
+        print(f"checkout     {found} (no names: only this repo; --all: every repo)")
     print(f"groups       {len(cfg.groups)}")
     for g in cfg.groups:
         bits = [f"match {g.match}" if g.match else "the rest"]
@@ -269,12 +292,17 @@ def init(args) -> None:
 
 def list_repos(cfg, names: list[str]) -> None:
     gitlab = glab.projects(cfg) if any(r.startswith("gitlab:") for r in names) else {}
+    found = []
     for r in names:
         g = cfg.group_of(r, (gitlab.get(r) or {}).get("topics")) if r in gitlab else repos.group_of(cfg, r)
         alias = g.alias(r) if g else ""
-        extra = f"  ({alias})" if g and alias != core.short(r) else ""
-        print(f"{r:<45} {config.group_label(g, r)}{extra}")
-    print(f"{len(names)} repos")
+        found.append({"repo": r, "group": config.group_label(g, r), "alias": alias})
+        if not core.json_mode():
+            extra = f"  ({alias})" if g and alias != core.short(r) else ""
+            print(f"{r:<45} {config.group_label(g, r)}{extra}")
+    core.emit(found)
+    if not core.json_mode():
+        print(f"{len(names)} repos")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -290,6 +318,9 @@ def main(argv: list[str] | None = None) -> None:
                 return server([flag[2:], *(a for a in rest if a != flag)])
         server(["serve", *rest])
         return
+    cut = argv.index("--") if "--" in argv else len(argv)
+    as_json = "--json" in argv[:cut]
+    argv = [a for a in argv[:cut] if a != "--json"] + argv[cut:]
     parser, handlers = build_parser()
     args, extra = parser.parse_known_args(argv)
     if extra and args.cmd not in handlers:
@@ -298,6 +329,9 @@ def main(argv: list[str] | None = None) -> None:
     core.set_dry_run(getattr(args, "dry_run", False))
     local = glab.LOCAL.set(config.OVERRIDE.get() is None)  # glab only on this machine, never in the web console
     try:
+        if as_json:
+            with core.json_output(args.cmd):
+                return command(parser, handlers, args)
         return command(parser, handlers, args)
     finally:
         glab.LOCAL.reset(local)
@@ -328,6 +362,7 @@ def command(parser, handlers: dict, args) -> None:
             if not plugins.load() and not plugins.errors:
                 print("No plugins installed (pipx inject mason-cli <package>).")
             return None
+        here_names(args)
         if not core.transport().logged_in() and not glab.wanted_here(getattr(args, "repos", None)):
             sys.exit("Log in first: gh auth login (or mason login <Mason URL>; GitLab: glab auth login)")
         if args.cmd in handlers:
@@ -383,6 +418,25 @@ def command(parser, handlers: dict, args) -> None:
         return run(cfg, args, names, pick)
     except RuntimeError as err:
         sys.exit(str(err))
+
+
+SUBCOMMANDS = {"release": ("new", "view", "tag"), "secrets": ("set",)}
+
+
+def here_names(args) -> None:
+    """`.` and `#12` name this checkout's repo; no names inside a checkout mean only its repo (see here.py)."""
+    if getattr(args, "target", None):
+        args.target = here.default_names([args.target], True)[0]
+    names = getattr(args, "repos", None)
+    if names is None:
+        return
+    if args.cmd == "bump":
+        args.repos = here.default_names(names, True)
+    elif names[:1] and names[0] in SUBCOMMANDS.get(args.cmd, ()):
+        args.repos = names[:1] + here.default_names(names[1:], True)
+    else:
+        every = getattr(args, "all", False) or bool(getattr(args, "group", None) or getattr(args, "org", None))
+        args.repos = here.default_names(names, every)
 
 
 def secrets_command(cfg, args) -> None:
