@@ -50,7 +50,9 @@ WRITE = {
              R + r"/issues/\d+/comments$", R + r"/dispatches$", R + r"/actions/workflows/[^/]+/dispatches$",
              R + r"/environments/[^/]+/deployment-branch-policies$", R + r"/environments/[^/]+/variables$",
              R + r"/actions/variables$", R + r"/pages$", R + r"/autolinks$", R + r"/branches/[^/]+/rename$"],
-    "DELETE": [R + r"/git/refs/heads/.+$", R + r"/automated-security-fixes$", R + r"/private-vulnerability-reporting$",
+    # contents: mason bump deletes the changelog fragments it collected (PUT can rewrite any file already)
+    "DELETE": [R + r"/contents/.+$",
+               R + r"/git/refs/heads/.+$", R + r"/automated-security-fixes$", R + r"/private-vulnerability-reporting$",
                R + r"/immutable-releases$", R + r"/rulesets/\d+$", R + r"/vulnerability-alerts$",
                R + r"/environments/[^/]+/deployment-branch-policies/\d+$", R + r"/pages$", R + r"/autolinks/\d+$"],
 }

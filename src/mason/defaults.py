@@ -204,7 +204,7 @@ def covers(have, want) -> bool:
     if isinstance(want, dict) and isinstance(have, dict):
         return all(k in have and covers(have[k], v) for k, v in want.items())
     if isinstance(want, list) and isinstance(have, list) and len(want) == len(have):
-        return all(covers(h, w) for h, w in zip(have, want))
+        return all(covers(h, w) for h, w in zip(have, want, strict=False))
     return have == want
 
 

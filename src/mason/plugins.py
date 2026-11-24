@@ -19,7 +19,8 @@ from __future__ import annotations
 import contextvars
 import os
 import sys
-from typing import Any, Callable, ClassVar
+from collections.abc import Callable
+from typing import Any, ClassVar
 
 GROUP = "mason.plugins"
 # The signed-in user's secrets for plugins (the operator sets it per request): plugins.secret("hubra_token").

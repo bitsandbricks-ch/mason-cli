@@ -9,3 +9,4 @@ node_modules/
 src/mason/server/static/
 deploy/.env
 data/
+site/

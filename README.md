@@ -161,6 +161,10 @@ Bump, release and New tag need to know which file holds a repo's version. Mason 
 2. **Its group** in the defaults' `mason.toml`: `version = "plugin.yaml"`, `changelog = ["CHANGELOG.md"]`.
 3. **A known file in the repo root** that holds a version: plugin.yaml, pyproject.toml, package.json, Cargo.toml, VERSION (with CHANGELOG.md, CHANGES.md or HISTORY.md as the changelog).
 
+When the repo keeps changelog fragments (one file per change in `changelog.d/` or `changes/`), `mason bump`
+builds the new changelog section from them and deletes them in the release PR; otherwise it lists the titles
+of the PRs merged since the last release.
+
 `mason release` (no names) lists every repo with the file it found. `mason doctor` flags a repo that has releases but no
 version file, a version file that's missing or holds no version, and a version behind the latest release
 (`skip = ["version"]` on a group turns this off).
@@ -641,11 +645,14 @@ Ideas and planned features live in [docs/BACKLOG.md](docs/BACKLOG.md).
 ## Development
 
 ```sh
-pip install -e ".[dev]"
+pip install -e ".[dev,docs]"   # Python 3.12 or newer
 pytest          # runs every command against tests/fake_gh, a stand-in for gh
 ruff check .
+mkdocs build --strict              # the docs/ folder as a site (mkdocs serve to read it)
 cd web && npm ci && npm run build   # Mason's UI (npm run dev for a live-reloading one)
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md): a user-facing change adds a fragment to [changelog.d/](changelog.d/).
 
 ## License
 

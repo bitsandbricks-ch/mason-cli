@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        python: ["3.9", "3.13"]
+        python: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -67,3 +67,29 @@ jobs:
         run: |
           unzip -l dist/*.whl | grep 'mason/server/static/index.html'
           tar -tzf dist/*.tar.gz | grep 'src/mason/server/static/index.html'
+
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[docs]"
+      - run: mkdocs build --strict
+
+  ci-passed:
+    # The one required check: rulesets name it, so they never change when jobs do.
+    name: CI passed
+    if: always()
+    needs: [test, web, package, docs]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = success ] || exit 1; done

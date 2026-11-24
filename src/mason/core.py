@@ -23,7 +23,7 @@ import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 WEB = "https://github.com"
 WORKERS = 8  # repos handled at the same time
@@ -208,7 +208,7 @@ def for_each(repos: list[str], action, ctx: dict, parallel: bool = True) -> None
 
     collected = _json.get()
     if collected is not None:  # one list of lines per repo, without the heading
-        for repo, lines in zip(repos, pmap(one, repos) if parallel else map(one, repos)):
+        for repo, lines in zip(repos, pmap(one, repos) if parallel else map(one, repos), strict=False):
             collected["repos"][repo] = [line.strip() for line in lines[1:] if line.strip()]
         return
     if not parallel:
@@ -354,15 +354,17 @@ def file_on(repo: str, path: str, ref: str | None = None) -> str | None:
     return got[0] if got else None
 
 
-def put_file(repo: str, branch: str, path: str, text: str, sha: str | None, message: str) -> None:
-    """Commit one file on `branch`; `sha` is the blob it replaces (None: a new file)."""
+def put_file(repo: str, branch: str, path: str, text: str | None, sha: str | None, message: str) -> None:
+    """Commit one file on `branch`; `sha` is the blob it replaces (None: a new file). `text=None` deletes it."""
     import base64
+    from urllib.parse import quote
 
+    if text is None:
+        api("DELETE", f"/repos/{repo}/contents/{quote(path)}", {"message": message, "branch": branch, "sha": sha})
+        return
     body = {"message": message, "branch": branch, "content": base64.b64encode(text.encode()).decode()}
     if sha:
         body["sha"] = sha
-    from urllib.parse import quote
-
     api("PUT", f"/repos/{repo}/contents/{quote(path)}", body)
 
 
@@ -375,7 +377,7 @@ def quote_ref(name: str) -> str:
 
 def open_pr(repo: str, base: str, branch: str, files: dict[str, tuple[str, str | None]],
             message: str, title: str, body: str) -> str:
-    """Commit `files` ({path: (new text, old blob sha or None)}) on a new branch and open a PR."""
+    """Commit `files` ({path: (new text or None to delete, old blob sha or None)}) on a new branch and open a PR."""
     head = api("GET", f"/repos/{repo}/git/ref/heads/{quote_ref(base)}")["object"]["sha"]
     api("POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": head})
     for path, (text, sha) in files.items():
@@ -411,7 +413,7 @@ def newest(tags: list[str]) -> str | None:
 def ago(stamp: str | None) -> str:
     if not stamp:
         return "-"
-    secs = (datetime.now(timezone.utc) - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds()
+    secs = (datetime.now(UTC) - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds()
     for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
         if secs >= size:
             return f"{int(secs // size)}{unit} ago"
@@ -422,14 +424,14 @@ def table(head: list[str], rows: list[list[str]]) -> None:
     collected = _json.get()
     if collected is not None:
         keys = [re.sub(r"\W+", "_", h.strip().lower()).strip("_") or f"column{i + 1}" for i, h in enumerate(head)]
-        entry = {"columns": keys, "rows": [dict(zip(keys, (str(c).strip() for c in r))) for r in rows]}
+        entry = {"columns": keys, "rows": [dict(zip(keys, (str(c).strip() for c in r), strict=False)) for r in rows]}
         if _repo.get():
             entry = {"repo": _repo.get(), **entry}
         collected["tables"].append(entry)
         return
     widths = [max(len(r[i]) for r in [head, *rows]) for i in range(len(head))]
     for r in [head, ["-" * w for w in widths], *rows]:
-        say("  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip())
+        say("  ".join(c.ljust(w) for c, w in zip(r, widths, strict=False)).rstrip())
 
 
 def compact(value) -> str:

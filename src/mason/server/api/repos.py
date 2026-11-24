@@ -750,8 +750,8 @@ def security():
         cfg = load_config()
         gh_r, gl_r, _ = all_repos(cfg, gh, gl, names_arg(), request.args.get("group"))
         try:
-            found = list(zip(gh_r, core.pmap(R.repo_alerts, gh_r)))
-            found += list(zip(gl_r, core.pmap(lambda r: GL.alerts(gl, r), gl_r))) if gl and gl_r else []
+            found = list(zip(gh_r, core.pmap(R.repo_alerts, gh_r), strict=False))
+            found += list(zip(gl_r, core.pmap(lambda r: GL.alerts(gl, r), gl_r), strict=False)) if gl and gl_r else []
         except core.RateLimited as err:
             abort(429, str(err))
         out = []

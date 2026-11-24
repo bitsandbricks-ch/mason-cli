@@ -4,14 +4,11 @@ every command endpoint, the console, the proxy's allowlist, the defaults editor 
 from __future__ import annotations
 
 import json
-import sys
 
 import pytest
 
 pytest.importorskip("flask")
 pytest.importorskip("sqlalchemy")
-if sys.version_info < (3, 10):  # pragma: no cover
-    pytest.skip("the operator needs Python 3.10+", allow_module_level=True)
 
 
 @pytest.fixture()
@@ -353,8 +350,9 @@ def test_proxy_allowlist():
     # a dot or slash still encoded would be decoded once more on GitHub's side and leave the repo
     for sneaky in ("/repos/acme/web/contents/%2e%2e/%2E%2E/%2e%2e/user/keys", "/repos/acme/web/contents/a%2Fb",
                    "/repos/acme/web/contents/../../user", "/repos/acme/web/contents/a\\b"):
-        assert not allowed("PUT", sneaky) and not allowed("GET", sneaky)
+        assert not allowed("PUT", sneaky) and not allowed("GET", sneaky) and not allowed("DELETE", sneaky)
     assert allowed("PUT", "/repos/acme/web/contents/docs/a b.md")
+    assert allowed("DELETE", "/repos/acme/web/contents/changelog.d/search.md")  # mason bump collects fragments
 
 
 def test_graphql_proxy_refuses_hidden_mutations(op):

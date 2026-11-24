@@ -9,7 +9,7 @@ One GraphQL query per 20 repos and one REST call per repo; the operator shows th
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from statistics import median
 
 from mason import core
@@ -72,7 +72,7 @@ def summarize(repo: str, provider: str, merged: list[tuple], opened: list[dateti
 
 
 def github(repos: list[str], days: int = 30) -> list[dict]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since = now - timedelta(days=days)
     repos = [r for r in repos if "/" in r]  # a bare name (a typo in mason.toml's repos) has no owner to ask about
     batches = [repos[i:i + 20] for i in range(0, len(repos), 20)]
@@ -110,7 +110,7 @@ def github(repos: list[str], days: int = 30) -> list[dict]:
             out.append((when(r.get("created_at")), r.get("conclusion") or r.get("status"), mins))
         return out
 
-    all_runs = dict(zip(repos, core.pmap(runs_of, repos)))
+    all_runs = dict(zip(repos, core.pmap(runs_of, repos), strict=False))
     out = []
     for repo in repos:
         n = info.get(repo) or {}
@@ -125,7 +125,7 @@ def github(repos: list[str], days: int = 30) -> list[dict]:
 
 
 def totals(rows: list[dict], days: int) -> dict:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     ws = weeks(days, now)
 
     def series(key: str) -> list[int]:

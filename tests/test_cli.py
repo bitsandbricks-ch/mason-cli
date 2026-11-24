@@ -131,6 +131,13 @@ def test_bump_and_release(env, tmp_path):
     out = mason(env, "release", "b")  # asks; no answer leaves it
     assert "left as it is" in out
     log.write_text("")
+    out = mason({**env, "FAKE_GH_LOG": str(log)}, "bump", "b", "patch")  # collects changelog.d/ fragments
+    assert "0.4.0 -> 0.4.1 (plugin.yaml, CHANGELOG.md), 1 fragment(s) from changelog.d/" in out
+    assert "- Search by topic" in out
+    calls = log.read_text()
+    assert "-X DELETE /repos/acme/plugin-b/contents/changelog.d/search.md" in calls
+    assert "DELETE /repos/acme/plugin-b/contents/changelog.d/README.md" not in calls
+    log.write_text("")
     out = mason({**env, "FAKE_GH_LOG": str(log)}, "release", "b", "--yes")
     assert "tagged v0.4.0 on main at headsha (was v0.3.0)" in out and "release run: queued" in out
     assert "api -X POST /repos/acme/plugin-b/git/refs" in log.read_text()
@@ -148,6 +155,9 @@ def test_version_files():
     assert "## [Unreleased]\n\n## [1.1.0] - 2026-11-05\n- New" in text
     assert V.with_changelog("## 1.1.0\n", "1.1.0", "x", []) is None
     assert V.with_changelog(None, "0.1.0", "x", ["- A (#1)"]) == "# Changelog\n\n## 0.1.0\n\n- A (#1)\n\n"
+    # fragments win over PR titles, and join the [Unreleased] entries
+    assert V.with_changelog(None, "0.1.0", "x", ["- A (#1)"], ["- B"]) == "# Changelog\n\n## 0.1.0\n\n- B\n\n"
+    assert "## [1.1.0] - x\n- B\n- New" in V.with_changelog("## [Unreleased]\n- New\n", "1.1.0", "x", [], ["- B"])
 
 
 def test_run_and_pr_actions(env, monkeypatch, tmp_path):

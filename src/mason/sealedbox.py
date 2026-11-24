@@ -91,7 +91,7 @@ def salsa20_stream(key: bytes, nonce8: bytes, length: int) -> bytes:
     while len(out) < length:
         s = _state(key, nonce8 + struct.pack("<Q", counter))
         x = _rounds(s)
-        out += struct.pack("<16I", *((a + b) & 0xFFFFFFFF for a, b in zip(x, s)))
+        out += struct.pack("<16I", *((a + b) & 0xFFFFFFFF for a, b in zip(x, s, strict=False)))
         counter += 1
     return bytes(out[:length])
 
@@ -114,7 +114,7 @@ def poly1305(key: bytes, msg: bytes) -> bytes:
 
 def _secretbox(msg: bytes, nonce: bytes, key: bytes) -> bytes:
     stream = salsa20_stream(hsalsa20(key, nonce[:16]), nonce[16:], 32 + len(msg))
-    cipher = bytes(a ^ b for a, b in zip(msg, stream[32:]))
+    cipher = bytes(a ^ b for a, b in zip(msg, stream[32:], strict=False))
     return poly1305(stream[:32], cipher) + cipher
 
 
@@ -123,7 +123,7 @@ def _secretbox_open(box: bytes, nonce: bytes, key: bytes) -> bytes:
     stream = salsa20_stream(hsalsa20(key, nonce[:16]), nonce[16:], 32 + len(cipher))
     if poly1305(stream[:32], cipher) != tag:
         raise ValueError("the box doesn't open: wrong key or a damaged message")
-    return bytes(a ^ b for a, b in zip(cipher, stream[32:]))
+    return bytes(a ^ b for a, b in zip(cipher, stream[32:], strict=False))
 
 
 def _shared(secret: bytes, public: bytes) -> bytes:

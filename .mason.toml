@@ -2,3 +2,7 @@
 [handbook]
 profile = "cli-tool"
 version = "v1"
+
+[release]
+version = "src/mason/__init__.py"
+changelog = ["CHANGELOG.md"]

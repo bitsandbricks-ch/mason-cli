@@ -64,17 +64,12 @@ import fnmatch
 import json
 import os
 import re
-import sys
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from mason import core
 from mason.core import api, file_on
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover
-    import tomli as tomllib
 
 DEFAULTS_FILE = "mason.toml"
 ORG_REPO = ".mason"  # an org's (or GitLab group's) own defaults: <org>/.mason/mason.toml

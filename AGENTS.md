@@ -19,14 +19,16 @@ says where things are and how to run it.
 
 Run what CI runs and make it pass locally:
 
-- `pip install -e ".[dev]"`
+- `pip install -e ".[dev,docs]"`
 - `ruff check .`
 - `pytest -q`
-- `cd web && npm ci && npm run build`
+- `mkdocs build --strict`
+- `cd web && npm ci && npm run build && npm test`
 
 ## Repo-specific rules
 
 - **Pull requests:** fill in `.github/pull_request_template.md`.
+- **Changelog:** a user-facing change adds a fragment to `changelog.d/` (see its README).
 - **Releases:** the maintainer releases with `mason bump` and `mason release tag`.
 - **Tests never talk to the GitHub API:** they run against the stand-ins in `tests/fake_gh`
   (and `tests/fake_glab` for GitLab). Keep it that way.
