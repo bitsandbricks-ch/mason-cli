@@ -20,10 +20,11 @@ from mason.server.context import as_user, user_settings
 bp = Blueprint("console", __name__, url_prefix="/api/v1")
 
 READS = {"status", "prs", "pr", "runs", "releases", "packages", "security", "repos", "plugins", "stats", "workflows",
-         "issues", "handbook"}
+         "issues", "handbook", "exceptions", "access"}
 WRITES = {"merge", "approve", "doctor", "sync", "new", "rerun", "bump", "release", "issue", "auto", "adopt"}
 # write unless --dry-run (doctor, workflows: unless no --fix; release: unless --list or no names; issue: view)
-LOCAL = {"serve", "init", "tui", "open", "config", "login", "logout", "whoami", "market", "key", "check", "lint"}
+LOCAL = {"serve", "init", "tui", "open", "config", "login", "logout", "whoami", "market", "key", "check", "lint",
+         "drift"}
 
 
 def web_commands(only_on: bool = False) -> set[str]:

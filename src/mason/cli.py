@@ -35,6 +35,9 @@ means every repo, `.` names the checkout's repo and #12 its PR 12.
   mason lint [folder]                 a defaults repo or a handbook, offline (its CI)
   mason handbook [name] [--profiles]  the chapters, files, labels and skills the repo's handbook profile asks for
   mason adopt [names] --profile P     one PR per repo: .mason.toml [handbook], AGENTS.md, the profile's skills
+  mason exceptions [names]            checks repos skip for a while (skip_until): until when, why, ending soon
+  mason access [names] [--since F]    people, teams, deploy keys and webhooks per repo, for an access review
+  mason doctor --save; mason drift    keep doctor's results; what's new or fixed since (--now --notify URL: nightly)
   mason workflows [names] [--fix]     unpinned actions, write-all tokens, script injection; --fix: PRs that pin
   mason sync [names]                  PRs that bring shared files in line
   mason auto [names]                  what the auto_* keys allow: fix, release, update, close stale, rerun
@@ -70,9 +73,10 @@ from mason import (
 )
 
 # Commands that don't know GitLab projects yet (Mason, the web app, has most of them).
-GITHUB_ONLY = {"adopt", "rerun", "packages", "workflows", "auto", "bump", "release", "secrets", "new"}
+GITHUB_ONLY = {"adopt", "access", "drift", "rerun", "packages", "workflows", "auto", "bump", "release", "secrets",
+               "new"}
 ON_REPOS = ("status", "prs", "merge", "runs", "rerun", "releases", "packages", "approve", "security", "doctor", "sync",
-            "repos", "stats", "workflows", "issues", "auto")
+            "repos", "stats", "workflows", "issues", "auto", "exceptions", "access", "drift")
 
 
 def common_parser() -> argparse.ArgumentParser:
@@ -112,6 +116,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
         "workflows": "risky workflows: unpinned actions, write-all tokens, script injection",
         "issues": "open issues across repos, by label, assignee or age",
         "auto": "what the repos' auto_* keys let mason do on its own: fix, release, tidy up (cron-friendly)",
+        "exceptions": "checks repos skip for a while (skip_until): until when, and why",
+        "access": "who and what can reach each repo: people, teams, deploy keys, webhooks (read only)",
+        "drift": "what doctor found new or fixed since an earlier saved run (mason doctor --save)",
     }
     for cmd in ON_REPOS:
         sp = sub.add_parser(cmd, parents=[common], help=helps[cmd])
@@ -140,6 +147,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
             sp.add_argument("--no-auto", action="store_true",
                             help="only check, also repos whose .mason.toml or group sets auto_fix")
             sp.add_argument("--summary", action="store_true", help="one line per repo: ok, or how many issues")
+            sp.add_argument("--save", action="store_true",
+                            help="only check, and keep the result for mason drift (implies --summary)")
+            sp.add_argument("--history", metavar="DIR", help="--save: the history folder (default: MASON_HISTORY)")
         if cmd == "issues":
             sp.add_argument("--state", choices=("open", "closed", "all"), default="open")
             sp.add_argument("--label", action="append", metavar="LABEL", help="only with this label (repeatable)")
@@ -151,6 +161,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
             sp.add_argument("--fix", action="store_true", help="open a PR per repo that pins the actions to SHAs")
         if cmd == "stats":
             sp.add_argument("--days", type=int, default=30)
+        if cmd == "exceptions":
+            sp.add_argument("--soon", type=int, default=30, metavar="DAYS", help="mark those ending within DAYS")
+        if cmd == "access":
+            sp.add_argument("--since", metavar="FILE", help="an earlier `mason --json access`: mark what is new")
+            sp.add_argument("--stale", type=int, default=0, metavar="DAYS", help="mark deploy keys unused DAYS days")
+            sp.add_argument("--writers", action="store_true", help="only people who can write (admin, maintain, write)")
+        if cmd == "drift":
+            sp.add_argument("--now", action="store_true", help="run doctor (checks only) and save it first")
+            sp.add_argument("--days", type=int, default=0, help="compare with a run at least DAYS older")
+            sp.add_argument("--notify", metavar="URL", help="post new problems to this https webhook")
+            sp.add_argument("--history", metavar="DIR", help="the history folder (default: MASON_HISTORY)")
+            sp.add_argument("--keep", type=int, default=90, metavar="DAYS", help="--now: delete runs older than this")
         if cmd == "sync":
             sp.add_argument("--only", action="append", metavar="PATH", help="only this file (repeatable)")
     sp = sub.add_parser("bump", parents=[common], help="open a PR with the next version and changelog section")
@@ -691,6 +713,19 @@ def run(cfg, args, names: list[str], pick: dict) -> None:
         return repos.approve(names, args.yes)
     if args.cmd == "security":
         return repos.security(names)
+    if args.cmd == "doctor" and args.save:
+        return save_doctor(cfg, args, names)
+    if args.cmd == "exceptions":
+        from mason import exceptions
+        return exceptions.show(cfg, names, args.soon)
+    if args.cmd == "access":
+        from mason import access
+        return access.show(names, args.since, args.stale, args.writers)
+    if args.cmd == "drift":
+        from mason import history
+        if (args.now or args.notify or args.history) and config.OVERRIDE.get() is not None:
+            sys.exit("--now, --notify and --history work on your own machine")
+        return history.drift(cfg, names, args.now, args.days, args.notify, args.history, args.keep)
     if args.cmd == "doctor":
         if args.summary and not args.fix:
             return defaults.doctor_summary(cfg, names)  # only checks, also where auto_fix is set
@@ -716,6 +751,24 @@ def run(cfg, args, names: list[str], pick: dict) -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def save_doctor(cfg, args, names: list[str]) -> None:
+    """mason doctor --save: check (no fixes), keep the result for `mason drift`, print the summary."""
+    from mason import history
+    if config.OVERRIDE.get() is not None:
+        sys.exit("--save keeps the result on your own machine: run it there")
+    results = defaults.report(cfg, names)
+    path = history.save(results, args.history)
+    core.emit({"saved": str(path), "repos": list(results.values())})
+    if core.json_mode():
+        return None
+    rows = [r for r in results.values() if not r.get("reference")]
+    width = max((len(r["repo"]) for r in rows), default=0)
+    for r in sorted(rows, key=lambda r: (r["ok"], -len(r["problems"]), r["repo"])):
+        core.say(defaults.summary_line(r, width))
+    core.say(f"\nsaved {path} (mason drift compares the runs)")
+    return None
 
 
 def run_both(cfg, args, gh: list[str], gl: list[str], pick: dict) -> None:

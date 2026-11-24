@@ -192,18 +192,29 @@ def alert(repo: str, url: str, problems: list[str]) -> None:
     seen[repo] = problems
     if new and not core.dry_run():
         text = f"mason: {repo} has {len(new)} new problem(s)\n" + "\n".join(f"- {p}" for p in new)
-        host = urllib.parse.urlparse(url).hostname or ""
-        body = {"content": text[:1900]} if host.endswith(("discord.com", "discordapp.com")) else \
-            {"text": text} if host.endswith("slack.com") else {"text": text, "repo": repo, "problems": new}
-        req = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
-        try:
-            urllib.request.urlopen(req, timeout=15).close()  # noqa: S310 (https only, checked above)
-            say(f"   alerts: sent {len(new)} new problem(s)")
-        except OSError as err:
-            say(f"   alerts: couldn't send ({str(err)[:120]})")
+        said = post(url, text, {"repo": repo, "problems": new})
+        say(f"   alerts: {said}" if said.startswith("couldn't") else f"   alerts: sent {len(new)} new problem(s)")
+        if said.startswith("couldn't"):
             return
     elif new:
         say(f"   [dry-run] alerts: {len(new)} new problem(s)")
     if not core.dry_run():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(seen, indent=1))
+
+
+def post(url: str, text: str, extra: dict) -> str:
+    """Send `text` to a Slack, Discord or other https webhook (others get `extra` too); says what happened."""
+    if not url.startswith("https://"):
+        return "couldn't send: the address must start with https://"
+    if core.dry_run():
+        return f"[dry-run] would send {len(text.splitlines()) - 1} line(s) to {urllib.parse.urlparse(url).hostname}"
+    host = urllib.parse.urlparse(url).hostname or ""
+    body = {"content": text[:1900]} if host.endswith(("discord.com", "discordapp.com")) else \
+        {"text": text} if host.endswith("slack.com") else {"text": text, **extra}
+    req = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=15).close()  # noqa: S310 (https only, checked above)
+    except OSError as err:
+        return f"couldn't send ({str(err)[:120]})"
+    return f"sent to {host}"
