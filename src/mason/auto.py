@@ -89,7 +89,7 @@ def update_branches(cfg, repo: str, _on) -> None:
 
 
 def close_stale(cfg, repo: str, days) -> None:
-    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=int(days))
+    cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(days=int(days))
     items = api("GET", f"/repos/{repo}/issues?state=open&sort=updated&direction=asc&per_page=100") or []
     for it in items:
         stamp = str(it.get("updated_at") or "2100-01-01T00:00:00Z")
@@ -119,7 +119,7 @@ def rerun_failed(cfg, repo: str, attempts) -> None:
 
 
 def delete_branches(cfg, repo: str, days) -> None:
-    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=int(days))
+    cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(days=int(days))
     info = api("GET", f"/repos/{repo}") or {}
     keep = {info.get("default_branch") or "main"} | {p["head"]["ref"] for p in open_prs(repo)}
     closed = api("GET", f"/repos/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100") or []

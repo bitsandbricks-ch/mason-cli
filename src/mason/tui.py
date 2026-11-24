@@ -789,7 +789,7 @@ class MasonTui(App):
     def _fill_github(self, rows: list[list[str]], prs: dict[str, dict], info: dict) -> None:
         self.prs, self.info, self.detail_cache = prs, info, {}
         out = []
-        for repo, row in zip(self.repos, rows):
+        for repo, row in zip(self.repos, rows, strict=False):
             cells = [Text(c) for c in row]
             cells[0] = Text(self.label(repo))
             cells[4] = styled(row[4])
@@ -843,7 +843,7 @@ class MasonTui(App):
     def load_security(self) -> None:
         self.loaded["security"] = time.time()
         try:
-            found = dict(zip(self.repos, core.pmap(R.repo_alerts, self.repos)))
+            found = dict(zip(self.repos, core.pmap(R.repo_alerts, self.repos), strict=False))
         except core.RateLimited as err:
             self.call_from_thread(self.rate_limited, err)
             return

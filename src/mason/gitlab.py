@@ -26,6 +26,7 @@ import fnmatch
 import json
 import re
 import urllib.parse
+from datetime import UTC
 
 from mason import config, core
 from mason.config import group_label
@@ -836,11 +837,11 @@ def create(gl: GitLab, cfg, repo: str, group_name: str | None = None, public: bo
 
 
 def stats(gl: GitLab, repos: list[str], days: int = 30) -> list[dict]:
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from mason import stats as S
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since = now - timedelta(days=days)
     after = since.strftime("%Y-%m-%dT%H:%M:%SZ")
 

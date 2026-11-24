@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import sys
-
 import pytest
 
 pytest.importorskip("flask")
 pytest.importorskip("sqlalchemy")
-if sys.version_info < (3, 10):  # pragma: no cover
-    pytest.skip("the operator needs Python 3.10+", allow_module_level=True)
 
 
 @pytest.fixture()

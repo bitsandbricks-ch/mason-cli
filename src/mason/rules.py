@@ -285,7 +285,7 @@ def _archive(repo: str, state: dict, more: dict, label: str) -> list[Finding]:
     if not pushed:
         return []
     when = dt.datetime.fromisoformat(pushed.replace("Z", "+00:00"))
-    idle = (dt.datetime.now(dt.timezone.utc) - when).days // 30
+    idle = (dt.datetime.now(dt.UTC) - when).days // 30
     if idle >= int(months):
         return [Finding(f"no push for {idle} months ({label} archives after {months}): archive it", "archive")]
     return []

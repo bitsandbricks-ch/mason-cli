@@ -4,12 +4,6 @@ from __future__ import annotations
 
 import os
 import stat
-import sys
-
-import pytest
-
-if sys.version_info < (3, 10):  # pragma: no cover
-    pytest.skip("the operator needs Python 3.10+", allow_module_level=True)
 
 
 def test_made_once_in_the_data_folder(monkeypatch, tmp_path):

@@ -14,7 +14,9 @@ Where a repo keeps its version, first match wins (spec):
    Cargo.toml, VERSION), with CHANGELOG.md as its changelog when there is one.
 
 `mason bump name [major|minor|patch|1.4.0]` opens a PR on bump/v<new> with the new version and a
-changelog section; `mason release [names]` pushes the tag v<version> on the default branch for every
+changelog section, built from the fragments in changelog.d/ (or changes/) when the repo keeps them,
+which the PR then deletes, else from the titles of the PRs merged since the last release;
+`mason release [names]` pushes the tag v<version> on the default branch for every
 repo whose version is newer than its latest release. The repo's own workflow does the rest (build,
 approval, publish), which `mason runs` and the Releases tab follow.
 """
@@ -39,6 +41,7 @@ PATTERNS = {  # file kind -> the version, with what comes before and after it
 REPO_FILE = ".mason.toml"  # a repo's own [release] table: version, changelog, tag
 DETECT = ("plugin.yaml", "pyproject.toml", "package.json", "Cargo.toml", "VERSION")  # tried in this order
 CHANGELOGS = ("CHANGELOG.md", "CHANGES.md", "HISTORY.md")
+FRAGMENT_DIRS = ("changelog.d", "changes")  # one file per change, so feature PRs never edit the changelog
 
 
 def kind(path: str) -> str:
@@ -80,17 +83,20 @@ def next_version(current: str, level: str) -> str:
     raise RuntimeError(f"bump takes major, minor, patch or a version like 1.4.0, not {level!r}")
 
 
-def with_changelog(text: str | None, version: str, day: str, notes: list[str]) -> str | None:
+def with_changelog(text: str | None, version: str, day: str, notes: list[str],
+                   fragments: list[str] = ()) -> str | None:
     """The changelog with a section for `version`; None when it has one already.
 
-    Keep a Changelog: the [Unreleased] entries become `## [version] - day`. Otherwise a
-    `## version` section with `notes` goes on top."""
+    Keep a Changelog: the [Unreleased] entries (and `fragments`) become `## [version] - day`.
+    Otherwise a `## version` section with `fragments`, or else `notes`, goes on top."""
     text = text or "# Changelog\n"
     if re.search(rf"^##\s*\[?{re.escape(version)}\]?(\s|$)", text, re.M):
         return None
     m = re.search(r"^##\s*\[Unreleased\][^\n]*\n", text, re.M | re.I)
     if m:
-        return text[:m.end()] + f"\n## [{version}] - {day}\n" + text[m.end():]
+        extra = "".join(f"{line}\n" for line in fragments)
+        return text[:m.end()] + f"\n## [{version}] - {day}\n" + extra + text[m.end():]
+    notes = list(fragments) or notes
     section = f"## {version}\n\n" + "\n".join(notes or ["- "]) + "\n\n"
     m = re.search(r"^## ", text, re.M)
     return text[:m.start()] + section + text[m.start():] if m else text.rstrip("\n") + "\n\n" + section
@@ -115,6 +121,30 @@ def repo_release_table(repo: str, names: set[str]) -> dict:
     except tomllib.TOMLDecodeError as err:
         raise RuntimeError(f"{repo}/{path}: {err}") from err
     return table if isinstance(table, dict) else {}
+
+
+def fragments(repo: str, ref: str, names: set[str]) -> tuple[str, dict[str, str], list[str]]:
+    """(folder, {path: blob sha}, changelog lines) of the repo's changelog fragments; ("", {}, []) without.
+    A fragment is a Markdown file; each line becomes a changelog line ("- " added when it has none)."""
+    folder = next((d for d in FRAGMENT_DIRS if d in names), "")
+    if not folder:
+        return "", {}, []
+    try:
+        entries = api("GET", f"/repos/{repo}/contents/{folder}?ref={core.quote_ref(ref)}") or []
+    except RuntimeError:
+        return folder, {}, []
+    shas, lines = {}, []
+    for e in sorted(entries, key=lambda e: e.get("name", "")) if isinstance(entries, list) else []:
+        name = e.get("name", "")
+        if e.get("type") != "file" or name.startswith(".") or name.upper().startswith("README"):
+            continue
+        got = get_file(repo, e.get("path") or f"{folder}/{name}", ref)
+        if not got:
+            continue
+        shas[e.get("path") or f"{folder}/{name}"] = got[1]
+        lines += [ln if ln.startswith(("- ", "* ")) else f"- {ln}" for ln in
+                  (raw.strip() for raw in got[0].splitlines()) if ln]
+    return folder, shas, lines
 
 
 def root_names(repo: str) -> set[str]:
@@ -321,21 +351,29 @@ def bump(cfg: Config, repo: str, level: str, auto: bool = False) -> None:
     notes = [f"- {p['title']} (#{p['number']})" for p in merged_since(repo, base, last)]
     files = {path: (write_version(found[0], path, new), found[1])}
     day = time.strftime("%Y-%m-%d")
+    folder, used, lines = fragments(repo, base, root_names(repo)) if changelogs else ("", {}, [])
     for cl in changelogs:
         got = get_file(repo, cl, base)
-        text = with_changelog(got[0] if got else None, new, day, notes)
+        text = with_changelog(got[0] if got else None, new, day, notes, lines)
         if text:
             files[cl] = (text, got[1] if got else None)
+    collected = bool(lines) and len(files) > 1
+    if collected:  # now in the changelog: the bump PR deletes them
+        files.update({p: (None, sha) for p, sha in used.items()})
+        notes = lines
     branch = f"bump/v{new}"  # not release/*: release workflows often trust release branches
-    say(f"   {cur} -> {new} ({', '.join(files)}), {len(notes)} PR(s) merged since {last or 'the start'}")
+    origin = f"{len(used)} fragment(s) from {folder}/" if collected \
+        else f"{len(notes)} PR(s) merged since {last or 'the start'}"
+    say(f"   {cur} -> {new} ({', '.join(p for p, (t, _) in files.items() if t is not None)}), {origin}")
     for line in notes:
         say(f"      {line}")
     if core.dry_run():
         say(f"   [dry-run] push to {base}" if config.auto(cfg, repo, "auto_push")
             else f"   [dry-run] branch {branch}, PR 'Release {new}'")
         return
-    logs = ", ".join(f"`{c}`" for c in files if c != path)
+    logs = ", ".join(f"`{c}`" for c, (t, _) in files.items() if c != path and t is not None)
     body = (f"Sets `{path}` to {new}" + (f" and adds the {new} section to {logs}" if logs else "")
+            + (f", from the {len(used)} fragment(s) in `{folder}/`, which it deletes" if collected else "")
             + f". Edit the changelog here before merging.\n\nAfter the merge, `mason release {core.short(repo)}` "
             f"(R in the TUI) pushes the tag {tag_of(cfg, repo, new)}; the repo's release workflow takes it from there.")
     R.land(cfg, repo, base, branch, files, f"Release {new}", f"Release {new}", body, merge=auto,
