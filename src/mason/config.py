@@ -120,6 +120,8 @@ MORE: dict[str, tuple[str, str]] = {
     "webhooks": ("list", "webhook URLs that must exist (checked only)"),
     "deploy_keys": ("list", "deploy key titles that must exist (checked only)"),
     "alerts": ("scalar", "where mason auto reports new drift: a Slack, Discord or other https webhook"),
+    "handbook": ("dict", "the handbook the repos follow: {repo, profile, version} (see handbook.py)"),
+    "check": ("dict", "what `mason check` looks at offline: {fragments, migrations, skip}"),
 }
 GROUP_KEYS |= set(MORE)
 # What a repo's own .mason.toml may set for itself (besides [release]): it wins over every group.
@@ -129,7 +131,7 @@ CHECKS = ("settings", "security", "vulnerability_reporting", "immutable_releases
           "files", "required_files", "topics", "labels", "actions", "branch", "visibility", "description", "workflows",
           "plugins", "version", "environments", "variables", "secrets", "pages", "homepage", "code_scanning",
           "autolinks", "protect", "dependabot", "renovate", "codeowners", "templates", "release_notes", "discussions",
-          "social_preview", "archive", "properties", "webhooks", "deploy_keys", "github_rulesets")
+          "social_preview", "archive", "properties", "webhooks", "deploy_keys", "github_rulesets", "handbook")
 
 
 def config_dir() -> Path:
@@ -613,6 +615,8 @@ def _more(raw: dict) -> dict:
         if key not in raw:
             continue
         value = raw[key]
+        if key == "handbook" and isinstance(value, str):
+            value = {"repo": value}  # handbook = "owner/repo"
         if kind == "dict" and isinstance(value, bool):
             value = {"enabled": value}  # dependabot = true: the defaults
         elif kind == "dict" and not isinstance(value, dict):

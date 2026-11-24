@@ -31,6 +31,13 @@ means every repo, `.` names the checkout's repo and #12 its PR 12.
   mason secrets [names]               the Actions secrets the defaults name: set or missing (names only)
   mason secrets set NAME [names]      store a secret's value (read from stdin) in each repo (--env ENV)
   mason issues [names] [--mine]       open issues; mason issue new|view|close|comment name[#12] ...
+  mason check [--install-hook]        this checkout against its rules, offline (pre-push hook, CI)
+  mason lint [folder]                 a defaults repo or a handbook, offline (its CI)
+  mason handbook [name] [--profiles]  the chapters, files, labels and skills the repo's handbook profile asks for
+  mason adopt [names] --profile P     one PR per repo: .mason.toml [handbook], AGENTS.md, the profile's skills
+  mason exceptions [names]            checks repos skip for a while (skip_until): until when, why, ending soon
+  mason access [names] [--since F]    people, teams, deploy keys and webhooks per repo, for an access review
+  mason doctor --save; mason drift    keep doctor's results; what's new or fixed since (--now --notify URL: nightly)
   mason workflows [names] [--fix]     unpinned actions, write-all tokens, script injection; --fix: PRs that pin
   mason sync [names]                  PRs that bring shared files in line
   mason auto [names]                  what the auto_* keys allow: fix, release, update, close stale, rerun
@@ -66,9 +73,10 @@ from mason import (
 )
 
 # Commands that don't know GitLab projects yet (Mason, the web app, has most of them).
-GITHUB_ONLY = {"rerun", "packages", "workflows", "auto", "bump", "release", "secrets", "new"}
+GITHUB_ONLY = {"adopt", "access", "drift", "rerun", "packages", "workflows", "auto", "bump", "release", "secrets",
+               "new"}
 ON_REPOS = ("status", "prs", "merge", "runs", "rerun", "releases", "packages", "approve", "security", "doctor", "sync",
-            "repos", "stats", "workflows", "issues", "auto")
+            "repos", "stats", "workflows", "issues", "auto", "exceptions", "access", "drift")
 
 
 def common_parser() -> argparse.ArgumentParser:
@@ -108,6 +116,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
         "workflows": "risky workflows: unpinned actions, write-all tokens, script injection",
         "issues": "open issues across repos, by label, assignee or age",
         "auto": "what the repos' auto_* keys let mason do on its own: fix, release, tidy up (cron-friendly)",
+        "exceptions": "checks repos skip for a while (skip_until): until when, and why",
+        "access": "who and what can reach each repo: people, teams, deploy keys, webhooks (read only)",
+        "drift": "what doctor found new or fixed since an earlier saved run (mason doctor --save)",
     }
     for cmd in ON_REPOS:
         sp = sub.add_parser(cmd, parents=[common], help=helps[cmd])
@@ -136,6 +147,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
             sp.add_argument("--no-auto", action="store_true",
                             help="only check, also repos whose .mason.toml or group sets auto_fix")
             sp.add_argument("--summary", action="store_true", help="one line per repo: ok, or how many issues")
+            sp.add_argument("--save", action="store_true",
+                            help="only check, and keep the result for mason drift (implies --summary)")
+            sp.add_argument("--history", metavar="DIR", help="--save: the history folder (default: MASON_HISTORY)")
         if cmd == "issues":
             sp.add_argument("--state", choices=("open", "closed", "all"), default="open")
             sp.add_argument("--label", action="append", metavar="LABEL", help="only with this label (repeatable)")
@@ -147,6 +161,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
             sp.add_argument("--fix", action="store_true", help="open a PR per repo that pins the actions to SHAs")
         if cmd == "stats":
             sp.add_argument("--days", type=int, default=30)
+        if cmd == "exceptions":
+            sp.add_argument("--soon", type=int, default=30, metavar="DAYS", help="mark those ending within DAYS")
+        if cmd == "access":
+            sp.add_argument("--since", metavar="FILE", help="an earlier `mason --json access`: mark what is new")
+            sp.add_argument("--stale", type=int, default=0, metavar="DAYS", help="mark deploy keys unused DAYS days")
+            sp.add_argument("--writers", action="store_true", help="only people who can write (admin, maintain, write)")
+        if cmd == "drift":
+            sp.add_argument("--now", action="store_true", help="run doctor (checks only) and save it first")
+            sp.add_argument("--days", type=int, default=0, help="compare with a run at least DAYS older")
+            sp.add_argument("--notify", metavar="URL", help="post new problems to this https webhook")
+            sp.add_argument("--history", metavar="DIR", help="the history folder (default: MASON_HISTORY)")
+            sp.add_argument("--keep", type=int, default=90, metavar="DAYS", help="--now: delete runs older than this")
         if cmd == "sync":
             sp.add_argument("--only", action="append", metavar="PATH", help="only this file (repeatable)")
     sp = sub.add_parser("bump", parents=[common], help="open a PR with the next version and changelog section")
@@ -201,6 +227,23 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("--public", action="store_true", help="public (default: private)")
     sp.add_argument("--description", default="")
     sub.add_parser("config", help="show where mason looks and what it found")
+    sp = sub.add_parser("check", help="this checkout against its own rules, offline: for a pre-push hook and CI")
+    sp.add_argument("path", nargs="?", help="the checkout (default: the one you're in)")
+    sp.add_argument("--handbook", metavar="FOLDER", help="read the profile from this handbook folder, not the cache")
+    sp.add_argument("--base", help="the branch to compare with for the changelog check (default: origin/HEAD)")
+    sp.add_argument("--only", action="append", metavar="CHECK", help="only this check (repeatable)")
+    sp.add_argument("--install-hook", action="store_true", help="make git push run mason check first")
+    sp = sub.add_parser("lint", help="a defaults repo (mason.toml, rulesets) or a handbook, offline: for its CI")
+    sp.add_argument("path", nargs="?", help="the folder (default: here)")
+    sp = sub.add_parser("handbook", help="the handbook chapters, files, labels and skills a repo's profile asks for")
+    sp.add_argument("repo", nargs="?", help="a repo (default: this checkout, its .mason.toml read from disk)")
+    sp.add_argument("--profile", help="this profile instead of the repo's")
+    sp.add_argument("--profiles", action="store_true", help="list the handbook's profiles")
+    sp = sub.add_parser("adopt", parents=[common],
+                        help="one PR that makes a repo follow the handbook: .mason.toml, AGENTS.md, skills")
+    sp.add_argument("repos", nargs="*", help="the repos (default: this checkout's)")
+    sp.add_argument("--profile", help="the handbook profile (default: what the repo's .mason.toml says)")
+    sp.add_argument("--version", dest="hb_version", help="the handbook version to pin, e.g. v1")
     sp = sub.add_parser("login", help="sign in to Mason (the web app) with an API key")
     sp.add_argument("url", help="Mason's URL, e.g. https://mason.mortar.ch")
     sp.add_argument("--read", action="store_true", help="a read-only key")
@@ -343,6 +386,9 @@ def command(parser, handlers: dict, args) -> None:
             return init(args)
         if args.cmd == "config":
             return show_config()
+        if args.cmd in ("check", "lint"):  # offline: no login, no defaults
+            from mason import check, lint
+            return (check if args.cmd == "check" else lint).command(args)
         if args.cmd in ("login", "logout", "whoami"):
             from mason import login
             if args.cmd == "login":
@@ -368,6 +414,12 @@ def command(parser, handlers: dict, args) -> None:
         if args.cmd in handlers:
             return handlers[args.cmd](args)
         cfg = config.load(getattr(args, "org", None))
+        if args.cmd == "handbook":
+            from mason import handbook
+            repo = repos.resolve(cfg, args.repo)[0] if args.repo and args.repo != "." else None
+            return handbook.show(cfg, repo, args.profile, args.profiles)
+        if args.cmd == "adopt":
+            return adopt_command(cfg, args)
         if args.cmd == "tui":
             try:
                 from mason import tui
@@ -437,6 +489,37 @@ def here_names(args) -> None:
     else:
         every = getattr(args, "all", False) or bool(getattr(args, "group", None) or getattr(args, "org", None))
         args.repos = here.default_names(names, every)
+
+
+def adopt_command(cfg, args) -> None:
+    from mason import handbook
+    if not args.repos and not args.group:
+        sys.exit("Name the repo (or run it inside its checkout): mason adopt name --profile P")
+    names, _ = repos.pick_repos(cfg, args.repos, args.group)
+    done = []
+    for repo in github_only("adopt", names):
+        try:
+            d = handbook.adopt(cfg, repo, args.profile, args.hb_version)
+        except RuntimeError as err:
+            d = {"repo": repo, "error": str(err)}
+        done.append(d)
+        if core.json_mode():
+            continue
+        print(f"== {repo}")
+        if d.get("error"):
+            print(f"   error: {d['error']}")
+        elif d.get("url"):
+            print(f"   {'[dry-run] ' if core.dry_run() else ''}PR: {d['url']} ({', '.join(d['files'][:6])}"
+                  + (" ..." if len(d["files"]) > 6 else "") + ")")
+            if d.get("note"):
+                print(f"   {d['note']}")
+            if d.get("missing"):
+                print(f"   still missing for the profile: {', '.join(d['missing'])}")
+        else:
+            print(f"   follows {d['handbook']}, profile {d['profile']}, already")
+    core.emit(done)
+    if any(d.get("error") for d in done):
+        sys.exit(1)
 
 
 def secrets_command(cfg, args) -> None:
@@ -630,6 +713,19 @@ def run(cfg, args, names: list[str], pick: dict) -> None:
         return repos.approve(names, args.yes)
     if args.cmd == "security":
         return repos.security(names)
+    if args.cmd == "doctor" and args.save:
+        return save_doctor(cfg, args, names)
+    if args.cmd == "exceptions":
+        from mason import exceptions
+        return exceptions.show(cfg, names, args.soon)
+    if args.cmd == "access":
+        from mason import access
+        return access.show(names, args.since, args.stale, args.writers)
+    if args.cmd == "drift":
+        from mason import history
+        if (args.now or args.notify or args.history) and config.OVERRIDE.get() is not None:
+            sys.exit("--now, --notify and --history work on your own machine")
+        return history.drift(cfg, names, args.now, args.days, args.notify, args.history, args.keep)
     if args.cmd == "doctor":
         if args.summary and not args.fix:
             return defaults.doctor_summary(cfg, names)  # only checks, also where auto_fix is set
@@ -655,6 +751,24 @@ def run(cfg, args, names: list[str], pick: dict) -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def save_doctor(cfg, args, names: list[str]) -> None:
+    """mason doctor --save: check (no fixes), keep the result for `mason drift`, print the summary."""
+    from mason import history
+    if config.OVERRIDE.get() is not None:
+        sys.exit("--save keeps the result on your own machine: run it there")
+    results = defaults.report(cfg, names)
+    path = history.save(results, args.history)
+    core.emit({"saved": str(path), "repos": list(results.values())})
+    if core.json_mode():
+        return None
+    rows = [r for r in results.values() if not r.get("reference")]
+    width = max((len(r["repo"]) for r in rows), default=0)
+    for r in sorted(rows, key=lambda r: (r["ok"], -len(r["problems"]), r["repo"])):
+        core.say(defaults.summary_line(r, width))
+    core.say(f"\nsaved {path} (mason drift compares the runs)")
+    return None
 
 
 def run_both(cfg, args, gh: list[str], gl: list[str], pick: dict) -> None:

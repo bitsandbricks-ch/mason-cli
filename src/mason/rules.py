@@ -9,6 +9,7 @@ Some become what doctor already knows how to check and fix:
     release_notes = { categories = { Features = ["feature"] } }        -> .github/release.yml
     templates = true                                                   -> required issue and PR templates
     skip_until = { code_scanning = 2027-01-01 }                        -> skip, until that day
+    skip_until = { code_scanning = { until = 2027-01-01, reason = "CodeQL can't build it yet" } }
 
 The generated files reach the repo with `mason sync` (or straight away with auto_push), like shared files.
 Every repo's default branch must be protected by something (a ruleset of the repo or its org, or classic
@@ -50,11 +51,22 @@ def prepare(want: dict) -> dict:
     today = dt.date.today()
     expired = []
     for check, until in (more.get("skip_until") or {}).items():
+        until = until.get("until") if isinstance(until, dict) else until  # { until = 2027-01-01, reason = "..." }
         day = until if isinstance(until, dt.date) else dt.date.fromisoformat(str(until)[:10])
         if today <= day:
             want["skip"] = set(want.get("skip") or ()) | {check}
         else:
             expired.append(f"skip of {check} ran out on {day.isoformat()}: it's checked again")
+    from mason import handbook
+    profile, problem = handbook.doctor_profile(more.get("handbook") or {}, want.get("handbook_default"))
+    if problem:
+        expired.append(problem)
+    if profile and "handbook" not in (want.get("skip") or ()):  # the profile's files and labels, under the group's
+        want["required_files"] = list(dict.fromkeys(list(want.get("required_files") or []) + profile["files"]))
+        want["labels"] = {**profile["labels"], **(want.get("labels") or {})}
+        for path, text in (profile.get("skill_files") or {}).items():  # .claude/skills and their lock
+            want["files"] = {**want.get("files", {}), path: git_blob_sha(text)}
+            want["texts"] = {**want.get("texts", {}), path: text}
     want["expired_skips"] = expired
     # a layer below may have made the protect ruleset already: drop it, so a repo's own `protect = false`,
     # `skip = ["protect"]` or changed keys take effect

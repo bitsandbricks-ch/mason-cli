@@ -20,12 +20,40 @@ move it to "Done" when it ships.
 - **Live updates.** GitHub/GitLab webhooks (or a GitHub App) into the operator, pushed to the browser with
   server-sent events, so lists refresh themselves and the cache can be invalidated precisely. Until then the
   web app follows up on its own changes by reading the touched repos again (web/src/load.js, useFollow).
-- **Scheduled checks.** Run `doctor` nightly per user or group, keep the results, and show drift over time;
-  notify on new drift (email, Slack, Discord, a webhook).
-- **Access review.** Who has admin or write on each repo, outside collaborators, deploy keys and webhooks
-  (read only), with a periodic "still needed?" review and an export for audits.
+- **Scheduled checks in the web app.** The CLI side is done (`mason doctor --save`, `mason drift --now --notify`,
+  from cron or a scheduled workflow). Still to do: the operator running doctor nightly per user or group, keeping
+  the results in its database, a drift-over-time chart, and email as a notification channel.
+- **Access review in the web app.** `mason access` (people, outside collaborators, teams, deploy keys, webhook
+  hosts, `--since` an earlier review, `--stale` keys) is done. Still to do: an Access tab with the same data, a
+  "still needed?" sign-off per entry kept in the operator, and a CSV export for audits.
 - **Prometheus `/metrics`** for the operator itself (requests, GitHub calls, cache hit rate, rate limit left)
   and an optional exporter for repo stats.
+
+## Handbook and local checks (Mike, 2026-11-24)
+
+The list Mike approved, in the order it was built (PRs #76, #78, #79 and the backlog PR):
+
+1. Done: with no repo name, run in the current checkout (`git remote get-url origin`, GitHub or GitLab).
+2. Done: `mason check`, offline and local, no token: required files, `.mason.toml`, ruleset JSON, pinned
+   workflows and permissions, a changelog fragment on the branch, one migration head, AGENTS.md links the
+   handbook; `--install-hook` for a pre-push hook, and a shared CI step.
+3. Done: handbook awareness: `[handbook] profile` and `version` in `.mason.toml`, profiles' files, labels and
+   skills, `mason handbook` prints the chapters that apply. Nothing is hard-wired: no handbook unless a repo, a
+   user or the defaults name one (`handbook = "owner/repo"`).
+4. Done: `mason sync` also syncs the profile's skills into `.claude/skills` with a hash lock (skills-lock.json).
+5. Done: `mason adopt`: one PR with `.mason.toml` (profile), AGENTS.md from the handbook template, CLAUDE.md
+   and the skills.
+6. Done: `--json` on every command.
+7. Done: `mason lint` for a defaults repo (mason.toml, rulesets) or a handbook (profiles, skills).
+8. Done on the CLI: exceptions with an expiry (`skip_until` with a reason, `mason exceptions`), nightly doctor
+   with drift notifications (`mason doctor --save`, `mason drift`), access review (`mason access`).
+
+Next for this part:
+
+- The handbook panel for GitLab projects, and `mason adopt` for GitLab.
+- `mason check` results in the web app, from the CI step (an uploaded `--json` report per commit).
+- `mason check --fix` for what it can fix on its own (a missing CLAUDE.md, `mason sync` for skills).
+- Profiles for GitLab labels (doctor checks GitHub labels only).
 
 ## Defaults and rules
 
@@ -38,7 +66,7 @@ move it to "Done" when it ships.
 - Secrets and variables by name only: which repos lack a secret the group needs, and which are unused.
 - The new repo keys (topics, labels, required files) for GitLab groups too.
 - Terraform / OpenTofu export of the defaults, for teams that manage GitHub as code.
-- Exceptions with an expiry ("repo X may skip rule Y until 2027-01-01, because …").
+- Exceptions in the web app: list them (`mason exceptions`) and add one with a reason from a doctor finding.
 - Template repos as a first-class concept: "new repo from template" wizard with variables.
 
 ## Metrics and stats
@@ -93,6 +121,9 @@ move it to "Done" when it ships.
 - The same F3/F4/F6 search, filter and sort in the web app's lists.
 
 ## Done
+
+- Handbook and local checks: see the list above (current checkout, `--json`, check, lint, handbook, adopt,
+  skills lock, exceptions, drift, access review).
 
 - Saved views: a page with its filter and group under a name, in the tab bar (settings.views).
 - "New since your last visit" marks in the pull request, issue and run lists (per browser).

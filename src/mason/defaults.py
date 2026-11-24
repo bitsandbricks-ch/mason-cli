@@ -142,7 +142,8 @@ def baseline(cfg: Config, group: Group) -> dict:
                 description=group.description, skip=set(group.skip), environments=dict(group.environments),
                 variables=dict(group.variables), secrets=list(group.secrets), pages=group.pages,
                 homepage=group.homepage, code_scanning=group.code_scanning, autolinks=dict(group.autolinks),
-                auto_fix=group.auto_fix, more=dict(group.more), builtin=cfg.builtin)
+                auto_fix=group.auto_fix, more=dict(group.more), builtin=cfg.builtin,
+                handbook_default=(cfg.raw or {}).get("handbook"))
     return skip(rules.prepare(want))
 
 

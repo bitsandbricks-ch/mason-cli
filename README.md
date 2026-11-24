@@ -58,6 +58,13 @@ Repos are named as `owner/name`, as a bare `name` when only one repo has it, or 
 | `mason sync [names] [--only PATH]` | Opens a PR per repo whose shared files differ (with `auto_push`: pushes them to the default branch). |
 | `mason issues [names] [--mine] [--label L] [--assignee X] [--stale DAYS] [--state open\|closed\|all] [--limit 20]` | Issues across repos, newest activity first; PRs are left out. `--assignee none` shows unassigned ones, `*` any assigned; `--label` repeats. |
 | `mason issue new name "title" [--body TEXT] [--label L] [--assignee X]` | Opens an issue (`--body -` reads it from stdin). `mason issue view\|close\|reopen name#12` shows, closes (`--not-planned`) or reopens one, `mason issue comment name#12 "text"` comments. An issue URL works too. |
+| `mason check [path] [--install-hook] [--handbook FOLDER] [--base REF] [--only CHECK]` | The checkout you're in against its own rules, offline (no token, no API call): `.mason.toml` keys, ruleset JSON, pinned workflows and permissions, required files (the `.mason.toml`'s and the handbook profile's), a changelog fragment on the branch, one Alembic migration head, AGENTS.md linking the handbook, and synced skills matching their lock. Exits 1 on errors. `--install-hook` makes `git push` run it first. See [Checking a checkout](#checking-a-checkout-mason-check). |
+| `mason lint [folder]` | A defaults repo (`mason.toml`, its groups, rulesets and files folders) or a handbook (its profiles and skills), offline, for that repo's own CI. Exits 1 on errors. |
+| `mason handbook [name] [--profile P] [--profiles]` | The handbook the repo follows: the chapters to read (with links), and the files, labels and agent skills its profile asks for. See [Handbook](#handbook). |
+| `mason adopt [names] [--profile P] [--version v1]` | One PR per repo that makes it follow the handbook: `.mason.toml` with its `[handbook]` table (`repo`, `profile`, `version`), `AGENTS.md` from the handbook's template (or a link added to the one it has), `CLAUDE.md` importing it, and the profile's agent skills with their lock. The PR lists what the profile still wants. |
+| `mason exceptions [names] [--soon 30]` | Every check a repo skips for a while (`skip_until`, in a group, an org's `.mason` or the repo's `.mason.toml`), soonest first: until when, the reason, and whether it ends soon or ran out. `skip_until = { code_scanning = { until = 2027-01-01, reason = "..." } }` gives the reason. |
+| `mason access [names] [--since FILE] [--stale DAYS] [--writers]` | An access review, read only: direct collaborators and their role (outside collaborators marked), teams, deploy keys (read only or write, last used) and webhooks (the host only, its events and last answer). `--since` takes an earlier `mason --json access` and marks what is new; `--stale` marks deploy keys unused that long. |
+| `mason doctor --save` / `mason drift [--now] [--days N] [--notify URL]` | Doctor over time. `--save` checks (no fixes) and keeps the result (`MASON_HISTORY`, else `~/.local/state/mason/doctor`, 90 days); `mason drift` lists per repo the problems that are new and the ones fixed since the run before (or one `--days` older), and how many repos were off per run. `--now` checks and saves first, `--notify` posts the new problems to a Slack, Discord or other https webhook: `mason drift --now --notify https://...` nightly from cron. |
 | `mason workflows [names] [--fix]` | Risky GitHub Actions workflows: actions not pinned to a commit, `write-all` or missing `permissions`, `pull_request_target` that checks out the PR, script injection from `${{ github.event... }}`. `--fix` opens a PR per repo that pins the actions to commit SHAs. |
 | `mason new owner/name [--group G] [--public] [--description TEXT]` | Creates a repo the way its group wants it: from the reference repo when that is a GitHub template, the group's files committed, then its settings, security and rulesets applied. Private unless `--public`. |
 | `mason open web#12 [--actions] [--releases]` | Prints the link, and opens it (or copies it over SSH; `MASON_OPEN=browser\|copy\|print`). `--actions` and `--releases` link those pages of a repo. |
@@ -496,6 +503,96 @@ mason reads the `.mason` repo with your own login (gh, your token, or your Mason
 (5 minutes; a file written through mason drops it). `mason config` shows which `.mason` repos it found.
 `org_defaults = false` in your config, `MASON_ORG_DEFAULTS=0`, or the switch in the web app's Settings
 turns it off.
+
+## Checking a checkout: `mason check`
+
+`mason check` looks at the checkout you're in, offline, so it fits a pre-push hook (`mason check --install-hook`)
+and a CI step that runs the same everywhere:
+
+```yaml
+# .github/workflows/ci.yml (pin the actions to a commit, as mason check asks)
+- run: pipx install "mason-cli @ git+https://github.com/bitsandbricks-ch/mason-cli"
+- run: mason check --handbook ../handbook   # a checkout of the handbook; or let the cache from mason handbook do
+```
+
+| Check | What it looks at |
+|---|---|
+| `mason_toml` | `.mason.toml` parses, its keys are known, `[handbook]` is a table of strings, `skip` and `skip_until` name real checks and dates (an exception that ran out is a warning). |
+| `rulesets` | `.github/rulesets/*.json` and `.mason/rulesets/*.json`: JSON, a name, a target and enforcement GitHub knows, rules with a type, no name twice. |
+| `workflows` | What `mason workflows` finds, read from disk (the `.mason.toml`'s `workflows` key turns parts off). |
+| `required_files` | The `.mason.toml`'s `required_files` and the handbook profile's `files` (`a\|b`: either). |
+| `changelog` | On a branch: a new file in the fragments folder since it left the base branch (`origin/HEAD`, or `--base`). Only when the repo keeps fragments (`changelog.d`, `.changes`, `changes`, `newsfragments`, `.changeset`, or `[check] fragments`). |
+| `migrations` | Alembic `versions` folders (found next to an `env.py`, or `[check] migrations`): one head, so two branches' migrations don't both land. |
+| `handbook` | `AGENTS.md` links the handbook the repo follows. |
+| `skills` | `.claude/skills/*` match `skills-lock.json`: nobody edited a synced skill by hand. |
+
+```toml
+# .mason.toml
+[check]
+fragments = "changelog.d"
+migrations = "backend/migrations/versions"   # false: don't look
+skip = ["changelog"]
+```
+
+`--json` gives the findings as data (`check`, `level`, `text`, `path`, `line`).
+
+## Handbook
+
+A handbook is a repo of written rules for your projects, with profiles (a kind of project and what it needs),
+templates and agent skills. Mason has none built in: name one and it reads it, checks against it and syncs
+from it. First found wins:
+
+1. the repo's `.mason.toml`: `[handbook] repo = "owner/handbook"` (what `mason adopt` writes, so CI needs no config)
+2. `MASON_HANDBOOK`, or `handbook = "owner/handbook"` in your config (a local folder works too)
+3. `handbook = "owner/handbook"` in the defaults repo's `mason.toml` (a group or an org's `.mason` may set a `[handbook]` table too)
+
+```toml
+# a repo's .mason.toml
+[handbook]
+profile = "web-app"
+version = "v1"            # a tag or branch of the handbook; until it exists, its default branch is read
+```
+
+The handbook's layout (a `handbook.toml` at its root may rename the folders: `core`, `profiles`, `skills`, `templates`):
+
+```
+core/*.md               chapters every repo reads
+profiles/<name>.toml    what a profile needs (below)
+skills/<name>/SKILL.md  agent skills, synced into .claude/skills by mason sync
+templates/AGENTS.md     what mason adopt writes (<app> and <profile> filled in)
+```
+
+```toml
+# profiles/web-app.toml
+description = "A web app with an API and a database"
+chapters = ["blocks/api.md", "blocks/database.md"]       # on top of core/
+files = ["AGENTS.md", "CLAUDE.md", "CHANGELOG.md|changelog.d"]
+labels = ["type:bug", "type:feature"]                    # or { "type:bug" = "d73a4a" }
+skills = ["release", "pr-review"]
+[check]
+fragments = "changelog.d"
+migrations = true
+```
+
+**Skills.** A profile's `skills` are copied into `.claude/skills/<name>/` with a `.claude/skills/skills-lock.json`
+next to them: where each came from, its files and a sha256 over them (`computedHash`, the same shape as other
+skill lock files). `mason doctor` reports a missing or changed skill like any shared file, `mason sync` opens the
+PR that brings them in line, and `mason check` fails when someone edited a synced skill by hand: the fix goes into
+the handbook. Lock entries without `files` (skills another tool installed) are left alone.
+
+**Adopting.** `mason adopt name --profile web-app` opens the one PR a repo needs to start: `.mason.toml` with the
+`[handbook]` table (with `repo`, so CI and other people need no config), `AGENTS.md` from `templates/AGENTS.md`,
+`CLAUDE.md` with `@AGENTS.md`, and the skills.
+
+**In the web app** a repo's page has a **handbook** panel (when a handbook is named): the profile, the chapters
+with links, what the profile asks for, and **adopt** (the same pull request as `mason adopt`). The web console
+runs `mason handbook` and `mason adopt`; `mason check` and `mason lint` read a checkout, so they stay on your
+machine and in CI. The web app never reads a handbook from the server's own disk: there it must be a repo.
+
+`mason handbook` lists the chapters a repo's profile asks you to read, with links, and its files, labels and
+skills; `--profiles` lists the profiles. It also keeps the profile in `~/.cache/mason/handbook`, which is how
+`mason check` knows it offline. `mason doctor` holds the repo to the profile's files and labels (`skip =
+["handbook"]` turns that off), and `mason lint` on a handbook checks its profiles and skills.
 
 ## Plugins
 

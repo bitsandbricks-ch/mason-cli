@@ -17,6 +17,7 @@ import EventLog from '../components/EventLog.vue'
 import StatusHeader from '../components/StatusHeader.vue'
 import ReleaseForm from '../components/ReleaseForm.vue'
 import MasonPanel from '../components/MasonPanel.vue'
+import HandbookPanel from '../components/HandbookPanel.vue'
 import SecretsPanel from '../components/SecretsPanel.vue'
 import SettingsPanel from '../components/SettingsPanel.vue'
 import TextPane from '../components/TextPane.vue'
@@ -208,6 +209,7 @@ watch(repo, () => { fixed = ''; detail.value = ''; output.value = ''; form.value
         <template v-if="output"><h2 class="row" style="margin-top: 16px">output <span class="spacer" /><button class="link" @click="output = ''">clear</button></h2><TextPane :text="output" /></template>
         <DoctorPanel ref="doctorPanel" :repo="repo" :stamp="checked" :running="running" @result="checkedNow" @run="fixFrom" />
         <MasonPanel ref="masonPanel" :repo="repo" @done="({ text, ok }) => { output = text; if (ok) { checked++; log?.burst() } }" />
+        <HandbookPanel v-if="!gitlab" :repo="repo" @done="({ text, ok }) => { output = text; if (ok) { checked++; log?.burst() } }" />
         <SecretsPanel v-if="!gitlab" :repo="repo" @done="({ text }) => (output = text)" />
         <SettingsPanel ref="settingsPanel" :repo="repo" @done="({ text, ok }) => { output = text; if (ok) { checked++; masonPanel?.load(); log?.burst() } }" />
       </div>

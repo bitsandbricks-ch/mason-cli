@@ -310,6 +310,19 @@ if argv[0] == "api":
     if not m or m.group(1) not in REPOS:
         fail("gh: Not Found (HTTP 404)")
     repo, rest = m.group(1), m.group(2) or ""
+    if repo == "acme/web":  # who has access (mason access)
+        if rest == "/collaborators":
+            out([{"login": "contractor", "role_name": "write"}] if params.get("affiliation") == "outside" else
+                [{"login": "mike", "role_name": "admin"}, {"login": "contractor", "role_name": "write"},
+                 {"login": "reader", "role_name": "read"}])
+        if rest == "/teams":
+            out([{"slug": "ops", "permission": "maintain"}])
+        if rest == "/keys":
+            out([{"id": 5, "title": "deploy bot", "read_only": False, "created_at": "2025-01-01T09:00:00Z",
+                  "last_used": "2026-11-01T09:00:00Z"}])
+        if rest == "/hooks":
+            out([{"id": 9, "active": True, "events": ["push"], "config": {"url": "https://ci.acme.example/hook"},
+                  "last_response": {"code": 200}}])
     settings, rsets, files, immutable = REPOS[repo]
     if rest == "":
         out(info(repo))
