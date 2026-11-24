@@ -64,6 +64,9 @@ def prepare(want: dict) -> dict:
     if profile and "handbook" not in (want.get("skip") or ()):  # the profile's files and labels, under the group's
         want["required_files"] = list(dict.fromkeys(list(want.get("required_files") or []) + profile["files"]))
         want["labels"] = {**profile["labels"], **(want.get("labels") or {})}
+        for path, text in (profile.get("skill_files") or {}).items():  # .claude/skills and their lock
+            want["files"] = {**want.get("files", {}), path: git_blob_sha(text)}
+            want["texts"] = {**want.get("texts", {}), path: text}
     want["expired_skips"] = expired
     # a layer below may have made the protect ruleset already: drop it, so a repo's own `protect = false`,
     # `skip = ["protect"]` or changed keys take effect

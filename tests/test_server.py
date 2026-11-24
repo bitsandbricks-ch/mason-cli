@@ -1608,3 +1608,18 @@ def test_one_token_refresh_at_a_time(op, monkeypatch):
     for t in threads:
         t.join()
     assert calls == ["r1"] and got == ["new-1"] * 3  # one refresh; the others use its token
+
+
+def test_handbook_in_the_web_app(op, monkeypatch, tmp_path):
+    """No handbook unless one is named; a handbook that is a folder is never read from the server's disk."""
+    _, c = op
+    assert c.get("/api/v1/mason/handbook?repo=acme/web").json["handbook"] is None
+    (tmp_path / "profiles").mkdir()
+    (tmp_path / "profiles" / "web-app.toml").write_text('description = "secret"\n')
+    monkeypatch.setenv("FAKE_GH_OWN", f'[handbook]\nrepo = "{tmp_path}"\nprofile = "web-app"\n')
+    monkeypatch.setenv("MASON_HANDBOOK", str(tmp_path))
+    r = c.get("/api/v1/mason/handbook?repo=mike/dotfiles")
+    assert r.status_code == 502 and "secret" not in r.get_data(as_text=True)
+    for line in ("mason check", "mason lint /etc"):
+        r = c.post("/api/v1/console", json={"line": line}, headers=H)
+        assert r.status_code == 400 and "your own machine" in r.json["error"]

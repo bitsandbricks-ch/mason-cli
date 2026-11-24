@@ -7,6 +7,8 @@
     POST /api/v1/mason/protect                set (or turn off) the repo's `protect` table, or a group's in the
                                               org's .mason; `apply` protects the default branch right away
     POST /api/v1/mason/save-live              the repo's live rulesets as .mason/rulesets/*.json
+    GET  /api/v1/mason/handbook?repo=acme/web the handbook the repo follows: profile, chapters, files, skills
+    POST /api/v1/mason/handbook/adopt         one pull request that makes the repo follow it (mason adopt)
 
 Writes go through a pull request (merge request), straight onto the default branch (`commit`), or `auto`:
 straight on when the repo has auto_push, else a pull request. Everything is validated before it's written,
@@ -800,3 +802,46 @@ def save_live():
         abort(404, f"{repo} has no rulesets" + (" of those names" if only else ""))
     return commit(repo, changes, str(data.get("mode") or "auto"), "Keep the live rulesets in .mason/rulesets (Mason)",
                   "mason.save_live", write_allowed(bool(data.get("dry_run"))))
+
+
+# ── the handbook (handbook.py): what `mason handbook` and `mason adopt` do ────
+
+
+@bp.get("/handbook")
+@need("read")
+def get_handbook():
+    from mason import handbook
+    repo = valid_repo(request.args.get("repo", ""))
+    profile = str(request.args.get("profile") or "") or None
+    with as_user():
+        cfg = load_config()
+        if not handbook.wanted(cfg, repo):
+            return jsonify({"handbook": None, "hint": "No handbook: set handbook = \"owner/repo\" in your defaults' "
+                                                      "mason.toml, or [handbook] repo in the repo's .mason.toml"})
+        try:
+            return jsonify(handbook.describe(cfg, repo, profile))
+        except RuntimeError as err:
+            abort(502, str(err))
+
+
+@bp.post("/handbook/adopt")
+@need("write")
+def adopt_handbook():
+    from mason import handbook
+    data = body()
+    repo = valid_repo(str(data.get("repo", "")))
+    if is_gl(repo):
+        abort(400, "adopt is GitHub only for now")
+    dry = write_allowed(bool(data.get("dry_run")))
+    profile = str(data.get("profile") or "") or None
+    version = str(data.get("version") or "") or None
+    with as_user(dry=dry):
+        try:
+            got = handbook.adopt(load_config(), repo, profile, version)
+        except RuntimeError as err:
+            abort(422, str(err))
+    text = (f"{'[dry-run] ' if dry else ''}PR: {got['url']} ({', '.join(got['files'])})" if got.get("url")
+            else f"{repo} follows {got['handbook']}, profile {got['profile']}, already")
+    if not dry and got.get("url"):
+        audit("mason.adopt", repo, dry_run=False, detail=text)
+    return jsonify({**got, "text": text, "dry": dry})

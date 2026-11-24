@@ -20,10 +20,10 @@ from mason.server.context import as_user, user_settings
 bp = Blueprint("console", __name__, url_prefix="/api/v1")
 
 READS = {"status", "prs", "pr", "runs", "releases", "packages", "security", "repos", "plugins", "stats", "workflows",
-         "issues"}
-WRITES = {"merge", "approve", "doctor", "sync", "new", "rerun", "bump", "release", "issue", "auto"}
+         "issues", "handbook"}
+WRITES = {"merge", "approve", "doctor", "sync", "new", "rerun", "bump", "release", "issue", "auto", "adopt"}
 # write unless --dry-run (doctor, workflows: unless no --fix; release: unless --list or no names; issue: view)
-LOCAL = {"serve", "init", "tui", "open", "config", "login", "logout", "whoami", "market", "key"}
+LOCAL = {"serve", "init", "tui", "open", "config", "login", "logout", "whoami", "market", "key", "check", "lint"}
 
 
 def web_commands(only_on: bool = False) -> set[str]:
@@ -87,6 +87,8 @@ def run():
     if cmd in ("help", "--help", "-h"):
         return jsonify({"text": core.capture(cli.main, ["--help"]), "write": False})
     if cmd in LOCAL:
+        if cmd in ("check", "lint"):
+            abort(400, f"`mason {cmd}` reads a checkout on your own machine: run it there or in CI")
         abort(400, f"`mason {cmd}` works on your own machine, not in the operator (Settings has the same)")
     if cmd not in READS | WRITES | web_commands(only_on=True):  # a plugin switched off is off here too
         abort(400, f"`mason {cmd}` isn't available in the web console")

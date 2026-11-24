@@ -79,11 +79,14 @@ def table_of(raw: dict) -> dict:
 
 def spec(own: dict | None = None, defaults_raw: dict | None = None, mine: dict | None = None) -> Spec:
     """The handbook for a repo whose .mason.toml says `own` (parsed), under these defaults and your config."""
+    from mason import here
     table = table_of(own or {})
+    local = here.local()  # in the web app: no config file, no environment and no folders of the server's
     if mine is None:
-        mine = config.OVERRIDE.get() if config.OVERRIDE.get() is not None else config.user_config()
+        mine = config.user_config() if local else (config.OVERRIDE.get() or {})
     found = Spec(version=table.get("version"), profile=table.get("profile"))
-    for where, said in ((table.get("repo"), ".mason.toml"), (os.environ.get("MASON_HANDBOOK"), "MASON_HANDBOOK"),
+    for where, said in ((table.get("repo"), ".mason.toml"),
+                        (os.environ.get("MASON_HANDBOOK") if local else None, "MASON_HANDBOOK"),
                         (table_of(mine).get("repo"), "your config"),
                         (table_of(defaults_raw or {}).get("repo"), "the defaults")):
         if where:
@@ -173,11 +176,12 @@ def open_handbook(found: Spec) -> Handbook:
     if not found:
         raise RuntimeError("No handbook: set handbook = \"owner/repo\" in your config or the defaults' mason.toml, "
                            "or [handbook] repo = \"owner/repo\" in the repo's .mason.toml")
-    source = config.Source(found.where, found.version)
+    from mason import here
+    source = config.Source(found.where, found.version, allow_local=here.local())
     book = Handbook(source)
     layout_text = source.read("handbook.toml")
     if layout_text is None and found.version and not source.local and not source.tree(LAYOUT["profiles"]):
-        source = config.Source(found.where, None)
+        source = config.Source(found.where, None, allow_local=here.local())
         book = Handbook(source, note=f"{found.version} isn't a tag or branch of {found.where} yet: "
                                      "read its default branch")
         layout_text = source.read("handbook.toml")
@@ -194,14 +198,18 @@ _doctor = core.Scoped("handbook_profiles")
 
 
 def doctor_profile(table: dict, default) -> tuple[dict | None, str]:
-    """The profile a repo's (stacked) [handbook] table names, for doctor: (profile or None, a problem or "")."""
+    """The profile a repo's (stacked) [handbook] table names, for doctor and sync: (profile or None, a problem
+    or ""). The profile carries `skill_files`: {path in the repo: text} of its skills and their lock."""
     found = spec({"handbook": table}, {"handbook": default} if default else {})
     if not found or not found.profile:
         return None, ""
     key = (found.where, found.version, found.profile)
     if key not in _doctor:
         try:
-            _doctor[key] = (open_handbook(found).profile(found.profile), "")
+            book = open_handbook(found)
+            prof = book.profile(found.profile)
+            prof["skill_files"] = skill_repo_files(book, prof["skills"]) if prof["skills"] else {}
+            _doctor[key] = (prof, "")
         except RuntimeError as err:
             _doctor[key] = (None, f"handbook: {err}")
     return _doctor[key]
@@ -292,7 +300,7 @@ def skill_repo_files(book: Handbook, names: list[str]) -> dict[str, str]:
 def local_table() -> dict:
     """The [handbook] table of this checkout's .mason.toml, read from disk (it may not be pushed yet)."""
     from mason import here
-    root = here.root()
+    root = here.root() if here.local() else None
     if root is None:
         return {}
     _, text = config.repo_file(lambda p: (root / p).read_text() if (root / p).is_file() else None, "")
@@ -358,3 +366,113 @@ def show(cfg, repo: str | None, profile: str | None = None, list_profiles: bool 
         print(f"Labels (mason doctor):                   {', '.join(d['labels'])}")
     if d["skills"]:
         print(f"Agent skills (mason sync):               {', '.join(d['skills'])}")
+
+
+# ── mason adopt ──────────────────────────────────────────────────────────────
+
+ADOPT_BRANCH = "mason/adopt-handbook"
+
+
+def handbook_table(where: str, profile: str, version: str | None) -> str:
+    lines = ["[handbook]", f"repo = {json.dumps(where)}", f"profile = {json.dumps(profile)}"]
+    if version:
+        lines.append(f"version = {json.dumps(version)}")
+    return "\n".join(lines) + "\n"
+
+
+def with_table(text: str | None, table: str) -> str:
+    """A .mason.toml with its [handbook] table (and any `handbook = ...` line) replaced by `table`."""
+    if not text:
+        return f"# Mason's settings for this repo (see mason's README)\n\n{table}"
+    out, skipping = [], False
+    for line in text.splitlines():
+        header = re.match(r"^\s*\[([^\]]+)\]\s*(#.*)?$", line)
+        if header:
+            skipping = header.group(1).strip() == "handbook"
+            if skipping:
+                continue
+        if skipping or re.match(r"^\s*handbook\s*=", line):
+            continue
+        out.append(line)
+    body = "\n".join(out).rstrip()
+    return (body + "\n\n" if body else "") + table
+
+
+def agents_text(book: Handbook, found: Spec, repo: str, current: str | None) -> str | None:
+    """AGENTS.md: the handbook's template for a repo without one; a link added to one that lacks it; None: as is."""
+    name = found.where.removeprefix("gitlab:")
+    link = web_link(found.where) or found.where
+    if current is None:
+        template = book.template("AGENTS.md")
+        if template:
+            text = template.replace("<app>", core.short(repo).rsplit("/", 1)[-1]).replace("<profile>", found.profile)
+            return text if name in text else text.rstrip() + f"\n\nHandbook: {link}\n"
+        return (f"# Rules for coding agents\n\nThis repo follows the handbook {link}, profile **{found.profile}** "
+                "(see `.mason.toml`). Read its core chapters and the ones the profile lists "
+                "(`mason handbook` prints them).\n\n## Repo-specific rules\n\n- TODO\n")
+    if name in current:
+        return None
+    note = f"This repo follows the handbook {link}, profile **{found.profile}** (see `.mason.toml`).\n"
+    lines = current.splitlines(keepends=True)
+    at = next((i + 1 for i, line in enumerate(lines) if line.startswith("# ")), 0)
+    rest = "".join(lines[at:]).lstrip("\n")
+    return "".join(lines[:at]) + ("\n" if at else "") + note + ("\n" + rest if rest else "")
+
+
+def adopt(cfg, repo: str, profile: str | None, version: str | None) -> dict:
+    """One PR that makes `repo` follow the handbook: .mason.toml with [handbook], AGENTS.md (and CLAUDE.md
+    importing it), and the profile's skills with their lock. Returns what it did."""
+    found = spec({"handbook": repo_table(cfg, repo)}, cfg.raw)
+    found.profile = profile or found.profile
+    found.version = version or found.version
+    if not found.profile:
+        book = open_handbook(found)
+        raise RuntimeError(f"Name the profile: mason adopt {repo} --profile P (profiles: "
+                           f"{', '.join(book.profiles()) or 'none'})")
+    book = open_handbook(found)
+    prof = book.profile(found.profile)
+    info = core.api("GET", f"/repos/{repo}") or {}
+    base = info.get("default_branch") or "main"
+    path, _ = config.repo_file(lambda p: core.file_on(repo, p, base), repo)
+    got = core.get_file(repo, path, base)
+    files: dict[str, tuple[str, str | None]] = {}
+    new = with_table(got[0] if got else None, handbook_table(found.where, found.profile, found.version))
+    if not got or new != got[0]:
+        files[path] = (new, got[1] if got else None)
+    agents = core.get_file(repo, "AGENTS.md", base)
+    text = agents_text(book, found, repo, agents[0] if agents else None)
+    if text is not None:
+        files["AGENTS.md"] = (text, agents[1] if agents else None)
+    if core.get_file(repo, "CLAUDE.md", base) is None:
+        files["CLAUDE.md"] = ("@AGENTS.md\n", None)
+    ours = set()
+    if prof["skills"]:
+        from mason.defaults import blob_shas
+        ours = blob_shas(repo, base)
+        for p, t in skill_repo_files(book, prof["skills"]).items():
+            if ours.get(p) != core.git_blob_sha(t):
+                files[p] = (t, ours.get(p))
+    out = {"repo": repo, "handbook": found.where, "profile": found.profile, "version": found.version,
+           "files": sorted(files), "note": book.note}
+    if not files:
+        out["url"] = None
+        return out
+    from mason.defaults import blob_shas, has
+    ours = ours or blob_shas(repo, base)
+    todo = [n for n in prof["files"] if not has(set(ours) | set(files) | {p.rsplit("/", 1)[0] for p in ours}, n)]
+    chapters = "\n".join(f"- [{book.title(p)}]({book.link(p)})" for p in book.core_chapters() + prof["chapters"])
+    body = (f"Makes this repo follow the handbook {web_link(found.where) or found.where}, profile "
+            f"**{found.profile}**" + (f" ({found.version})" if found.version else "") + ".\n\n"
+            + "\n".join(f"- `{p}`" for p in sorted(files) if not p.startswith(SKILLS_DIR + "/") or p == LOCK)
+            + (f"\n- the profile's agent skills in `{SKILLS_DIR}/`: {', '.join(prof['skills'])}" if prof["skills"]
+               else "")
+            + ("\n\nFill in the repo-specific parts of AGENTS.md (its `<...>` placeholders) before merging."
+               if "AGENTS.md" in files and not agents else "")
+            + ("\n\nStill missing for the profile (add them in follow-up PRs; `mason check` lists them):\n\n"
+               + "\n".join(f"- `{n}`" for n in todo) if todo else "")
+            + (f"\n\nChapters to read:\n\n{chapters}" if chapters else "")
+            + "\n\nOpened by `mason adopt`.")
+    out["url"] = core.open_pr(repo, base, ADOPT_BRANCH, files, f"chore: follow the handbook ({found.profile})",
+                              f"Follow the handbook: profile {found.profile}", body)
+    out["missing"] = todo
+    return out

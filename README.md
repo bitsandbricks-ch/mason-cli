@@ -61,6 +61,7 @@ Repos are named as `owner/name`, as a bare `name` when only one repo has it, or 
 | `mason check [path] [--install-hook] [--handbook FOLDER] [--base REF] [--only CHECK]` | The checkout you're in against its own rules, offline (no token, no API call): `.mason.toml` keys, ruleset JSON, pinned workflows and permissions, required files (the `.mason.toml`'s and the handbook profile's), a changelog fragment on the branch, one Alembic migration head, AGENTS.md linking the handbook, and synced skills matching their lock. Exits 1 on errors. `--install-hook` makes `git push` run it first. See [Checking a checkout](#checking-a-checkout-mason-check). |
 | `mason lint [folder]` | A defaults repo (`mason.toml`, its groups, rulesets and files folders) or a handbook (its profiles and skills), offline, for that repo's own CI. Exits 1 on errors. |
 | `mason handbook [name] [--profile P] [--profiles]` | The handbook the repo follows: the chapters to read (with links), and the files, labels and agent skills its profile asks for. See [Handbook](#handbook). |
+| `mason adopt [names] [--profile P] [--version v1]` | One PR per repo that makes it follow the handbook: `.mason.toml` with its `[handbook]` table (`repo`, `profile`, `version`), `AGENTS.md` from the handbook's template (or a link added to the one it has), `CLAUDE.md` importing it, and the profile's agent skills with their lock. The PR lists what the profile still wants. |
 | `mason workflows [names] [--fix]` | Risky GitHub Actions workflows: actions not pinned to a commit, `write-all` or missing `permissions`, `pull_request_target` that checks out the PR, script injection from `${{ github.event... }}`. `--fix` opens a PR per repo that pins the actions to commit SHAs. |
 | `mason new owner/name [--group G] [--public] [--description TEXT]` | Creates a repo the way its group wants it: from the reference repo when that is a GitHub template, the group's files committed, then its settings, security and rulesets applied. Private unless `--public`. |
 | `mason open web#12 [--actions] [--releases]` | Prints the link, and opens it (or copies it over SSH; `MASON_OPEN=browser\|copy\|print`). `--actions` and `--releases` link those pages of a repo. |
@@ -569,6 +570,21 @@ skills = ["release", "pr-review"]
 fragments = "changelog.d"
 migrations = true
 ```
+
+**Skills.** A profile's `skills` are copied into `.claude/skills/<name>/` with a `.claude/skills/skills-lock.json`
+next to them: where each came from, its files and a sha256 over them (`computedHash`, the same shape as other
+skill lock files). `mason doctor` reports a missing or changed skill like any shared file, `mason sync` opens the
+PR that brings them in line, and `mason check` fails when someone edited a synced skill by hand: the fix goes into
+the handbook. Lock entries without `files` (skills another tool installed) are left alone.
+
+**Adopting.** `mason adopt name --profile web-app` opens the one PR a repo needs to start: `.mason.toml` with the
+`[handbook]` table (with `repo`, so CI and other people need no config), `AGENTS.md` from `templates/AGENTS.md`,
+`CLAUDE.md` with `@AGENTS.md`, and the skills.
+
+**In the web app** a repo's page has a **handbook** panel (when a handbook is named): the profile, the chapters
+with links, what the profile asks for, and **adopt** (the same pull request as `mason adopt`). The web console
+runs `mason handbook` and `mason adopt`; `mason check` and `mason lint` read a checkout, so they stay on your
+machine and in CI. The web app never reads a handbook from the server's own disk: there it must be a repo.
 
 `mason handbook` lists the chapters a repo's profile asks you to read, with links, and its files, labels and
 skills; `--profiles` lists the profiles. It also keeps the profile in `~/.cache/mason/handbook`, which is how

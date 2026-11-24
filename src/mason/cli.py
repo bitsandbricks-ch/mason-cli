@@ -34,6 +34,7 @@ means every repo, `.` names the checkout's repo and #12 its PR 12.
   mason check [--install-hook]        this checkout against its rules, offline (pre-push hook, CI)
   mason lint [folder]                 a defaults repo or a handbook, offline (its CI)
   mason handbook [name] [--profiles]  the chapters, files, labels and skills the repo's handbook profile asks for
+  mason adopt [names] --profile P     one PR per repo: .mason.toml [handbook], AGENTS.md, the profile's skills
   mason workflows [names] [--fix]     unpinned actions, write-all tokens, script injection; --fix: PRs that pin
   mason sync [names]                  PRs that bring shared files in line
   mason auto [names]                  what the auto_* keys allow: fix, release, update, close stale, rerun
@@ -69,7 +70,7 @@ from mason import (
 )
 
 # Commands that don't know GitLab projects yet (Mason, the web app, has most of them).
-GITHUB_ONLY = {"rerun", "packages", "workflows", "auto", "bump", "release", "secrets", "new"}
+GITHUB_ONLY = {"adopt", "rerun", "packages", "workflows", "auto", "bump", "release", "secrets", "new"}
 ON_REPOS = ("status", "prs", "merge", "runs", "rerun", "releases", "packages", "approve", "security", "doctor", "sync",
             "repos", "stats", "workflows", "issues", "auto")
 
@@ -216,6 +217,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("repo", nargs="?", help="a repo (default: this checkout, its .mason.toml read from disk)")
     sp.add_argument("--profile", help="this profile instead of the repo's")
     sp.add_argument("--profiles", action="store_true", help="list the handbook's profiles")
+    sp = sub.add_parser("adopt", parents=[common],
+                        help="one PR that makes a repo follow the handbook: .mason.toml, AGENTS.md, skills")
+    sp.add_argument("repos", nargs="*", help="the repos (default: this checkout's)")
+    sp.add_argument("--profile", help="the handbook profile (default: what the repo's .mason.toml says)")
+    sp.add_argument("--version", dest="hb_version", help="the handbook version to pin, e.g. v1")
     sp = sub.add_parser("login", help="sign in to Mason (the web app) with an API key")
     sp.add_argument("url", help="Mason's URL, e.g. https://mason.mortar.ch")
     sp.add_argument("--read", action="store_true", help="a read-only key")
@@ -390,6 +396,8 @@ def command(parser, handlers: dict, args) -> None:
             from mason import handbook
             repo = repos.resolve(cfg, args.repo)[0] if args.repo and args.repo != "." else None
             return handbook.show(cfg, repo, args.profile, args.profiles)
+        if args.cmd == "adopt":
+            return adopt_command(cfg, args)
         if args.cmd == "tui":
             try:
                 from mason import tui
@@ -459,6 +467,37 @@ def here_names(args) -> None:
     else:
         every = getattr(args, "all", False) or bool(getattr(args, "group", None) or getattr(args, "org", None))
         args.repos = here.default_names(names, every)
+
+
+def adopt_command(cfg, args) -> None:
+    from mason import handbook
+    if not args.repos and not args.group:
+        sys.exit("Name the repo (or run it inside its checkout): mason adopt name --profile P")
+    names, _ = repos.pick_repos(cfg, args.repos, args.group)
+    done = []
+    for repo in github_only("adopt", names):
+        try:
+            d = handbook.adopt(cfg, repo, args.profile, args.hb_version)
+        except RuntimeError as err:
+            d = {"repo": repo, "error": str(err)}
+        done.append(d)
+        if core.json_mode():
+            continue
+        print(f"== {repo}")
+        if d.get("error"):
+            print(f"   error: {d['error']}")
+        elif d.get("url"):
+            print(f"   {'[dry-run] ' if core.dry_run() else ''}PR: {d['url']} ({', '.join(d['files'][:6])}"
+                  + (" ..." if len(d["files"]) > 6 else "") + ")")
+            if d.get("note"):
+                print(f"   {d['note']}")
+            if d.get("missing"):
+                print(f"   still missing for the profile: {', '.join(d['missing'])}")
+        else:
+            print(f"   follows {d['handbook']}, profile {d['profile']}, already")
+    core.emit(done)
+    if any(d.get("error") for d in done):
+        sys.exit(1)
 
 
 def secrets_command(cfg, args) -> None:
