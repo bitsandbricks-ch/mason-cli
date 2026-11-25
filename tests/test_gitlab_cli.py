@@ -132,3 +132,11 @@ def test_init_keeps_gitlab_groups(env, tmp_path):
     text = (tmp_path / "config" / "mason" / "config.toml").read_text()
     assert 'gitlab_groups = ["acme-gl"]' in text
     assert "gitlab:acme-gl/web" in mason({**mine, "FAKE_GH_LOG": str(tmp_path / "log")}, "repos")
+
+
+def test_login_signs_gh_and_glab_in(gl_env):
+    out = mason(gl_env, "login")
+    assert "GitHub: gh is signed in already" in out and "GitLab: glab is signed in to gitlab.com already" in out
+    out = mason({**gl_env, "FAKE_GLAB_SIGNED_OUT": "1"}, "login", "--gitlab")
+    assert "GitLab: running glab auth login --hostname gitlab.com" in out and "GitHub" not in out
+    assert "glab auth login --hostname gitlab.com" in calls(gl_env)

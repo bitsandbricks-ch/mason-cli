@@ -54,6 +54,9 @@ def node(path):
             "mergeRequests": {"count": len(mrs), "nodes": mrs}}
 
 
+if argv[:2] == ["auth", "login"]:
+    print("Logged in to gitlab.com as mike-gl")
+    sys.exit(0)
 if argv[:2] == ["auth", "status"]:
     if os.environ.get("FAKE_GLAB_SIGNED_OUT"):
         print("x gitlab.com: not logged in", file=sys.stderr)

@@ -763,3 +763,14 @@ def test_ignoring_github_rulesets(env, tmp_path):
     assert "ruleset release (.github/rulesets/tags.json) isn't imported" in mason(e, "doctor", "dotfiles")
     out = mason({**e, "FAKE_GH_OWN": 'skip = ["github_rulesets"]'}, "doctor", "dotfiles")
     assert ".github/rulesets/tags.json" not in out and "ok (group default + .mason.toml)" in out  # mason's rules only
+
+
+def test_login_signs_gh_in(env, tmp_path):
+    e = {**env, "FAKE_GH_LOG": str(tmp_path / "calls.log")}
+    out = mason(e, "login", "--github")
+    assert "GitHub: gh is signed in already" in out
+    out = mason({**e, "FAKE_GH_SIGNED_OUT": "1"}, "login", "--github")
+    assert "GitHub: running gh auth login" in out and "Logged in as mike" in out
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    assert calls.count("auth login") == 1 and not any(c.startswith("glab") for c in calls)
+    assert "mason login (runs gh auth login" in mason({**e, "FAKE_GH_SIGNED_OUT": "1"}, "status")

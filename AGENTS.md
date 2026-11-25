@@ -37,8 +37,13 @@ Run what CI runs and make it pass locally:
 - **Releases:** the maintainer releases with `mason bump` and `mason release tag`.
 - **Tests never talk to the GitHub API:** they run against the stand-ins in `tests/fake_gh`
   (and `tests/fake_glab` for GitLab). Keep it that way.
-- **Tokens:** on its own, mason talks to GitHub through the gh CLI and never sees a token.
-  Don't change that without asking.
+- **Core and add-on:** the CLI and the TUI are the core; the web app (`src/mason/server/`, `web/`)
+  is an add-on on top of it. The core never imports the add-on and works without its libraries;
+  a feature lands in the core first. See [docs/architecture.md](docs/architecture.md) (issue #88).
+- **Tokens:** the CLI and the TUI reach GitHub through gh and GitLab through glab (`mason login`
+  runs `gh auth login` and `glab auth login`). The CLI may read the token they hold, but mason
+  never stores one. The web app signs each user in with their own OAuth token; only the server
+  holds the client secret. Don't change the server's secret handling without asking.
 - Stay inside the repository. Ask before deleting files you didn't create.
 
 ## Differences from the handbook
