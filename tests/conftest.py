@@ -19,6 +19,7 @@ def env(tmp_path_factory):
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         "FAKE_GH_LOG": str(bin_dir / "calls.log"),
         "XDG_CONFIG_HOME": str(bin_dir / "config"),
+        "XDG_CACHE_HOME": str(bin_dir / "cache"),  # never the real ~/.cache (handbook and defaults copies)
         "MASON_DEFAULTS": "acme/defaults",
         "MASON_OPEN": "print",
         "MASON_HERE": "0",  # the tests run inside mason's own checkout: no names means every repo
@@ -27,7 +28,9 @@ def env(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
-def _not_serving_after(monkeypatch):
-    """create_app marks the process as the web app (core.SERVING); a test after it is the CLI again."""
+def _not_serving_after(monkeypatch, tmp_path):
+    """create_app marks the process as the web app (core.SERVING); a test after it is the CLI again.
+    Copies kept for `mason check` go to the test's own folder, never the real ~/.cache."""
     from mason import core
     monkeypatch.setattr(core, "SERVING", core.SERVING)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))

@@ -58,7 +58,7 @@ Repos are named as `owner/name`, as a bare `name` when only one repo has it, or 
 | `mason sync [names] [--only PATH]` | Opens a PR per repo whose shared files differ (with `auto_push`: pushes them to the default branch). |
 | `mason issues [names] [--mine] [--label L] [--assignee X] [--stale DAYS] [--state open\|closed\|all] [--limit 20]` | Issues across repos, newest activity first; PRs are left out. `--assignee none` shows unassigned ones, `*` any assigned; `--label` repeats. |
 | `mason issue new name "title" [--body TEXT] [--label L] [--assignee X]` | Opens an issue (`--body -` reads it from stdin). `mason issue view\|close\|reopen name#12` shows, closes (`--not-planned`) or reopens one, `mason issue comment name#12 "text"` comments. An issue URL works too. |
-| `mason check [path] [--install-hook] [--handbook FOLDER] [--base REF] [--only CHECK]` | The checkout you're in against its own rules, offline (no token, no API call): `.mason.toml` keys, ruleset JSON, pinned workflows and permissions, required files (the `.mason.toml`'s and the handbook profile's), a changelog fragment on the branch, one Alembic migration head, AGENTS.md linking the handbook, and synced skills matching their lock. Exits 1 on errors. `--install-hook` makes `git push` run it first. See [Checking a checkout](#checking-a-checkout-mason-check). |
+| `mason check [path] [--install-hook] [--handbook FOLDER] [--defaults FOLDER] [--base REF] [--only CHECK]` | The checkout you're in against its own rules, offline (no token, no API call). It names the repo from the git remote and applies the groups of its org's `.mason` and your defaults that match it, as `mason doctor` does, from a folder or the copy online commands keep. It checks `.mason.toml` keys, ruleset JSON, pinned workflows and permissions, required files (the `.mason.toml`'s and the handbook profile's), a changelog fragment on the branch, one Alembic migration head, AGENTS.md linking the handbook, and synced skills matching their lock. Exits 1 on errors. `--install-hook` makes `git push` run it first. See [Checking a checkout](#checking-a-checkout-mason-check). |
 | `mason lint [folder]` | A defaults repo (`mason.toml`, its groups, rulesets and files folders) or a handbook (its profiles and skills), offline, for that repo's own CI. Exits 1 on errors. |
 | `mason handbook [name] [--profile P] [--profiles]` | The handbook the repo follows: the chapters to read (with links), and the files, labels and agent skills its profile asks for. See [Handbook](#handbook). |
 | `mason adopt [names] [--profile P] [--version v1]` | One PR per repo that makes it follow the handbook: `.mason.toml` with its `[handbook]` table (`repo`, `profile`, `version`), `AGENTS.md` from the handbook's template (or a link added to the one it has), `CLAUDE.md` importing it, and the profile's agent skills with their lock. The PR lists what the profile still wants. |
@@ -538,7 +538,33 @@ migrations = "backend/migrations/versions"   # false: don't look
 skip = ["changelog"]
 ```
 
-`--json` gives the findings as data (`check`, `level`, `text`, `path`, `line`).
+`--json` gives the findings as data (`check`, `level`, `text`, `path`, `line`), and the checkout's `repo`.
+
+### The repo and its defaults
+
+`mason check` reads the repo's name from the checkout's `origin` remote (else its first remote), as every other
+command does inside a checkout, and prints it first. With the name it picks the groups that match the repo, as
+`mason doctor` does online: the org's `.mason` (a GitLab group's, nearest first) and the groups of your own
+defaults, with the repo's `.mason.toml` on top (the repo wins). From the groups it takes `required_files`,
+`workflows`, `[check]` and `[handbook]`, so a group that pins the handbook or asks for `SECURITY.md` counts here too.
+
+It never goes online for them. It reads them from:
+
+- `--defaults FOLDER`: a checkout of the org's `.mason` (repeatable, the last one wins), handy in CI;
+- your config's `defaults` (or `MASON_DEFAULTS`) when that is a folder;
+- the copy online commands keep in `~/.cache/mason/defaults` (`XDG_CACHE_HOME`) each time they read an org's
+  `.mason` or your defaults repo: `mason doctor .` once online fills it. The web app keeps no such copy.
+
+The notes say which one each came from and how old the copy is. Without any of them, or without a GitHub or
+GitLab remote, check looks at the repo's own `.mason.toml` only, as before. Groups that match by `topics` need
+GitHub to know the repo's topics and are left out (the notes name them).
+
+```yaml
+# CI: check against the org's .mason as well
+- uses: actions/checkout@<sha> # v4
+  with: { repository: acme/.mason, path: .mason-defaults }
+- run: mason check --defaults .mason-defaults
+```
 
 ## Handbook
 

@@ -231,6 +231,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("path", nargs="?", help="the checkout (default: the one you're in)")
     sp.add_argument("--handbook", metavar="FOLDER", help="read the profile from this handbook folder, not the cache")
     sp.add_argument("--base", help="the branch to compare with for the changelog check (default: origin/HEAD)")
+    sp.add_argument("--defaults", action="append", metavar="FOLDER",
+                    help="a checkout of the org's .mason (repeatable): its groups instead of the cached copy")
     sp.add_argument("--only", action="append", metavar="CHECK", help="only this check (repeatable)")
     sp.add_argument("--install-hook", action="store_true", help="make git push run mason check first")
     sp = sub.add_parser("lint", help="a defaults repo (mason.toml, rulesets) or a handbook, offline: for its CI")

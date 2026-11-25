@@ -212,3 +212,75 @@ def test_doctor_holds_a_repo_to_its_profile(book):
     assert want["labels"] == {"type:bug": {"color": "d73a4a"}}  # the group's own spec wins
     want = rules.prepare({"more": {"handbook": {"repo": str(book), "profile": "nope"}}})
     assert any("has no profile 'nope'" in t for t in want["expired_skips"])
+
+
+# ── the repo and its defaults, offline ───────────────────────────────────────
+
+ORG_MASON = """
+[[group]]
+name = "web"
+match = { prefix = "web" }
+required_files = ["SECURITY.md"]
+handbook = { repo = "acme/handbook", profile = "web-app" }
+
+[[group]]
+name = "tagged"
+match = { topics = ["app"] }
+
+[[group]]
+name = "other"
+match = { prefix = "api" }
+required_files = ["OPENAPI.md"]
+"""
+
+
+def test_check_names_the_repo(env, repo):
+    _, _, doc = findings(env, repo)
+    assert doc["result"]["repo"] == "acme/web"
+    assert doc["result"]["notes"][0] == "repo acme/web (from the git remote)"
+
+
+def test_org_defaults_from_a_folder(env, repo, tmp_path):
+    org = tmp_path / "dotmason"
+    write(org, {"mason.toml": ORG_MASON})
+    write(repo, {".mason.toml": "", "AGENTS.md": "Nothing.\n"})  # the group names the handbook
+    code, got, doc = findings(env, repo, "--defaults", str(org))
+    notes = doc["result"]["notes"]
+    assert code == 1
+    assert ("required_files", "missing") in got  # SECURITY.md from the web group; OPENAPI.md isn't asked for
+    assert not any("OPENAPI" in f["path"] for f in doc["result"]["findings"])
+    assert "doesn't link the handbook acme/handbook (said by group acme:web)" in [
+        f["text"] for f in doc["result"]["findings"]]
+    assert "groups acme:web" in notes
+    assert "groups that match by topic need GitHub, left out here: acme:tagged" in notes
+    # the repo's own file wins over the group
+    write(repo, {".mason.toml": '[handbook]\nrepo = "acme/other-book"\n', "SECURITY.md": "Tell us.\n",
+                 "AGENTS.md": "acme/other-book\n"})
+    code, got, _ = findings(env, repo, "--defaults", str(org))
+    assert not any(c in ("handbook", "required_files") for c, _ in got)
+
+
+def test_org_defaults_from_the_cache(env, repo, tmp_path, monkeypatch):
+    from mason import config
+    cache = {**env, "XDG_CACHE_HOME": str(tmp_path / "cache")}
+    write(repo, {".mason.toml": ""})
+    _, _, doc = findings(cache, repo)
+    assert any("acme/.mason isn't cached: run `mason doctor .` once online" in n for n in doc["result"]["notes"])
+    monkeypatch.setenv("XDG_CACHE_HOME", cache["XDG_CACHE_HOME"])
+    config.remember_defaults("acme/.mason", ORG_MASON)  # what an online lookup leaves behind
+    code, got, doc = findings(cache, repo)
+    assert ("required_files", "missing") in got
+    assert any(n.startswith("acme/.mason from the cache (") for n in doc["result"]["notes"])
+    config.remember_defaults("acme/.mason", None)  # read online: the org has no .mason
+    _, got, doc = findings(cache, repo)
+    assert ("required_files", "missing") not in got and not any("acme/.mason" in n for n in doc["result"]["notes"])
+
+
+def test_no_remote_means_only_the_own_file(env, repo, tmp_path):
+    subprocess.run(["git", "-C", str(repo), "remote", "remove", "origin"], check=True)
+    org = tmp_path / "dotmason"
+    write(org, {"mason.toml": ORG_MASON})
+    _, got, doc = findings(env, repo, "--defaults", str(org))
+    assert doc["result"]["repo"] is None
+    assert "no GitHub or GitLab remote: only this checkout's own settings" in doc["result"]["notes"]
+    assert ("required_files", "missing") not in got
