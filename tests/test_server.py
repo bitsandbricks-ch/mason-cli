@@ -1253,9 +1253,16 @@ def test_mason_files_write(op, monkeypatch, tmp_path):
                                                   "text": '[handbook]\nprofile = "cli-tool"\nversion = "v1"\n'},
                   headers=H).json
     assert good["problems"] == []
-    bad = c.post("/api/v1/mason/validate", json={"repo": "acme/web", "path": ".mason.toml",
-                                                 "text": 'handbook = "cli-tool"\n'}, headers=H).json
-    assert "handbook must be a table" in bad["problems"][0]
+    # every form `mason adopt` and the handbook's template write
+    for text in ('[handbook]\nrepo = "acme/handbook"\nprofile = "multi-tool"\nversion = "v1"\n',
+                 '[handbook]\nprofile = ["static-site", "service"]\n', 'handbook = "acme/handbook"\n'):
+        assert c.post("/api/v1/mason/validate", json={"repo": "acme/web", "path": ".mason.toml", "text": text},
+                      headers=H).json["problems"] == [], text
+    for text in ('handbook = 3\n', '[handbook]\nprofile = []\n', '[handbook]\nprofile = [1]\n',
+                 '[handbook]\nnope = "x"\n'):
+        bad = c.post("/api/v1/mason/validate", json={"repo": "acme/web", "path": ".mason.toml", "text": text},
+                     headers=H).json
+        assert "handbook must be a table" in bad["problems"][0], text
     ok = c.put("/api/v1/mason/file", json={"repo": "acme/web", "path": ".mason.toml", "text": "auto_fix = true\n",
                                            "mode": "commit"}, headers=H).json
     assert ok["mode"] == "commit" and "pushed to the default branch" in ok["text"]

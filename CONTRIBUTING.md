@@ -1,7 +1,7 @@
 # Contributing to Mason
 
 Thanks for helping. Mason follows the [BitsAndBricks handbook](https://github.com/bitsandbricks-ch/handbook)
-(profile `cli-tool`); [AGENTS.md](AGENTS.md) lists what is specific to this repo, for people and coding
+(profile `multi-tool`); [AGENTS.md](AGENTS.md) lists what is specific to this repo, for people and coding
 agents alike.
 
 ## Set up
@@ -26,7 +26,10 @@ cd web && npm run build && npm test
 
 ## Pull requests
 
-- One topic per branch and pull request, opened as a draft with the template filled in. Link the issue.
+- Start from an issue, and link it from the pull request (`Fixes #12`).
+- One topic per branch and pull request, opened as a draft with the template filled in. The PR title
+  follows [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) (`fix(web): ...`),
+  because it becomes the squash commit on `main`.
 - A user-facing change adds a fragment to [changelog.d/](changelog.d/) instead of editing `CHANGELOG.md`.
 - Don't change the version: releases are made with `mason bump` and `mason release`.
 - A change to sign-in, keys, tokens, the GitHub proxy or plugins says so in the description and updates

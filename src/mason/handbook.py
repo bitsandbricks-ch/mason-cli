@@ -38,16 +38,11 @@ import hashlib
 import json
 import os
 import re
-import sys
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from mason import config, core
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover
-    import tomli as tomllib
 
 LAYOUT = {"core": "core", "profiles": "profiles", "skills": "skills", "templates": "templates"}
 PROFILE_KEYS = {"description", "chapters", "files", "labels", "skills", "check", "status"}

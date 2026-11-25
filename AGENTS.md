@@ -5,9 +5,10 @@ Humans: the same rules apply to you in spirit.
 `CLAUDE.md` imports this file.
 
 This repo follows the [BitsAndBricks handbook](https://github.com/bitsandbricks-ch/handbook),
-profile **cli-tool** (see `.mason.toml`). Read its core chapters and the blocks this profile
-lists. The rules below are only what is specific to this repo; where they differ from the
-handbook, this file wins.
+profile **multi-tool** (see `.mason.toml`). Read the latest handbook from `main`: its core
+chapters and the blocks this profile lists. The rules below are only what is specific to this
+repo. Where this repo differs from the handbook, the difference is listed under
+[Differences from the handbook](#differences-from-the-handbook) with its reason.
 
 ## What this is
 
@@ -27,6 +28,10 @@ Run what CI runs and make it pass locally:
 
 ## Repo-specific rules
 
+- Work from an issue: open one if there is none, comment when you start and when blocked, link it
+  from the PR (`Fixes #12`).
+- Commits and PR titles follow Conventional Commits, with these scopes: `cli`, `tui`, `web`,
+  `server`, `gitlab`, `handbook`, `docs`, `ci`.
 - **Pull requests:** fill in `.github/pull_request_template.md`.
 - **Changelog:** a user-facing change adds a fragment to `changelog.d/` (see its README).
 - **Releases:** the maintainer releases with `mason bump` and `mason release tag`.
@@ -35,3 +40,9 @@ Run what CI runs and make it pass locally:
 - **Tokens:** on its own, mason talks to GitHub through the gh CLI and never sees a token.
   Don't change that without asking.
 - Stay inside the repository. Ask before deleting files you didn't create.
+
+## Differences from the handbook
+
+- No `pre-commit`, `ruff format` or PR-title check yet (handbook 0009, 0010): the first
+  `ruff format` run touches most files, so it gets its own PR (#84). Until then, run the commands
+  under "Before you push".

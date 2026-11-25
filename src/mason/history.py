@@ -29,7 +29,7 @@ def folder(where: str | None = None) -> Path:
 
 def save(results: dict[str, dict], where: str | None = None, keep: int = 90,
          now: dt.datetime | None = None) -> Path:
-    now = now or dt.datetime.now(dt.timezone.utc)
+    now = now or dt.datetime.now(dt.UTC)
     root = folder(where)
     root.mkdir(parents=True, exist_ok=True)
     doc = {"when": now.isoformat(timespec="seconds"),

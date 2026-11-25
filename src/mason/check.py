@@ -25,16 +25,12 @@ import datetime as dt
 import json
 import os
 import sys
+import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from mason import config, core, handbook, here, workflows
 from mason.defaults import RULESET_DIRS, has
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover
-    import tomli as tomllib
 
 CHECKS = ("mason_toml", "rulesets", "workflows", "required_files", "changelog", "migrations", "handbook", "skills")
 FRAGMENT_DIRS = ("changelog.d", ".changes", "changes", "newsfragments", ".changeset", "changelog/unreleased")

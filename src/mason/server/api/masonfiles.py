@@ -84,14 +84,23 @@ def validate_settings(text: str) -> list[str]:
     except RuntimeError as err:
         return [str(err)]
     problems = []
-    # [handbook] names the BitsAndBricks handbook profile the repo follows; mason only keeps it for now
+    # [handbook]: the handbook the repo follows (handbook.py reads it; `mason adopt` writes it)
     unknown = sorted(set(raw) - config.REPO_KEYS - {"release", "gitlab", "handbook"})
     if unknown:
         problems.append(f"a repo's own file doesn't take {', '.join(unknown)} (groups only, or unknown)")
+    from mason import handbook as HB
+
     handbook = raw.get("handbook", {})
-    if not isinstance(handbook, dict) or set(handbook) - {"profile", "version"} or not all(
-            isinstance(v, str) for v in handbook.values()):
-        problems.append('handbook must be a table like { profile = "cli-tool", version = "v1" }')
+    if isinstance(handbook, str):  # handbook = "owner/repo"
+        handbook = {"repo": handbook}
+    profiles = handbook.get("profile") if isinstance(handbook, dict) else None
+    if isinstance(profiles, list):  # several profiles, main one first (handbook decision 0011)
+        profiles = profiles if profiles and all(isinstance(p, str) for p in profiles) else None
+    if not isinstance(handbook, dict) or set(handbook) - HB.TABLE_KEYS or not all(
+            isinstance(v, str) for k, v in handbook.items() if k != "profile") or (
+            "profile" in handbook and not isinstance(profiles, (str, list))):
+        problems.append('handbook must be a table like { repo = "owner/handbook", profile = "multi-tool", '
+                        'version = "v1" }; profile may be a list')
     settings = raw.get("settings") or {}
     if not isinstance(settings, dict):
         problems.append("settings must be a table")
