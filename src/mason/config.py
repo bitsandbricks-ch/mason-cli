@@ -64,6 +64,7 @@ import fnmatch
 import json
 import os
 import re
+import time
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -447,16 +448,19 @@ class Config:
     org_defaults: bool = True  # look for each org's .mason repo
     builtin: bool = True  # Mason's own defaults (builtin.py) for repos nothing else describes
 
-    def layers_of(self, repo: str, topics: list[str] | None = None) -> list[Group]:
+    def layers_of(self, repo: str, topics: list[str] | None = None,
+                  org_found: list[OrgDefaults] | None = None) -> list[Group]:
         """Every group that matches the repo, least important first: your catch-all (only when no
         group of the org's .mason matches), the org's .mason groups (a parent GitLab group's before its
         subgroup's), then your groups that name the repo with `match`. Within one file a more specific
         match wins (full names over prefixes and suffixes over orgs and topics over none); on a tie the
-        group written first wins."""
+        group written first wins. `org_found` stands in for the org lookup (mason check, offline)."""
         mine = [(i, g) for i, g in enumerate(self.groups) if g.matches(repo, topics)]
         org: list[Group] = []
-        if self.org_defaults:
-            for found in reversed(org_defaults_of(repo)):  # farthest first
+        if org_found is None and self.org_defaults:
+            org_found = org_defaults_of(repo)
+        if org_found:
+            for found in reversed(org_found):  # farthest first
                 if found.error:
                     raise RuntimeError(found.error)
                 org += ranked([(i, g) for i, g in enumerate(found.groups) if g.matches(repo, topics)])
@@ -680,6 +684,8 @@ def load(orgs: list[str] | None = None, mine: dict | None = None, env: bool = Tr
         name, text = read_defaults(source)
         if text is None:
             raise RuntimeError(f"No {DEFAULTS_FILE} in {source}. Start one with: mason init {where}")
+        if not source.local and not server:
+            remember_defaults(f"{where}@{ref}" if ref else where, text)
         raw = parse_defaults(text, f"{source}/{name}")
     env_orgs = [o.strip() for o in (getenv("MASON_ORGS") or "").split(",") if o.strip()]
     all_orgs = env_orgs or _unique(_list(raw.get("orgs")) + _list(mine.get("orgs")))
@@ -747,6 +753,56 @@ def defaults_of_orgs(orgs: list[str]) -> list[OrgDefaults]:
     return [o for o in found if o]
 
 
+def org_groups(where: str, text: str, source: Source | None = None) -> OrgDefaults:
+    """An org's .mason mason.toml as its groups, named `org:name` (a broken file: no groups and the error)."""
+    org = where.rsplit("/", 1)[0].removeprefix("gitlab:")
+    try:
+        raw = parse_defaults(text, f"{where}/{DEFAULTS_FILE}")
+        groups = []
+        for i, g in enumerate(raw.get("group") or []):
+            grp = make_group(g, i)
+            grp.name = f"{org}:{grp.name}"
+            grp.source = source
+            grp.origin = where
+            groups.append(grp)
+        return OrgDefaults(where, groups)
+    except RuntimeError as err:
+        return OrgDefaults(where, [], str(err))
+
+
+# ── the offline copy `mason check` reads ─────────────────────────────────────
+
+
+def defaults_cache_dir() -> Path:
+    return Path(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")) / "mason" / "defaults"
+
+
+def _defaults_cache_file(where: str) -> Path:
+    return defaults_cache_dir() / (re.sub(r"[^\w.-]+", "_", where) + ".json")
+
+
+def remember_defaults(where: str, text: str | None) -> None:
+    """Keep a defaults repo's mason.toml (None: it has none) for `mason check`, which never goes online.
+    Only on your own machine: the web app reads with each user's login and keeps nothing on disk."""
+    if core.SERVING or OVERRIDE.get() is not None:
+        return
+    path = _defaults_cache_file(where)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"where": where, "text": text, "fetched": time.strftime("%Y-%m-%d")}))
+    except OSError:  # a read-only home: check says the copy is missing, nothing breaks here
+        pass
+
+
+def remembered_defaults(where: str) -> dict | None:
+    """{where, text (None: it has no mason.toml), fetched} from the cache, None when it was never read."""
+    try:
+        got = json.loads(_defaults_cache_file(where).read_text())
+    except (OSError, ValueError):
+        return None
+    return got if isinstance(got, dict) and got.get("where") == where else None
+
+
 def org_defaults(where: str) -> OrgDefaults | None:
     """`where`'s mason.toml as an org's defaults, or None when there is none (or no way to read it).
 
@@ -776,22 +832,8 @@ def org_defaults(where: str) -> OrgDefaults | None:
             text = got[0] if got else None
     except (RuntimeError, KeyError, TypeError):
         return None  # a rate limit or an outage: try again next time, cache nothing
-    found = None
-    if text is not None:
-        org = where.rsplit("/", 1)[0]
-        org = org[len("gitlab:"):] if gitlab else org
-        try:
-            raw = parse_defaults(text, f"{where}/{DEFAULTS_FILE}")
-            groups = []
-            for i, g in enumerate(raw.get("group") or []):
-                grp = make_group(g, i)
-                grp.name = f"{org}:{grp.name}"
-                grp.source = source
-                grp.origin = where
-                groups.append(grp)
-            found = OrgDefaults(where, groups)
-        except RuntimeError as err:
-            found = OrgDefaults(where, [], str(err))
+    remember_defaults(where, text)
+    found = org_groups(where, text, source) if text is not None else None
     cache[where] = found
     return found
 

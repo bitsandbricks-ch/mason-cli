@@ -1,0 +1,1 @@
+- `mason check` names the repo from the checkout's git remote and applies the matching groups of its org's `.mason` and your defaults (`required_files`, `workflows`, `[check]`, `[handbook]`), still offline: from `--defaults FOLDER`, a defaults folder in your config, or the copy online commands now keep in `~/.cache/mason/defaults`.

@@ -27,7 +27,7 @@ def _days(stamp: str | None) -> int | None:
     if not stamp:
         return None
     then = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
-    return (dt.datetime.now(dt.timezone.utc) - then).days
+    return (dt.datetime.now(dt.UTC) - then).days
 
 
 def repo_access(repo: str) -> dict:

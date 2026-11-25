@@ -9,8 +9,11 @@
   handbook           AGENTS.md links the handbook the repo follows
   skills             .claude/skills match their skills-lock.json (nobody edited a synced skill by hand)
 
-The profile's rules come from the handbook; offline they come from ~/.cache/mason/handbook (`mason handbook`
-fills it) or from a handbook folder (`--handbook ../handbook`, handy in CI). In the repo's .mason.toml:
+The repo is named from the checkout's git remote. The groups that match it (the org's .mason, your defaults)
+go under the repo's own .mason.toml, as in `mason doctor`: read from --defaults folders, a defaults folder in your
+config, or ~/.cache/mason/defaults (online commands fill it). The profile's rules come from the handbook;
+offline they come from ~/.cache/mason/handbook (`mason handbook` fills it) or from a handbook folder
+(`--handbook ../handbook`, handy in CI). In the repo's .mason.toml:
 
   [check]
   fragments = "changelog.d"      # where changelog fragments go (found on its own: changelog.d, .changes, ...)
@@ -25,16 +28,12 @@ import datetime as dt
 import json
 import os
 import sys
+import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from mason import config, core, handbook, here, workflows
 from mason.defaults import RULESET_DIRS, has
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover
-    import tomli as tomllib
 
 CHECKS = ("mason_toml", "rulesets", "workflows", "required_files", "changelog", "migrations", "handbook", "skills")
 FRAGMENT_DIRS = ("changelog.d", ".changes", "changes", "newsfragments", ".changeset", "changelog/unreleased")
@@ -343,16 +342,131 @@ def skills(root: Path, profile: dict | None) -> list[Finding]:
     return found
 
 
+# ── the defaults, offline ────────────────────────────────────────────────────
+
+
+def _cached(where: str) -> tuple[str | None, str]:
+    """(mason.toml text or None, a note) for a defaults repo from the cache."""
+    got = config.remembered_defaults(where)
+    if got is None:
+        return None, f"{where} isn't cached: run `mason doctor .` once online, or pass --defaults FOLDER"
+    if got.get("text") is None:
+        return None, ""  # read online: it has no mason.toml
+    return got["text"], f"{where} from the cache ({got.get('fetched') or 'date unknown'})"
+
+
+def _folder(where: str) -> tuple[str | None, str]:
+    path = Path(os.path.expanduser(where)) / config.DEFAULTS_FILE
+    if not path.is_file():
+        return None, f"{where}: no {config.DEFAULTS_FILE} there"
+    return path.read_text(), f"{where} (folder)"
+
+
+def defaults(repo: str | None, folders: list[str] | None = None) -> tuple[list[config.Group], dict, list[str]]:
+    """The groups that match `repo`, least important first, read without the network: your config's
+    defaults (a folder, or the cache) and the org's .mason (--defaults folders, or the cache). Also the
+    defaults' own top-level table (its [handbook]) and notes on where each came from."""
+    notes: list[str] = []
+    if not repo:
+        return [], {}, ["no GitHub or GitLab remote: only this checkout's own settings"]
+    try:
+        mine = config.user_config()
+    except RuntimeError as err:
+        mine = {}
+        notes.append(f"your config: {err}")
+    where = os.environ.get("MASON_DEFAULTS") or mine.get("defaults")
+    ref = os.environ.get("MASON_DEFAULTS_REF") or mine.get("ref")
+    org_on = config._on(os.environ.get("MASON_ORG_DEFAULTS"), mine.get("org_defaults", True))
+    raw: dict = {}
+    if where:
+        local = config._is_local(where)
+        text, note = _folder(where) if local else _cached(f"{where}@{ref}" if ref else where)
+        notes.append(f"your defaults {note}" if local else note)
+        if text:
+            try:
+                raw = config.parse_defaults(text, f"{where}/{config.DEFAULTS_FILE}")
+            except RuntimeError as err:
+                notes.append(str(err))
+    org_found: list[config.OrgDefaults] = []
+    if folders:  # in place of the org lookup; the last folder is the nearest (it wins)
+        for folder in reversed(folders):
+            text, note = _folder(folder)
+            notes.append(note)
+            if text is not None:
+                org_found.append(config.org_groups(config.org_candidates(repo)[0] if config.org_candidates(repo)
+                                                   else folder, text))
+    elif org_on:
+        for candidate in config.org_candidates(repo):
+            if candidate == repo:
+                continue
+            text, note = _cached(candidate)
+            if note:
+                notes.append(note)
+            if text is not None:
+                org_found.append(config.org_groups(candidate, text))
+    for found in org_found:
+        if found.error:
+            notes.append(f"{found.where}: {found.error}")
+    org_found = [f for f in org_found if not f.error]
+    try:
+        cfg = config.Config(source=None, orgs=[], repos=[], exclude=[],
+                            groups=[config.make_group(g, i) for i, g in enumerate(raw.get("group") or [])],
+                            raw=raw, org_defaults=False)
+        layers = cfg.layers_of(repo, None, org_found)
+    except (RuntimeError, TypeError, ValueError, AttributeError) as err:
+        return [], raw, notes + [f"the defaults: {err}"]
+    by_topic = sorted({g.name for g in cfg.groups + [g for f in org_found for g in f.groups]
+                       if g.match.get("topics")})
+    if by_topic:
+        notes.append("groups that match by topic need GitHub, left out here: " + ", ".join(by_topic))
+    if layers:
+        notes.append("groups " + ", ".join(g.name for g in layers))
+    return layers, raw, notes
+
+
+def effective(raw: dict, layers: list[config.Group]) -> tuple[dict, str | None]:
+    """The repo's .mason.toml with the keys mason check reads (required_files, workflows, check, handbook)
+    taken from its groups first, the repo's own file winning as in `mason doctor`. Also the group that
+    named the handbook, when the repo's own file doesn't."""
+    if not layers:
+        return raw, None
+    try:
+        own = config.make_group({**{k: v for k, v in raw.items() if k in config.REPO_KEYS},
+                                 "name": config.REPO_LAYER}, 0)
+    except (RuntimeError, TypeError, ValueError, AttributeError):
+        own = None  # mason_toml already says what is wrong with it
+    group = config.stack(layers + ([own] if own else []))
+    out = dict(raw)
+    if group.required_files:
+        out["required_files"] = group.required_files
+    if group.workflows is not None:
+        out["workflows"] = group.workflows
+    for key in ("check", "handbook"):
+        if group.more.get(key):
+            out[key] = group.more[key]
+    said = None
+    if not handbook.table_of(raw).get("repo") and handbook.table_of(out).get("repo"):
+        said = next((f"group {g.name}" for g in reversed(layers) if (g.more.get("handbook") or {}).get("repo")),
+                    None)
+    return out, said
+
+
 # ── the command ──────────────────────────────────────────────────────────────
 
 
 def run(root: Path, handbook_folder: str | None = None, base: str | None = None,
-        only: list[str] | None = None) -> tuple[list[Finding], list[str]]:
-    """(findings, notes) for the checkout at `root`."""
-    notes: list[str] = []
-    path, raw, found = read_own(root)
+        only: list[str] | None = None, defaults_folders: list[str] | None = None,
+        repo: str | None = None) -> tuple[list[Finding], list[str]]:
+    """(findings, notes) for the checkout at `root` (the repo `repo`, from its remote)."""
+    notes: list[str] = [f"repo {repo} (from the git remote)"] if repo else []
+    path, own, found = read_own(root)
+    layers, defaults_raw, more = defaults(repo, defaults_folders)
+    notes += more
+    raw, said = effective(own, layers)
     skipped = set(config._list((raw.get("check") or {}).get("skip")))
-    spec = handbook.spec(raw)
+    spec = handbook.spec(raw, defaults_raw)
+    if said and spec.said == ".mason.toml":
+        spec.said = said
     profile = None
     if spec:
         notes.append(f"handbook {spec.where}" + (f" {spec.version}" if spec.version else "")
@@ -402,9 +516,10 @@ def command(args) -> None:
     for name in args.only or []:
         if name not in CHECKS:
             sys.exit(f"Unknown check {name}. Checks: {', '.join(CHECKS)}")
-    found, notes = run(root, args.handbook, args.base, args.only)
+    repo = here.repo(root)
+    found, notes = run(root, args.handbook, args.base, args.only, args.defaults, repo)
     errors = [f for f in found if f.level == "error"]
-    core.emit({"root": str(root), "notes": notes, "errors": len(errors),
+    core.emit({"root": str(root), "repo": repo, "notes": notes, "errors": len(errors),
                "warnings": len(found) - len(errors), "findings": [asdict(f) for f in found]})
     if not core.json_mode():
         for n in notes:

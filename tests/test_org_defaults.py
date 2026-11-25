@@ -175,3 +175,15 @@ def test_gitlab_nearest_group_first():
     # without a GitLab login nothing is looked up
     with core.using(Gh({})):
         assert cfg_with("").group_of("gitlab:top/web") is None
+
+
+def test_an_online_read_is_kept_for_mason_check(acme, monkeypatch):
+    monkeypatch.setattr(core, "SERVING", False)
+    with core.using(acme):
+        config.org_defaults("acme/.mason")
+        config.org_defaults("acme2/.mason")
+    assert config.remembered_defaults("acme/.mason")["text"] == ORG
+    assert config.remembered_defaults("acme2/.mason")["text"] is None  # no .mason there: offline knows too
+    monkeypatch.setattr(core, "SERVING", True)  # the web app keeps nothing on disk
+    config.remember_defaults("acme/.mason", "changed")
+    assert config.remembered_defaults("acme/.mason")["text"] == ORG
