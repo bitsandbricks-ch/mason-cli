@@ -1,0 +1,2 @@
+`mason login` without a URL signs this machine in: it runs `gh auth login`, and `glab auth login` when you use GitLab (`--github` or `--gitlab` for only one). `mason login <URL>` still signs in to the web app.
+The CLI and the TUI are Mason's core and the web app is an add-on (the `server` extra): `mason serve` without it says how to install it, and docs/architecture.md describes the line between them.

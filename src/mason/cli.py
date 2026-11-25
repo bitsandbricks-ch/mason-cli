@@ -44,7 +44,8 @@ means every repo, `.` names the checkout's repo and #12 its PR 12.
   mason new owner/name [--group G]    a new repo, set up the way its group wants
   mason tui                           all of it, full screen
   --json                              any command: one JSON document instead of text (scripts, CI)
-  mason login https://mason          go through Mason (the web app) with an API key: no gh needed
+  mason login [--github|--gitlab]     sign gh and glab in (gh auth login, glab auth login) where they aren't
+  mason login https://mason          go through Mason's web app (the add-on) with an API key: no gh needed
   mason market [install NAME]         plugins from the signed plugin index
   mason serve [--check|--users]    run Mason, the web app (the [server] extra); --users: its accounts
   mason operator add|remove|list   who may open Mason's operator page (run where Mason runs)
@@ -246,10 +247,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict]:
     sp.add_argument("repos", nargs="*", help="the repos (default: this checkout's)")
     sp.add_argument("--profile", help="the handbook profile (default: what the repo's .mason.toml says)")
     sp.add_argument("--version", dest="hb_version", help="the handbook version to pin, e.g. v1")
-    sp = sub.add_parser("login", help="sign in to Mason (the web app) with an API key")
-    sp.add_argument("url", help="Mason's URL, e.g. https://mason.mortar.ch")
-    sp.add_argument("--read", action="store_true", help="a read-only key")
-    sp.add_argument("--key", help="use this API key instead of approving a code in the browser")
+    sp = sub.add_parser("login", help="sign gh and glab in; with a URL: sign in to Mason's web app with an API key")
+    sp.add_argument("url", nargs="?", help="Mason's web app, e.g. https://mason.example.com (default: gh and glab)")
+    sp.add_argument("--github", action="store_true", help="only GitHub (gh auth login)")
+    sp.add_argument("--gitlab", action="store_true", help="only GitLab (glab auth login)")
+    sp.add_argument("--read", action="store_true", help="web app: a read-only key")
+    sp.add_argument("--key", help="web app: use this API key instead of approving a code in the browser")
     sub.add_parser("logout", help="forget Mason's API key")
     sub.add_parser("whoami", help="how mason reaches GitHub and GitLab, and as whom")
     sp = sub.add_parser("market", help="plugins in the plugin index: list, install, sign")
@@ -350,13 +353,28 @@ def list_repos(cfg, names: list[str]) -> None:
         print(f"{len(names)} repos")
 
 
+WEB_ADDON_HINT = (
+    "Mason's web app is an add-on to the CLI and isn't installed here. Add it with:\n"
+    '    pipx install --force "mason-cli[tui,server] @ git+https://github.com/bitsandbricks-ch/mason-cli"'
+)
+
+
+def web_addon():
+    """The web app add-on's entry point (mason.server). The core's only door to it: everything else in
+    the core works without it, and tests/test_boundary.py keeps it that way."""
+    try:
+        from mason.server.app import main as server
+    except ImportError as err:
+        sys.exit(f"{WEB_ADDON_HINT}\n({err})")
+    return server
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["operator"]:  # mason operator add|remove|list [WHO]: on the host, against Mason's database
-        from mason.server.app import main as server
-        return server(argv)
+        return web_addon()(argv)
     if argv[:1] == ["serve"]:  # the web app: mason serve [--host H] [--port P], --check, --users
-        from mason.server.app import main as server
+        server = web_addon()
         rest = argv[1:]
         for flag in ("--check", "--users"):
             if flag in rest:
@@ -393,8 +411,12 @@ def command(parser, handlers: dict, args) -> None:
             return (check if args.cmd == "check" else lint).command(args)
         if args.cmd in ("login", "logout", "whoami"):
             from mason import login
-            if args.cmd == "login":
+            if args.cmd == "login" and args.url:
                 return login.login(args.url, "read" if args.read else "write", args.key)
+            if args.cmd == "login":
+                both = not (args.github or args.gitlab)  # neither flag: gh, and glab where GitLab is used
+                gitlab = None if both else args.gitlab
+                return login.login_here(github=both or args.github, gitlab=gitlab)
             if args.cmd == "logout":
                 return login.logout()
             login.whoami()
@@ -412,7 +434,7 @@ def command(parser, handlers: dict, args) -> None:
             return None
         here_names(args)
         if not core.transport().logged_in() and not glab.wanted_here(getattr(args, "repos", None)):
-            sys.exit("Log in first: gh auth login (or mason login <Mason URL>; GitLab: glab auth login)")
+            sys.exit("Log in first: mason login (runs gh auth login; GitLab: glab auth login)")
         if args.cmd in handlers:
             return handlers[args.cmd](args)
         cfg = config.load(getattr(args, "org", None))

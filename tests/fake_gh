@@ -4,6 +4,7 @@
 acme: web, api, plugin-tpl (the plugins' reference), plugin-a (in line), plugin-b (drifted),
       legacy (excluded by the defaults), old (archived), defaults (a defaults repo).
 mike: dotfiles (a user, not an org: /orgs/mike/repos is a 404), .mason (defaults for mike's repos, with FAKE_GH_MASON=1).
+FAKE_GH_SIGNED_OUT=1: `gh auth status` fails, as before `gh auth login`.
 FAKE_GH_LOG names a file that gets one line per call.
 """
 import base64
@@ -216,6 +217,9 @@ def node(repo):
 
 
 if argv[:2] in (["auth", "status"], ["auth", "token"]):
+    sys.exit(1 if os.environ.get("FAKE_GH_SIGNED_OUT") else 0)
+if argv[:2] == ["auth", "login"]:
+    print("Logged in as mike")
     sys.exit(0)
 
 

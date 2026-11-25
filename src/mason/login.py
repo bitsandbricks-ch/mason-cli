@@ -1,6 +1,10 @@
-"""`mason login <operator URL>`: sign the CLI and the TUI in to an operator with an API key.
+"""`mason login`: sign this machine in to GitHub and GitLab, or to Mason's web app.
 
-The operator shows a code page; you approve the code in the browser where you are signed in with
+`mason login` (no URL) runs `gh auth login` and `glab auth login` where they aren't signed in yet: the
+CLI and the TUI (Mason's core) reach GitHub through gh and GitLab through glab, which keep the tokens.
+
+`mason login <URL>` signs in to Mason's web app (the [server] add-on) instead. The web app shows a code
+page; you approve the code in the browser where you are signed in with
 GitHub or GitLab, and mason gets an API key (read or write) that it keeps in
 ~/.config/mason/server.json (readable only by you). From then on every mason command and
 `mason tui` go through the operator: no gh and no GitHub token needed on this machine.
@@ -10,12 +14,56 @@ GitHub or GitLab, and mason gets an API key (read or write) that it keeps in
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import time
 import urllib.error
 import urllib.request
 import webbrowser
 
 from mason import core, transport
+
+GH_INSTALL = "https://cli.github.com"
+
+
+def _tool(args: list[str]) -> int:
+    """Run gh or glab with this terminal, so its own prompts and browser step work."""
+    try:
+        return subprocess.run(args, check=False).returncode
+    except FileNotFoundError:
+        return 127
+
+
+def login_here(github: bool = True, gitlab: bool | None = None) -> None:
+    """`mason login`: gh auth login, then glab auth login (when GitLab is used here or asked for)."""
+    from mason import glab
+
+    failed = []
+    if github:
+        if not shutil.which("gh"):
+            print(f"GitHub: the gh CLI isn't installed ({GH_INSTALL}); mason reaches GitHub through it")
+            failed.append("gh")
+        elif _tool(["gh", "auth", "status"]) == 0:
+            print("GitHub: gh is signed in already (gh auth status shows the account)")
+        else:
+            print("GitHub: running gh auth login")
+            if _tool(["gh", "auth", "login"]) != 0:
+                failed.append("gh auth login")
+    if gitlab is None:
+        gitlab = glab.wanted_here() or bool(shutil.which("glab"))
+    if gitlab:
+        host = glab.web_url().split("://", 1)[-1]
+        if not shutil.which("glab"):
+            print(f"GitLab: the glab CLI isn't installed ({glab.INSTALL}); mason reaches GitLab through it")
+            failed.append("glab")
+        elif _tool(["glab", "auth", "status", "--hostname", host]) == 0:
+            print(f"GitLab: glab is signed in to {host} already")
+        else:
+            print(f"GitLab: running glab auth login --hostname {host}")
+            if _tool(["glab", "auth", "login", "--hostname", host]) != 0:
+                failed.append("glab auth login")
+    if failed:
+        raise RuntimeError("not signed in: " + ", ".join(failed))
 
 
 def _post(url: str, data: dict) -> tuple[int, dict]:
@@ -81,7 +129,8 @@ def logout() -> None:
     if transport.forget_operator_login():
         print(f"Forgot the API key for {url}. Revoke it in the operator too: Settings › API keys.")
     else:
-        print("Not signed in to an operator.")
+        print("Not signed in to Mason's web app. gh and glab keep their own sign-in "
+              "(gh auth logout, glab auth logout).")
 
 
 def whoami() -> None:
@@ -92,6 +141,6 @@ def whoami() -> None:
         logins = ", ".join(f"{i['provider']}:{i['login']}" for i in me.get("identities") or [])
         print(f"operator  {t.operator}\nuser      {user.get('name', '?')} ({logins})\nkey       {me.get('scope')}")
     elif isinstance(t, transport.GhTransport):
-        print("gh CLI (gh auth status shows the account); mason login <operator URL> signs in to an operator")
+        print("GitHub: through gh (gh auth status shows the account); mason login signs gh and glab in")
     else:
         print(f"{getattr(t, 'name', '?')} transport")

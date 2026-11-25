@@ -13,12 +13,12 @@ The defaults live in a repository you choose. Point `mason` at any repo (or loca
 
 ## Install
 
-Mason isn't on PyPI yet, so install it from GitHub with pipx. The `tui` extra adds `mason tui`, `server` adds `mason serve` (the web app), and `market` adds signature checks for `mason market`:
+Mason's core is the CLI and the TUI. The web app is an add-on on top of the same core ([core and add-ons](docs/architecture.md)).
+Mason isn't on PyPI yet, so install it from GitHub with pipx. The `tui` extra adds `mason tui`, `server` adds the web app add-on (`mason serve`), and `market` adds signature checks for `mason market`:
 
 ```sh
 pipx install "mason-cli[tui,server] @ git+https://github.com/bitsandbricks-ch/mason-cli"
-gh auth login          # on its own, mason talks to GitHub through the gh CLI and never sees a token
-glab auth login        # optional, for GitLab: the same through the glab CLI
+mason login            # runs gh auth login, and glab auth login when you use GitLab: mason goes through gh and glab
 mason init your-org/your-defaults [--gitlab-group your-group]
 ```
 
@@ -72,7 +72,8 @@ Repos are named as `owner/name`, as a bare `name` when only one repo has it, or 
 | `mason plugins` | Installed plugins. |
 | `mason market [install NAME] [--index URL]` | Plugins in the signed plugin index; `install` adds one (only from a verified index). `keygen`, `sign` and `verify` are for whoever publishes an index. |
 | `mason serve [--host 127.0.0.1] [--port 8080]` | Runs Mason, the web app, on Flask's development server (needs the `server` extra). `mason serve --check` shows what its settings allow and what is missing; `mason serve --users` lists its accounts, and `mason operator add github:LOGIN` makes someone an operator (the operator page). See [docs/mason.md](docs/mason.md). |
-| `mason login https://mason [--read] [--key KEY]` | Go through [Mason](docs/mason.md), the web app, with an API key: mason shows a code, you approve it in the browser, and every command and the TUI then work without gh or a GitHub token here. `--read` asks for a read-only key, `--key` uses one you made in Settings › API keys. `mason logout` forgets the key, `mason whoami` says how mason reaches GitHub and as whom. |
+| `mason login [--github\|--gitlab]` | Sign this machine in: runs `gh auth login` where gh isn't signed in yet, and `glab auth login --hostname <host>` when you use GitLab (a `gitlab:` name, `gitlab_groups`, or glab installed). Already signed in: it says so. `--github` or `--gitlab` does only one. gh and glab keep the tokens. |
+| `mason login https://mason [--read] [--key KEY]` | Go through [Mason's web app](docs/mason.md) (the add-on) with an API key: mason shows a code, you approve it in the browser, and every command and the TUI then work without gh or a GitHub token here. `--read` asks for a read-only key, `--key` uses one you made in Settings › API keys. `mason logout` forgets the key, `mason whoami` says how mason reaches GitHub and as whom. |
 | `mason tui` | Everything above, full screen. |
 
 Every command takes `--json` (anywhere on the line): one JSON document instead of text, for scripts and CI. It always has `command` and `ok` (false with `error` when the command failed, and the exit code stays non-zero); commands that know their data put it in `result`, the others give their tables as `tables` (`columns` and `rows` by column name), their per-repo lines as `repos` and the rest as `messages`.
@@ -642,7 +643,8 @@ hubra-cli is one: it adds Hubra plugin releases, signing checks and a Hubra tab.
 `mason serve` runs mason as a web app. People sign in with their own GitHub or GitLab account (OAuth, so every
 call uses their own token) and get every command and TUI view in a terminal-style browser UI, plus issues,
 workflow hardening, a defaults editor with templates, stats, a console, plugins and a signed plugin
-marketplace. It works on a phone too. `mason login https://mason.mortar.ch` points the CLI and TUI at it with an
+marketplace. It works on a phone too. The web app is an add-on (the `server` extra) on top of the CLI's core: see
+[core and add-ons](docs/architecture.md). `mason login https://mason.mortar.ch` points the CLI and TUI at it with an
 API key, so a laptop needs neither gh nor a token.
 
 The quickest way to run it is Docker, which builds the UI too:
