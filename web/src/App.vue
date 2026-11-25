@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { get, loadMe, log, post, put, state } from './api.js'
-import { THEMES } from './themes.js'
+import { SCHEME, THEMES } from './themes.js'
 import { GROUPS, SECTIONS, TABS, sectionOf } from './router.js'
 import { typing } from './keys.js'
 import { arrowKey } from './arrows.js'
@@ -30,7 +30,8 @@ function stored() { try { return localStorage.getItem('mason-theme') } catch { r
 function fallback() { try { return matchMedia('(prefers-color-scheme: light)').matches ? 'mortar' : 'bricks' } catch { return 'bricks' } }
 const theme = ref(themes.includes(stored()) ? stored() : fallback())
 const plugins = ref([])
-watch(theme, (t) => { document.documentElement.dataset.theme = t; try { localStorage.setItem('mason-theme', t) } catch { /* private mode */ } }, { immediate: true })
+// data-look picks Mason's theme, data-theme the shared tokens' light or dark under it.
+watch(theme, (t) => { const html = document.documentElement; html.dataset.look = t; html.dataset.theme = SCHEME[t]; try { localStorage.setItem('mason-theme', t) } catch { /* private mode */ } }, { immediate: true })
 // The theme is a per-user setting: signing in picks up your choice, and switching saves it to your account.
 watch(() => state.me?.settings?.theme, (t) => { if (themes.includes(t)) theme.value = t }, { immediate: true })
 watch(theme, async (t) => {

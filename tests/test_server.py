@@ -130,9 +130,11 @@ def test_web_themes_match_the_server():
     from mason.server.context import THEMES
 
     web = Path(__file__).resolve().parents[1] / "web" / "src"
-    js = re.findall(r"'([a-z]+)'", (web / "themes.js").read_text())
-    css = re.findall(r'\[data-theme="([a-z]+)"\]', (web / "style.css").read_text())
-    assert tuple(js) == THEMES and set(css) == set(THEMES)
+    themes_js = (web / "themes.js").read_text()
+    js = re.findall(r"'([a-z]+)'", re.search(r"THEMES = \[([^\]]*)\]", themes_js).group(1))
+    schemes = dict(re.findall(r"(\w+): '(light|dark)'", re.search(r"SCHEME = \{([^}]*)\}", themes_js).group(1)))
+    css = re.findall(r'\[data-look="([a-z]+)"\]', (web / "style.css").read_text())
+    assert tuple(js) == THEMES and set(css) == set(THEMES) and set(schemes) == set(THEMES)
 
 def test_lists(op):
     _, c = op

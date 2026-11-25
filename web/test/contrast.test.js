@@ -2,12 +2,17 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
+import { neutrals, status } from '@bitsandbricks/tokens'
+import { SCHEME } from '../src/themes.js'
 
 const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8')
 
+// A theme's colours: its own hex values, and var(--bnb-*) looked up in the shared tokens' light or dark theme.
 function theme(name) {
-  const block = css.match(new RegExp(`\\[data-theme="${name}"\\]\\s*\\{([^}]*)\\}`))?.[1] || ''
-  return Object.fromEntries([...block.matchAll(/--([\w-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1], m[2]]))
+  const block = css.match(new RegExp(`\\[data-look="${name}"\\]\\s*\\{([^}]*)\\}`))?.[1] || ''
+  const shared = { ...neutrals[SCHEME[name]], ...status[SCHEME[name]] }
+  const value = (v) => (v.startsWith('#') ? v : shared[v.match(/^var\(--bnb-([\w-]+)\)$/)?.[1]])
+  return Object.fromEntries([...block.matchAll(/--([\w-]+):\s*(#[0-9a-f]{6}|var\(--bnb-[\w-]+\))/gi)].map((m) => [m[1], value(m[2])]))
 }
 function lum(hex) {
   const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4))
